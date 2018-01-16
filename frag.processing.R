@@ -5,3 +5,5 @@ setwd("~/Desktop/FragEVI/")
 poop <- 45
 
 pee <- 12
+
+vomit <- 34
