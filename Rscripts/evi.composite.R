@@ -3,8 +3,6 @@ library(raster)
 library(data.table)
 
 ## be sure to set correct local director
-setwd("~/Desktop/FragEVI/") ## for laptop
-# setwd("E:/FragEVI/") ## for desktop
 write.files <- FALSE ### force raster rewrite
 
 ## figure out which files are there, target scene years, and work each file separately
