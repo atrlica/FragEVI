@@ -45,7 +45,7 @@ frag.stack <- stack(evi.isa.cr, isa.na.agg)
 # master.crs <- crs(AOI)
 
 
-### Boston test areas -- combine high-res NDVI and canopy map
+### Boston -- combine high-res NDVI and canopy map
 
 #### important notes re. land cover class using Quickbird 2.4m NDVI w/ 1m canopy presence map
 ### not readily possible in R to align/resample the two different maps into a common grid -- severe registration error in NDVI after processing
@@ -61,9 +61,11 @@ frag.stack <- stack(evi.isa.cr, isa.na.agg)
 
 ### new NDVI resampled in arc
 ndvi.res <- raster("E:/FragEVI/data/NDVI/NDVI_1m_res_cangrid.tif")
+ndvi.res <- raster("/Volumes/Ultra/Ultra2/Users/atrlica/FragEVI/boston/NDVI_1m_res_cangrid.tif")
 
 ## 1m Canopy presence/absence map
 bos.can <- raster("E:/FragEVI/data/dataverse_files/bostoncanopy_1m.tif")
+bos.can <- raster("/Volumes/Ultra/Ultra2/Users/atrlica/FragEVI/boston/bostoncanopy_1m.tif")
 
 ### test polygons imported from Arc (approx 100x100m)
 t1 <- readOGR(dsn="E:/FragEVI/data/AOI", layer = "test.sm1")
@@ -137,44 +139,45 @@ cov.t4 <- setValues(can.t4, t4.dat[,cov])
 plot(can.t4); plot(t4, add=T)
 plot(cov.t4); plot(t4, add=T) ## color scale goofballed -- note no barren present
 
-
-### attempt to perform Boston-wide cover class, row by row
-strip <- seq(from=1, to=nrow(bos.can), by = 2000)
-cov <- numeric()
-for(r in 1:nrow(bos.can)){
-  tmp.can <- getValues(bos.can, row=r)
-  tmp.ndvi <- getValues(ndvi.cr, row=r)
-  d <- as.data.table(cbind(tmp.can, tmp.ndvi))
-  d[tmp.ndvi<0.2, cov:=0]
-  d[tmp.can==0&tmp.ndvi>=0.2, cov:=1]
-  d[tmp.can==1, cov:=2]
-  cov <- c(cov, d[,cov])
-  print(paste("finished row", r)) ## not particularly fast!
-}
-bos.cov <- setValues(bos.can, cov)
-writeRaster(bos.cov, filename="E:/FragEVI/processed/Boston_1mcover.tif", format="GTiff", overwrite=T)
-
-### function for row-by-row replacement of raster values (this works but the logic is flawed for the cover repalcement)
-cover.f <- function(x, y, filename) { #x is canopy, y is ndvi
+### use 1m canopy and NDVI to reclassify map into barren/grass/tree (0,1,2)
+### function to process serially in chunks #### THIS WORKS BEAUTIFULLY, TAKES ~15 MIN FOR ALL OF BOSTON
+cover.bl <- function(x, y, filename) {
   out <- raster(x)
+  bs <- blockSize(out)
   out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
-  for (r in 1:nrow(out)) {
-    v <- getValues(x, r)
-    g <- getValues(y, r)
-    
-    v[g<0.2] <- 0
-    v[v==0 & g>=0.2] <- 1
-    v[v==1] <- 2
-    out <- writeValues(out, v, r)
-    print(paste("finished row", r))
+  for (i in 1:bs$n) {
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## canopy map
+    g <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## ndvi map
+    cov <- v
+    cov[g>=0.2 & v==0] <- 1
+    cov[v==1] <- 2
+    out <- writeValues(out, cov, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
   }
   out <- writeStop(out)
   return(out)
 }
-s <- cover.f(bos.can, ndvi.cr, filename="E:/FragEVI/processed/bos.cov.test.tif")
-par(mfrow=c(1,1))
-plot
+s <- cover.bl(bos.can, ndvi.cr, filename="processed/bos.cov.tif")
+plot(s)
 
+# 
+# ### function for row-by-row replacement of raster values (this works but is slower)
+# cover.f <- function(x, y, filename) { #x is canopy, y is ndvi
+#   out <- raster(x)
+#   out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+#   for (r in 1:nrow(out)) {
+#     v <- getValues(x, r) ## canopy map
+#     g <- getValues(y, r) ## ndvi map
+#     cov <- v
+#     cov[g>=0.2 & v==0] <- 1
+#     cov[v==1] <- 2
+#     out <- writeValues(out, cov, r)
+#     print(paste("finished row", r))
+#   }
+#   out <- writeStop(out)
+#   return(out)
+# }
+# s <- cover.f(bos.can, ndvi.cr, filename="E:/FragEVI/processed/bos.cov.test.tif")
 
 ### Test Code: Process NAIP 1m CIR data to NDVI
 ### NOTE SO MUCH: BAND ORDER IN NAIP CIR DATA IS RED GREEN BLUE NIR (1,2,3,4)
@@ -185,3 +188,7 @@ naip.dat[, ndvi:=((band4-band1)/(band4+band1))]
 ndvi.r <- raster(naip.test[[1]])
 ndvi.r <- setValues(x = ndvi.r, values=naip.dat[,ndvi])
 writeRaster(ndvi.r, filename="processed/NAIP.ndvi.test.tif", format="GTiff", overwrite=T)
+
+
+### get edge classification for canopies
+Sys.which("gdal_polygonize.py")
