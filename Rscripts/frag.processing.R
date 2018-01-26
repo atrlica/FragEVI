@@ -61,11 +61,11 @@ frag.stack <- stack(evi.isa.cr, isa.na.agg)
 
 ### new NDVI resampled in arc
 ndvi.res <- raster("E:/FragEVI/data/NDVI/NDVI_1m_res_cangrid.tif")
-ndvi.res <- raster("/Volumes/Ultra/Ultra2/Users/atrlica/FragEVI/boston/NDVI_1m_res_cangrid.tif")
+# ndvi.res <- raster("/Volumes/Ultra/Ultra2/Users/atrlica/FragEVI/boston/NDVI_1m_res_cangrid.tif")
 
 ## 1m Canopy presence/absence map
 bos.can <- raster("E:/FragEVI/data/dataverse_files/bostoncanopy_1m.tif")
-bos.can <- raster("/Volumes/Ultra/Ultra2/Users/atrlica/FragEVI/boston/bostoncanopy_1m.tif")
+# bos.can <- raster("/Volumes/Ultra/Ultra2/Users/atrlica/FragEVI/boston/bostoncanopy_1m.tif")
 
 ### test polygons imported from Arc (approx 100x100m)
 t1 <- readOGR(dsn="E:/FragEVI/data/AOI", layer = "test.sm1")
