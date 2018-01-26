@@ -65,17 +65,29 @@ ndvi.res <- raster("E:/FragEVI/data/NDVI/NDVI_1m_res_cangrid.tif")
 
 ## 1m Canopy presence/absence map
 bos.can <- raster("E:/FragEVI/data/dataverse_files/bostoncanopy_1m.tif")
+# repl.na <- function(x){
+#   x[x==0] <- NA
+#   return(x)
+# }
+# rasterOptions(chunksize = 2e+6)
+# object.size(bos.can)/1048600 ### object size in MB
+bos.can.dat <- as.data.table(as.data.frame(bos.can))
+bos.can.dat[bostoncanopy_1m==0,] <- NA
+bos.can.na <- raster(bos.can)
+bos.can.na <- setValues(bos.can.na, bos.can.dat$bostoncanopy_1m)
+# bos.can.na <- repl.na(bos.can)
+writeRaster(bos.can.na, "E:/FragEVI/data/dataverse_files/bostoncanopy_1m_na.tif", format="GTiff", overwrite=T, datatype="INT1U")
 # bos.can <- raster("/Volumes/Ultra/Ultra2/Users/atrlica/FragEVI/boston/bostoncanopy_1m.tif")
 
 ### test polygons imported from Arc (approx 100x100m)
 t1 <- readOGR(dsn="E:/FragEVI/data/AOI", layer = "test.sm1")
 t1 <- spTransform(t1, crs(bos.can))
 t2 <- readOGR(dsn="E:/FragEVI/data/AOI", layer = "test.sm2")
-t2 <- spTransform(t2, crs(bos.stack))
+t2 <- spTransform(t2, crs(bos.can))
 t3 <- readOGR(dsn="E:/FragEVI/data/AOI", layer = "test.sm3")
-t3 <- spTransform(t3, crs(bos.stack))
+t3 <- spTransform(t3, crs(bos.can))
 t4 <- readOGR(dsn="E:/FragEVI/data/AOI", layer = "test.sm4")
-t4 <- spTransform(t4, crs(bos.stack))
+t4 <- spTransform(t4, crs(bos.can))
 
 par(mfrow=c(1,2))
 
@@ -86,6 +98,8 @@ bos <- stack(bos.can, ndvi.cr)
 
 ### test 1, good NDVI 1m, SW corner of Public Gardens -- seems to find grassy/barren areas between trees alright, sees impervious as barren
 can.t1 <- crop(bos.can, t1)
+can.t1[can.t1==0] <- NA
+writeRaster(can.t1, filename="E:/FragEVI/processed/can.t1.tif", overwrite=T, datatype="INT1U")
 ndvi.t1 <- crop(ndvi.cr, t1)
 plot(can.t1); plot(t1, add=T)
 plot(ndvi.t1); plot(t1, add=T)
@@ -100,6 +114,7 @@ plot(cov.t1); plot(t1, add=T)
 
 ### test 2, good NDVI 1m, Alston Suburb --some marginal confusion near canopies but also sees what look like residential lawns
 can.t2 <- crop(bos.can, t2)
+writeRaster(can.t2, filename="E:/FragEVI/processed/can.t2.tif", format="GTiff", overwrite=T)
 ndvi.t2 <- crop(ndvi.cr, t2)
 plot(can.t2); plot(t2, add=T)
 plot(ndvi.t2); plot(t2, add=T)
@@ -114,6 +129,7 @@ plot(cov.t2); plot(t2, add=T)
 
 ### test 3, good NDVI 1m, forest edge with ball park, Franklin Park S of track -- detects clear edge with lawn/baseball field, even detects what look like barren places at park periphery
 can.t3 <- crop(bos.can, t3)
+writeRaster(can.t3, filename="E:/FragEVI/processed/can.t3.tif", format="GTiff", overwrite=T)
 ndvi.t3 <- crop(ndvi.cr, t3)
 plot(can.t3); plot(t3, add=T)
 plot(ndvi.t3); plot(t3, add=T)
@@ -128,6 +144,7 @@ plot(cov.t3); plot(t3, add=T)
 
 ### test 4, good NDVI 1m, forest patch in Stonybrook Park S of Turtle Pond -- sees canopy except for a few gaps with grass
 ndvi.t4 <- crop(ndvi.cr, t4)
+writeRaster(can.t4, filename="E:/FragEVI/processed/can.t4.tif", format="GTiff", overwrite=T)
 plot(can.t4); plot(t4, add=T)
 plot(ndvi.t4); plot(t4, add=T)
 t4.dat <- as.data.table(as.data.frame(stack(can.t4, ndvi.t4)))
@@ -192,3 +209,5 @@ writeRaster(ndvi.r, filename="processed/NAIP.ndvi.test.tif", format="GTiff", ove
 
 ### get edge classification for canopies
 Sys.which("gdal_polygonize.py")
+
+
