@@ -23,7 +23,7 @@ library(rPython)
 
 ### process ISA fraction per 30 m EVI gridcell (~Urban intensity?)
 ### don't fart around with the ISA grid until it's stacked with a 30 m EVI and cropped -- too hard to monkey with, leave in its native state until the end
-# isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
+isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
 
 # ### the data-only approach doesn't seem to work -- file is too large to read in, possibly see big.memory
 # # isa.dat <- ff(vmode="double", filename="processed/isa.raw.ff")
@@ -47,7 +47,7 @@ isa.na.agg <- raster("E:/FragEVI/processed/stack/isa.30m.tif")
 # evi.isa.cr <- crop(evi.isa, extent(isa.na.agg))
 # writeRaster(evi.isa.cr, filename="processed/evi.isa.tif", format="GTiff", overwrite=T)
 evi.r <- raster("E:/FragEVI/processed/EVI/030005-6_2010-2012_EVI_NAD83.tif") ## this is the July 2010-2012 AOI EVI composite
-isa.stack <- projectRaster(isa.na.agg, evi.r, method="bilinear")
+isa.stack <- projectRaster(isa.na.agg, evi.r, method="bilinear", filename="E:/FragEVI/processed/isa.30m.NAD83.tif", format="GTiff", overwrite=T)
 
 frag.stack <- stack(evi.r, isa.stack)
 names(frag.stack) <- c("evi", "isa")

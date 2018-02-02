@@ -32,8 +32,10 @@ buffs = [10, 20, 30]
 rasterDump = "F:/FragEVI/processed/"
 for b in range(0,2):
     try:
-        arcpy.gp.Expand_sa(dbpath+"bos_can_0_R", dbpath+"nocan_"+str(buffs[b])+"mbuff", str(buffs[b]), "0")
-        arcpy.RasterToOtherFormat(dbpath+"nocan_"+str(buffs[b])+"mbuff", rasterDump+"nocan_"+str(buffs[b])+"mbuff", "TIFF")
+        buffR = arcpy.gp.Expand_sa(dbpath+"bos_can_0_R", dbpath+"nocan_"+str(buffs[b])+"mbuff", str(buffs[b]), "0")
+        buffR.save("E:/FragEVI/processed/nocan_"+str(buffs[b])+"mbuff.tif")
+        # arcpy.RasterToOtherFormat(dbpath+"nocan_"+str(buffs[b])+"mbuff", rasterDump+"nocan_"+str(buffs[b])+"mbuff", "TIFF")
+        # arcpy.CopyRaster_management(dbpath+"nocan_"+str(buffs[b])+"mbuff", "E:/FragEVI/processed/nocan_"+str(buffs[b])+"mbuff.tif")
         print("did " + str(buffs[b]) + "m buffer and wrote raster .tif to /processed")
     except Exception as e:
         print(e)
