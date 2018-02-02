@@ -4,8 +4,6 @@ library(rgdal)
 library(rgeos)
 library(raster)
 library(data.table)
-library(rPython)
-# library(ff)
 
 
 #######
@@ -13,8 +11,8 @@ library(rPython)
 ### intermediate steps run on the cluster
 
 ### read in AOI for crs description
-# AOI <- readOGR(dsn="/projectnb/buultra/atrlica/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/", layer="AOI_simple_NAD83UTM19N")
-# master.crs <- crs(AOI)
+AOI <- readOGR(dsn="/projectnb/buultra/atrlica/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/", layer="AOI_simple_NAD83UTM19N")
+master.crs <- crs(AOI)
 
 ### load EVI composite for grid and process for ISA grid
 # evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI.tif") ## this is the July 2010-2012 AOI EVI composite
@@ -26,10 +24,11 @@ library(rPython)
 isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
 
 # ### the data-only approach doesn't seem to work -- file is too large to read in, possibly see big.memory
-# # isa.dat <- ff(vmode="double", filename="processed/isa.raw.ff")
-# # isa.dat <- as.vector(isa)
-# # isa.dat[isa.dat==16] <- NA
-# # isa <- setValues(isa, isa.dat)
+# isa.dat <- ff(vmode="integer", filename="processed/isa.raw.ff", length=12682965744)
+# isa.dat <- as.data.table(as.data.frame(isa))
+# isa.dat <- as.vector(isa)
+# isa.dat[isa.dat==16] <- NA
+# isa <- setValues(isa, isa.dat)
 
 ### raster-native approach -- takes a long time
 ### correct the 16 values to NA to get a proper aggregated mean value per cell (0 = not impervious, 1 = impervious)
@@ -42,16 +41,18 @@ isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
 # writeRaster(isa.na.agg, filename="processed/isa.30m.tif", format="GTiff", overwrite=T)
 
 ### read in the 30 m ISA, align to the EVI grid and stack
-isa.na.agg <- raster("E:/FragEVI/processed/stack/isa.30m.tif")
+isa.na.agg <- raster("processed/isa.30m.tif")
+# isa.na.agg <- raster("E:/FragEVI/processed/stack/isa.30m.tif")
 # evi.isa <- projectRaster(from=evi.r, crs=crs(isa.na.agg), res=30, method="bilinear")
 # evi.isa.cr <- crop(evi.isa, extent(isa.na.agg))
 # writeRaster(evi.isa.cr, filename="processed/evi.isa.tif", format="GTiff", overwrite=T)
-evi.r <- raster("E:/FragEVI/processed/EVI/030005-6_2010-2012_EVI_NAD83.tif") ## this is the July 2010-2012 AOI EVI composite
-isa.stack <- projectRaster(isa.na.agg, evi.r, method="bilinear", filename="E:/FragEVI/processed/isa.30m.NAD83.tif", format="GTiff", overwrite=T)
+evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif")
+# evi.r <- raster("E:/FragEVI/processed/EVI/030005-6_2010-2012_EVI_NAD83.tif") ## this is the July 2010-2012 AOI EVI composite
+isa.pr <- projectRaster(isa.na.agg, evi.r, method="ngb", filename="processed/isa.30m.NAD83.tif", format="GTiff", overwrite=T)
 
-frag.stack <- stack(evi.r, isa.stack)
-names(frag.stack) <- c("evi", "isa")
-writeRaster(frag.stack, filename="E:/FragEVI/processed/EVI.ISA.30mstack.tiff", format="GTiff", overwrite=T)
+frag.stack <- stack(evi.r, isa.pr)
+frag.stack <- crop(frag.stack, AOI)
+writeRaster(frag.stack, filename="processed/evi.isa.30m.tif", format="GTiff", overwrite=T)
 
 
 ### Boston -- combine high-res NDVI and canopy map to produce 1m veg classification map
