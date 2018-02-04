@@ -37,10 +37,8 @@ except:
 buffs = [10, 20, 30]
 for b in range(0,3):
     try:
-        buffR = Expand(in_raster=can0Filt, number_cells=10, zone_values=0)
+        buffR = Expand(in_raster=can0Filt, number_cells=buffs[b], zone_values=0)
         buffR.save("E:/FragEVI/processed/nocan_"+str(buffs[b])+"mbuff.tif")
-        # arcpy.RasterToOtherFormat(dbpath+"nocan_"+str(buffs[b])+"mbuff", rasterDump+"nocan_"+str(buffs[b])+"mbuff", "TIFF")
-        # arcpy.CopyRaster_management(dbpath+"nocan_"+str(buffs[b])+"mbuff", "E:/FragEVI/processed/nocan_"+str(buffs[b])+"mbuff.tif")
         print("did " + str(buffs[b]) + "m buffer and wrote raster .tif to /processed")
     except Exception as e:
         print(e)

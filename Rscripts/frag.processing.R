@@ -61,24 +61,25 @@ writeRaster(frag.stack, filename="processed/evi.isa.30m.tif", format="GTiff", ov
 ### not readily possible in R to align/resample the two different maps into a common grid -- severe registration error in NDVI after processing
 ### use Arcmap to resample + snap to 1m grid (bilinear) for NDVI 2.4m -- get good alignment with original data and features in canopy map
 
-### step 1: 1m Canopy presence/absence map -- set no canopy (0) values to NA
-# bos.can <- raster("E:/FragEVI/data/dataverse_files/bostoncanopy_1m.tif")
+### step 1: 1m Canopy presence/absence map 
+bos.can <- raster("E:/FragEVI/data/dataverse_files/bostoncanopy_1m.tif")
+### set no canopy (0) values to NA
 # bos.can.dat <- as.data.table(as.data.frame(bos.can))
 # bos.can.dat[bostoncanopy_1m==0,] <- NA
 # bos.can.na <- raster(bos.can)
 # bos.can.na <- setValues(bos.can.na, bos.can.dat$bostoncanopy_1m)
 # writeRaster(bos.can.na, "E:/FragEVI/data/dataverse_files/bostoncanopy_1m_na.tif", format="GTiff", overwrite=T, datatype="INT1U")
-bos.can.na <- raster("E:/FragEVI/data/dataverse_files/bostoncanopy_1m_na.tif")
-
+# bos.can.na <- raster("E:/FragEVI/data/dataverse_files/bostoncanopy_1m_na.tif")
 
 ### step 2: read in 2.4m Quickbird NDVI map, filter for NA
-bos.ndvi <- raster("E:/FragEVI/data/NDVI/NDVI.img") ## original Quickbird NDVI, manually process for 0==NA
-bos.ndvi.dat <- as.data.table(as.data.frame(bos.ndvi))
-bos.ndvi.dat[NDVI==0, NDVI:=NA]
-bos.ndvi.na <- setValues(bos.ndvi, values = bos.ndvi.dat[,NDVI]) ## good, full map, UTM 19N
-writeRaster(bos.ndvi.na, filename="E:/FragEVI/data/NDVI/NDVI_na.tif", format="GTiff", overwrite=T)
+# bos.ndvi <- raster("E:/FragEVI/data/NDVI/NDVI.img") ## original Quickbird NDVI, manually process for 0==NA
+# bos.ndvi.dat <- as.data.table(as.data.frame(bos.ndvi))
+# bos.ndvi.dat[NDVI==0, NDVI:=NA]
+# bos.ndvi.na <- setValues(bos.ndvi, values = bos.ndvi.dat[,NDVI]) ## good, full map, UTM 19N
+# writeRaster(bos.ndvi.na, filename="E:/FragEVI/data/NDVI/NDVI_na.tif", format="GTiff", overwrite=T)
+# bos.ndvi.na <- raster("E:/FragEVI/data/NDVI/NDVI_na.tif")
 
-### step 3: put NDVI app through arc and resample+snap to grid for 1m canopy map - be sure the end product is NAD83 UTM19N
+### step 3: put NDVI app through Arc and resample+snap to grid for 1m canopy map - be sure the end product is NAD83 UTM19N
 ### NEED PYTHON IMBED HERE
 
 ### step 4: land cover classification for Boston using the 1m resampled NDVI (0 = barren, 1 = grass, 2 = canopy)
@@ -102,8 +103,29 @@ cover.bl <- function(x, y, filename) { # x is canopy, y is ndvi
   out <- writeStop(out)
   return(out)
 }
-s <- cover.bl(bos.can.na, bos.ndvi, filename="processed/bos.cov.tif")
+s <- cover.bl(bos.can, bos.ndvi, filename="processed/bos.cov.tif")
 plot(s)
+
+### ### similar function to produce map only of grass location
+cover.bl <- function(x, y, filename) { # x is canopy, y is ndvi
+  out <- raster(x)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## canopy map
+    g <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## ndvi map
+    cov <- v
+    cov[g>=0.2 & v==0] <- 1
+    cov[v==1] <- 2
+    out <- writeValues(out, cov, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+s <- cover.bl(bos.can, bos.ndvi, filename="processed/bos.cov.tif")
+plot(s)
+
 
 # ### function for row-by-row replacement of raster values (this works but is slower)
 # cover.f <- function(x, y, filename) { #x is canopy, y is ndvi

@@ -17,8 +17,51 @@ library(sp)
 # AOI.r <- rasterize(AOI, dat.r)
 # dat.r <- stack(dat.r, lulc, AOI.r)
 # writeRaster(dat.r, filename="processed/EVI_enhance_stack.tif", format="GTiff", overwrite=T)
-dat.r <- stack("processed/EVI_enhance_stack.tif")
+dat.r <- stack("E:/FragEVI/processed/EVI_enhance_stack.tif")
 names(dat.r) <-  c("evi", "isa", "lulc", "AOI")
+
+
+
+## get area of cover, snap to 30m grid in Arc
+bos.cov <- raster("E:/FragEVI/processed/bos.cov.tif")
+
+## get labeled values for grass/canopy/barren
+grass.find <- function(x){
+  x[x!=1] <- 0
+  return(x) ## this give 900 for areas that are 100% grass
+}
+grass <- calc(bos.cov, fun=grass.find, filename="E:/FragEVI/processed/bos.grass_only.tif", format="GTiff", overwrite=T)
+# grass.agg <- aggregate(grass, fact=30, expand=T, fun=sum, na.rm=T)
+
+barr.find <- function(x){
+  x[x==0] <- 10
+  x[x!=10] <- 0
+  x[] <- x[]/10
+}
+barr <- calc(bos.cov, barr.find, filename="E:/FragEVI/processed/bos.barr_only.tif", format="GTiff", overwrite=T)
+# barr.agg <- aggregate(barr, fact=30, expand=T, fun=sum, na.rm=T)
+
+can.find <- function(x){
+  x[x==2] <- 10
+  x[x!=10] <- 0
+  x[] <- x[]/10
+  return(x)
+}
+can <- calc(bos.cov, can.find, filename="E:/FragEVI/processed/bos.can_only.tif", format="GTiff", overwrite=T)
+# can.agg <- aggregate(can, fact=30, expand=T, fun=sum, na.rm=T)
+
+### arcpy to aggregate these to 30 m Landsat grid
+
+ed1 <- raster("E:/processed/nocan_10mbuff.tif")
+ed1.agg <- aggregate(ed1, fact=30, expand=T, fun=)
+ed2 <- raster("E:/processed/nocan_20mbuff.tif")
+ed3 <- raster("E:/processed/nocan_30mbuff.tif")
+
+
+edge <- as.data.table(as.data.frame(stack(bos.cov, ed1, ed2, ed3)))
+
+
+
 dat <- as.data.table(as.data.frame(dat.r))
 
 ### this approach controls for which pixels to include as end-members, but not sure that makes sense and creates discontinuities at the ends of the Vzi curve vs. the binned averages
