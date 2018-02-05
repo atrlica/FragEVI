@@ -20,49 +20,41 @@ library(sp)
 dat.r <- stack("E:/FragEVI/processed/EVI_enhance_stack.tif")
 names(dat.r) <-  c("evi", "isa", "lulc", "AOI")
 
-
-
 ## get area of cover, snap to 30m grid in Arc
 bos.cov <- raster("E:/FragEVI/processed/bos.cov.tif")
 
-## get labeled values for grass/canopy/barren
-grass.find <- function(x){
-  x[x!=1] <- 0
-  return(x) ## this give 900 for areas that are 100% grass
-}
-grass <- calc(bos.cov, fun=grass.find, filename="E:/FragEVI/processed/bos.grass_only.tif", format="GTiff", overwrite=T)
-# grass.agg <- aggregate(grass, fact=30, expand=T, fun=sum, na.rm=T)
+### intermediate prep step to get isolated cover values before snapping to 30 m landsat grid in Arc
+# ## get labeled values for grass/canopy/barren, export to arc for aggregation to landsat grid
+# grass.find <- function(x){
+#   x[x!=1] <- 0
+#   return(x) ## this give 900 for areas that are 100% grass
+# }
+# grass <- calc(bos.cov, fun=grass.find, filename="E:/FragEVI/processed/bos.grass_only.tif", format="GTiff", overwrite=T)
+# 
+# barr.find <- function(x){
+#   x[x==0] <- 10
+#   x[x!=10] <- 0
+#   x[] <- x[]/10
+# }
+# barr <- calc(bos.cov, barr.find, filename="E:/FragEVI/processed/bos.barr_only.tif", format="GTiff", overwrite=T)
+# 
+# can.find <- function(x){
+#   x[x==2] <- 10
+#   x[x!=10] <- 0
+#   x[] <- x[]/10
+#   return(x)
+# }
+# can <- calc(bos.cov, can.find, filename="E:/FragEVI/processed/bos.can_only.tif", format="GTiff", overwrite=T)
+# # can.agg <- aggregate(can, fact=30, expand=T, fun=sum, na.rm=T)
 
-barr.find <- function(x){
-  x[x==0] <- 10
-  x[x!=10] <- 0
-  x[] <- x[]/10
-}
-barr <- calc(bos.cov, barr.find, filename="E:/FragEVI/processed/bos.barr_only.tif", format="GTiff", overwrite=T)
-# barr.agg <- aggregate(barr, fact=30, expand=T, fun=sum, na.rm=T)
-
-can.find <- function(x){
-  x[x==2] <- 10
-  x[x!=10] <- 0
-  x[] <- x[]/10
-  return(x)
-}
-can <- calc(bos.cov, can.find, filename="E:/FragEVI/processed/bos.can_only.tif", format="GTiff", overwrite=T)
-# can.agg <- aggregate(can, fact=30, expand=T, fun=sum, na.rm=T)
-
-### arcpy to aggregate these to 30 m Landsat grid
-
-ed1 <- raster("E:/processed/nocan_10mbuff.tif")
-ed1.agg <- aggregate(ed1, fact=30, expand=T, fun=)
-ed2 <- raster("E:/processed/nocan_20mbuff.tif")
-ed3 <- raster("E:/processed/nocan_30mbuff.tif")
-
-
-edge <- as.data.table(as.data.frame(stack(bos.cov, ed1, ed2, ed3)))
+### aggregate in the stack from edge class too
 
 
 
-dat <- as.data.table(as.data.frame(dat.r))
+### EVI_grid_agg.py to snap these to grid
+
+
+
 
 ### this approach controls for which pixels to include as end-members, but not sure that makes sense and creates discontinuities at the ends of the Vzi curve vs. the binned averages
 # veg <- dat[isa<0.01 & lulc%in%c(3,37), mean(evi, na.rm=T)]
@@ -98,9 +90,10 @@ lines(beta.range*100, Vzi, col="red")
 plot(chunk[,bin], chunk[,I], main="ISA vs. %ISA(bin)", ylab="frac. ISA")
 
 ## calculate EVI enhancement (either in bins or in raw data?)
-chunk <- merge(chunk, )
 
-### compare EVI enhancement
+
+
+## look at NDVI vs edge class in 1 m data (will need to extract from sub-polys)
 
 
 
