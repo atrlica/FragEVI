@@ -58,7 +58,7 @@ bos.cov <- cover.bl(bos.can, bos.ndvi, filename="E:/FragEVI/processed/bos.cov.ti
 
 ### call python script for identifying canopy edge distance
 pyth.path = './Rscripts/canopy_process.py'
-output = system2('python.exe', args=pyth.path, stdout=TRUE)
+output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
 print(paste("ArcPy working on canopy edges: ", output))
 
 ### read in edge rasters and correct to produce proper edge layers
@@ -82,7 +82,7 @@ edges.bl <- function(x, y, filename) { # x is edge class, y is cover class
     v[v!=0] <- NA # kill any weird values that aren't coming from the nocan==0 buffer
     v[g!=2] <- NA # cancel edge ID for non-canopy
     v[v==0] <- 1 # ID edge pixels as 1
-    v[v!=1] <- NA # make sure everything that isn't an edge canopy is dead
+    v[v!=1 & g%in%c(0,1,2)] <- 0 ## set non-edge values to 0 to hold space
     out <- writeValues(out, v, bs$row[i])
     print(paste("finished block", i, "of", bs$n))
   }
