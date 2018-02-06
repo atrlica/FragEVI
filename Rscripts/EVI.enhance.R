@@ -5,7 +5,7 @@ library(rgeos)
 library(rgdal)
 library(sp)
 
-### initial processing -- evi+isa+lulc+AOI
+### Stack 30m layers and crop to AOI
 # dat.r <- stack("processed/evi.isa.30m.tif") ## just EVI and ISA
 # 
 # ### read in the LULC map to help constrain the pixel selection for the end members
@@ -18,7 +18,7 @@ library(sp)
 #
 # dat.r <- stack(dat.r, lulc, AOI.r)
 # writeRaster(dat.r, filename="processed/EVI_enhance_stack.tif", format="GTiff", overwrite=T)
-dat.r <- stack("E:/FragEVI/processed/EVI_enhance_stack.tif")
+dat.r <- stack("processed/EVI_enhance_stack.tif")
 names(dat.r) <-  c("evi", "isa", "lulc", "AOI")
 dat <- as.data.table(as.data.frame(dat.r))
 
@@ -48,7 +48,7 @@ dat[AOI==1 & lulc!=20, bin:=findInterval(isa, beta.range, all.inside=T)]
 chunk <- dat[lulc!=20 & AOI==1, list(.N, m=mean(evi, na.rm=T), med=median(evi, na.rm=T), i.bin=median(isa, na.rm=T)), by=bin]
 
 par(mar=c(4,4,2,1), mgp=c(2,1,0))
-pdf(file = "E:/FragEVI/images/EVI_ISA_binned30m.pdf", width = 6, height = 6)
+pdf(file = "images/EVI_ISA_binned30m.pdf", width = 6, height = 6)
 plot(chunk[,i.bin], chunk[,med], 
      ylim=c(noveg-0.05, veg+0.05),
      main="EVI vs. %ISA (binned)", 
@@ -60,14 +60,49 @@ dev.off()
 
 
 
+
+### analysis of 1m data with edge classes
 ## look at NDVI vs edge class in 1 m data (will need to extract from sub-polys)
 ### read in various 1m maps
-bos.cov <- raster("E:/FragEVI/processed/bos.cov.tif")
-bos.ndvi <- crop(raster("E:/FragEVI/data/NDVI/NDVI_1m_res_cangrid.tif", bos.cov)) ## extent is larger than boston cover map
-bos.ed1 <- raster("E:/FragEVI/processed/edge10m.tif")
-bos.ed2 <- raster("E:/FragEVI/processed/edge20m.tif")
-bos.ed3 <- raster("E:/FragEVI/processed/edge30m.tif")
+bos.cov <- raster("processed/bos.cov.tif")
+bos.ndvi <- crop(raster("data/NDVI/NDVI_1m_res_cangrid.tif"), bos.cov) ## extent is larger than boston cover map
+bos.ed1 <- raster("processed/edge10m.tif")
+bos.ed2 <- raster("processed/edge20m.tif")
+bos.ed3 <- raster("processed/edge30m.tif")
 
 bos.stack <- stack(bos.cov, bos.ndvi, bos.ed1, bos.ed2, bos.ed3)
+names(bos.stack) <- c("cov", "ndvi", "ed10", "ed20", "ed30")
 
+### extract test values from AOI over Stonybrook reserve
+sb <- readOGR(dsn = "processed/stonybrook_AOI.shp", layer = "stonybrook_AOI")
+sb.dat <- extract(bos.stack, sb, df=T)
+sb.dat <- as.data.table(sb.dat)
 
+sb.dat[cov==2 & ed10==1, median(ndvi)]
+hist(sb.dat[cov==2 & ed10==1, ndvi])
+
+sb.dat[cov==2 & ed20==1, median(ndvi)]
+hist(sb.dat[cov==2 & ed20==1, ndvi])
+
+sb.dat[cov==2 & ed30==1, median(ndvi)]
+hist(sb.dat[cov==2 & ed30==1, ndvi])
+
+### only interior canopy
+sb.dat[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), median(ndvi)] ### higher than 
+hist(sb.dat[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), ndvi])
+
+sb.dat[ed30==1 & is.na(ed20) & is.na(ed10), ring:=3]
+sb.dat[ed20==1 & is.na(ed10), ring:=2]
+sb.dat[ed10==1, ring:=1]
+sb.dat[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), ring:=4]
+sb.dat[cov==1, ring:=5]
+sb.dat[cov==0, ring:=6]
+
+par(mar=c(1,4,2,1), mgp=c(2,1,0))
+png(filename="images/SB_test_NDVI_boxpl.png", width = 6, height = 6, units = "in", res=108)
+boxplot(sb.dat[, ndvi]~sb.dat[,ring], 
+        col=c("pink", "orange", "yellow", "forestgreen", "lightgreen", "grey50"), xaxt="n",
+        main="NDVI by edge distance and cover class", ylab="NDVI")
+legend(x = 3, y = 0, legend = c("10m", "20m", "30m", ">30m", "grass", "barren"), 
+       fill = c("pink", "orange", "yellow", "forestgreen", "lightgreen", "grey50"), cex=0.84)
+dev.off()

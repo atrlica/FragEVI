@@ -59,13 +59,13 @@ bos.cov <- cover.bl(bos.can, bos.ndvi, filename="E:/FragEVI/processed/bos.cov.ti
 ### call python script for identifying canopy edge distance
 pyth.path = './Rscripts/canopy_process.py'
 output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
-print(paste("ArcPy working on canopy edges: ", output))
+print(output)
 
 ### read in edge rasters and correct to produce proper edge layers
-bos.cov <- raster("E:/FragEVI/processed/bos.cov.tif")
-ed1 <- raster("E:/FragEVI/processed/nocan_10mbuff.tif")
-ed2 <- raster("E:/FragEVI/processed/nocan_20mbuff.tif")
-ed3 <- raster("E:/FragEVI/processed/nocan_30mbuff.tif")
+bos.cov <- raster("processed/bos.cov.tif")
+ed1 <- raster("processed/nocan_10mbuff.tif")
+ed2 <- raster("processed/nocan_20mbuff.tif")
+ed3 <- raster("processed/nocan_30mbuff.tif")
 ed1 <- extend(ed1, bos.cov) # edge and cover on same grid already
 ed2 <- extend(ed2, bos.cov)
 ed3 <- extend(ed3, bos.cov)
@@ -82,16 +82,16 @@ edges.bl <- function(x, y, filename) { # x is edge class, y is cover class
     v[v!=0] <- NA # kill any weird values that aren't coming from the nocan==0 buffer
     v[g!=2] <- NA # cancel edge ID for non-canopy
     v[v==0] <- 1 # ID edge pixels as 1
-    v[v!=1 & g%in%c(0,1,2)] <- 0 ## set non-edge values to 0 to hold space
+    # v[v!=1 & g %in% c(0,1,2)] <- 0 ## set non-edge values to 0 to hold space ## this doesn't work apparently, non-edge is still labeled NA
     out <- writeValues(out, v, bs$row[i])
     print(paste("finished block", i, "of", bs$n))
   }
   out <- writeStop(out)
   return(out)
 }
-s <- edges.bl(ed1, bos.cov, filename="E:/FragEVI/processed/edge10m.tif")
-t <- edges.bl(ed2, bos.cov, filename="E:/FragEVI/processed/edge20m.tif")
-u <- edges.bl(ed3, bos.cov, filename="E:/FragEVI/processed/edge30m.tif")
+s <- edges.bl(ed1, bos.cov, filename="processed/edge10m.tif")
+t <- edges.bl(ed2, bos.cov, filename="processed/edge20m.tif")
+u <- edges.bl(ed3, bos.cov, filename="processed/edge30m.tif")
 
 
 ###### get aggregated areas for 1m data at 30 m grid
