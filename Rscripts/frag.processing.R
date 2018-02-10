@@ -8,7 +8,7 @@ library(data.table)
 
 #########
 ### Boston high-res data
-#### chunk: combine 2.4m NDVI and canopy map to produce 1m veg classification map
+### combine 2.4m NDVI and canopy map to produce 1m veg classification map
 ### use Arcmap to resample + snap to 1m grid (bilinear) for NDVI 2.4m -- get good alignment with original data and features in canopy map
 
 ### step 1: 1m Canopy presence/absence map 
@@ -21,21 +21,17 @@ bos.can <- raster("E:/FragEVI/data/dataverse_files/bostoncanopy_1m.tif")
 # writeRaster(bos.can.na, "E:/FragEVI/data/dataverse_files/bostoncanopy_1m_na.tif", format="GTiff", overwrite=T, datatype="INT1U")
 # bos.can.na <- raster("E:/FragEVI/data/dataverse_files/bostoncanopy_1m_na.tif")
 
-### step 2: read in 2.4m Quickbird NDVI map, filter for NA
-# bos.ndvi <- raster("E:/FragEVI/data/NDVI/NDVI.img") ## in UTM19N, original Quickbird NDVI
-# bos.ndvi.dat <- as.data.table(as.data.frame(bos.ndvi))
-# bos.ndvi.dat[NDVI==0, NDVI:=NA]
-# bos.ndvi.na <- setValues(bos.ndvi, values = bos.ndvi.dat[,NDVI], filename="E:/FragEVI/data/NDVI/NDVI_na.tif", format="GTiff", overwrite=T) ## good, full map, UTM 19N
-
-### step 3: put NDVI app through Arc and resample+snap to grid for 1m canopy map - be sure the end product is NAD83 UTM19N
+### step 3: put NDVI.img through Arc and resample+snap to grid for 1m canopy map - be sure the end product is NAD83 UTM19N
 pyth.path = './Rscripts/NDVI_resamp.py'
 output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
 print(paste("ArcPy working on NDVI resample: ", output))
 
 ### step 4: land cover classification for Boston using the 1m resampled NDVI (0 = barren, 1 = grass, 2 = canopy)
 bos.ndvi <- raster("E:/FragEVI/data/NDVI/NDVI_1m_res_cangrid.tif")
+bos.can.na <- raster("E:/FragEVI/data/dataverse_files/bostoncanopy_1m_na.tif")
 bos.ndvi <- crop(bos.ndvi, bos.can.na)
 cover.bl <- function(x, y, filename) { # x is canopy, y is ndvi
+  if(file.exists("E:/FragEVI/processed/bos.cov.tif")){file.remove("E:/FragEVI/processed/bos.cov.tif")}
   out <- raster(x)
   bs <- blockSize(out)
   out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
@@ -46,14 +42,14 @@ cover.bl <- function(x, y, filename) { # x is canopy, y is ndvi
     cov[g>=0.2 & v==0] <- 1
     cov[v==1] <- 2
     out <- writeValues(out, cov, bs$row[i])
-    print(paste("finished block", i, "of", bs$n))
+    print(paste("finished 1m cover block", i, "of", bs$n))
   }
   out <- writeStop(out)
   return(out)
 }
 bos.cov <- cover.bl(bos.can, bos.ndvi, filename="E:/FragEVI/processed/bos.cov.tif")
 
-#####
+
 ### Processing for 1m canopy map for edge class
 
 ### call python script for identifying canopy edge distance
@@ -61,7 +57,7 @@ pyth.path = './Rscripts/canopy_process.py'
 output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
 print(output)
 
-### read in edge rasters and correct to produce proper edge layers
+### read in edge rasters and correct classifications to produce raster of edge rings (>10, 10-20, 20-30, >30)
 bos.cov <- raster("processed/bos.cov.tif")
 ed1 <- raster("processed/nocan_10mbuff.tif")
 ed2 <- raster("processed/nocan_20mbuff.tif")
@@ -71,7 +67,6 @@ ed2 <- extend(ed2, bos.cov)
 ed3 <- extend(ed3, bos.cov)
 edges <- stack(ed1, ed2, ed3, bos.cov) # just to make damn sure everything lines up
 
-### Pull in 1m edge buffers and use cover map to correct
 edges.bl <- function(x, y, filename) { # x is edge class, y is cover class
   out <- raster(x)
   bs <- blockSize(out)
@@ -79,10 +74,10 @@ edges.bl <- function(x, y, filename) { # x is edge class, y is cover class
   for (i in 1:bs$n) {
     v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## edge class
     g <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## cover map
-    v[v!=0] <- NA # kill any weird values that aren't coming from the nocan==0 buffer
+    v[v!=0] <- NA # kill any weird values that aren't coming from the nocan==0 buffer map
     v[g!=2] <- NA # cancel edge ID for non-canopy
     v[v==0] <- 1 # ID edge pixels as 1
-    # v[v!=1 & g %in% c(0,1,2)] <- 0 ## set non-edge values to 0 to hold space ## this doesn't work apparently, non-edge is still labeled NA
+    v[v!=1] <- 0 ## set non-edge values to 0 to hold space
     out <- writeValues(out, v, bs$row[i])
     print(paste("finished block", i, "of", bs$n))
   }
@@ -93,7 +88,11 @@ s <- edges.bl(ed1, bos.cov, filename="processed/edge10m.tif")
 t <- edges.bl(ed2, bos.cov, filename="processed/edge20m.tif")
 u <- edges.bl(ed3, bos.cov, filename="processed/edge30m.tif")
 
+### package up all the 1m data for Boston and write to disk
+bos.stack <- stack(bos.can.na, bos.ndvi, bos.cov, s, t, u)
+writeRaster()
 
+### aggregate 
 ###### get aggregated areas for 1m data at 30 m grid
 #######
 ### the following chunk aggregates 1m ISA to 30m landsat grid
