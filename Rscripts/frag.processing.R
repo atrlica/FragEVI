@@ -116,9 +116,9 @@ writeRaster(bos.stack, "processed/bos.stack.1m.tif", format="GTiff", overwrite=T
 
 ####
 ### 30 m aggregate to Landsat grid
-### read in AOI for crs description
-AOI <- readOGR(dsn="/projectnb/buultra/atrlica/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/", layer="AOI_simple_NAD83UTM19N")
-master.crs <- crs(AOI)
+# ### read in AOI for crs description
+# AOI <- readOGR(dsn="/projectnb/buultra/atrlica/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/", layer="AOI_simple_NAD83UTM19N")
+# master.crs <- crs(AOI)
 
 ### load EVI composite for grid and process for ISA grid
 # evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI.tif") ## this is the July 2010-2012 AOI EVI composite
@@ -126,36 +126,49 @@ master.crs <- crs(AOI)
 # writeRaster(evi.r, filename="processed/EVI/030005-6_2010-2012_EVI_NAD83.tif", format="GTiff", overwrite=T)
 evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif")
 
-#### The following should eventually be redone using the arcpy snap-to functionality -- could be artifacts with how this was made
-### process ISA fraction per 30 m EVI gridcell (~Urban intensity?)
-### don't fart around with the ISA grid until it's stacked with a 30 m EVI and cropped -- too hard to monkey with, leave in its native state until the end
-isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
+# ### aggregate raw 1m ISA to 30m
+# ### don't fart around with the ISA grid until it's stacked with a 30 m EVI and cropped -- too hard to monkey with, leave in its native state until the end
+# ### raster-native approach -- takes a long time
+# ### correct the 16 values to NA to get a proper aggregated mean value per cell (0 = not impervious, 1 = impervious)
+# isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
+# fun <- function(x){
+#   x[x==16] <- NA
+#   return(x)
+# }
+# isa.na <- calc(isa, fun)
+# isa.na.agg <- aggregate(isa.na, fact=30, fun=mean, na.rm=FALSE) # get mean ISA per 30 m footprint
+# writeRaster(isa.na.agg, filename="processed/isa.30m.tif", format="GTiff", overwrite=T)
+# isa.na.agg <- raster("processed/isa.30m.tif")
+# plot(isa.na.agg)
 
-### raster-native approach -- takes a long time
-### correct the 16 values to NA to get a proper aggregated mean value per cell (0 = not impervious, 1 = impervious)
-fun <- function(x){
-  x[x==16] <- NA
-  return(x)
-}
-isa.na <- calc(isa, fun)
-isa.na.agg <- aggregate(isa.na, fact=30, fun=mean, na.rm=FALSE) # get mean ISA per 30 m footprint
-writeRaster(isa.na.agg, filename="processed/isa.30m.tif", format="GTiff", overwrite=T)
+# ### align isa and evi grids, crop by AOI
+# ### call python script for resampling 30m ISA to EVI grid
+# pyth.path = './Rscripts/AOIISA_resamp.py'
+# output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
 
-### align isa and evi rasters
-### call python script for resampling 30m ISA to EVI grid
-pyth.path = './Rscripts/AOIISA_resamp.py'
-output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
-print(output)
-
-isa.na.agg <- raster("processed/isa30m_evigrd.tif")
+isa.r <- raster("processed/isa30m_evigrd.tif")
 evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif") ## this is the July 2010-2012 AOI EVI composite
-isa.pr <- projectRaster(isa.na.agg, evi.r, method="bilinear", filename="processed/isa.30m.NAD83.tif", format="GTiff", overwrite=T)
+# AOI <- readOGR(dsn="E:/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/AOI_simple_NAD83UTM19N.shp", layer="AOI_simple_NAD83UTM19N")
+# plot(isa.na.agg); plot(AOI, add=T)
+# plot(evi.r); plot(AOI, add=T)
+# AOI.r <- rasterize(AOI, evi.r)
+# writeRaster(AOI.r, filename="processed/AOI.r.tif", format="GTiff", overwrite=T)
+AOI.r <- raster("processed/AOI.r.tif")
 
-frag.stack <- stack(evi.r, isa.pr)
-frag.stack <- crop(frag.stack, AOI)
-writeRaster(frag.stack, filename="processed/evi.isa.30m.tif", format="GTiff", overwrite=T)
+# ### prep LULC --> EVI grid
+# pyth.path = './Rscripts/LULC_EVIgrid.py'
+# output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
 
-bos.cov <- raster("E:/FragEVI/processed/bos.cov.tif")
+LULC.r <- raster("processed/LULC30m.tif")
+LULC.r <- extend(LULC.r, evi.r)
+
+evi.r <- crop(evi.r, isa.r)
+AOI.r <- crop(evi.r, isa.r)
+LULC.r <- extend(LULC.r, isa.r)
+
+evi.stack <- stack(evi.r, isa.r, LULC.r, AOI.r)
+writeRaster(evi.stack, filename="processed/EVI30m.stack.tif", format="GTiff", overwrite=T)
+
 
 #### pull out cover classes as individual layers to assist with aggregated area in 30 m pixels
 # ## get labeled values for grass/canopy/barren, export to arc for aggregation to landsat grid
