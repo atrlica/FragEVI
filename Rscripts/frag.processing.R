@@ -112,16 +112,20 @@ bos.stack <- stack(bos.can, bos.ndvi, bos.cov, bos.isa, ed10, ed20, ed30)
 writeRaster(bos.stack, "processed/bos.stack.1m.tif", format="GTiff", overwrite=T)
 ### do I add a 1m raster version of the LULC layer here? at all useful past the bos.cov information?
 
-#######
-### 30 m aggregate of 
+
+
+
+####
+### 30 m aggregate to Landsat grid
 ### read in AOI for crs description
-AOI <- readOGR(dsn="/projectnb/buultra/atrlica/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/", layer="AOI_simple_NAD83UTM19N")
-master.crs <- crs(AOI)
+# AOI <- readOGR(dsn="/projectnb/buultra/atrlica/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/", layer="AOI_simple_NAD83UTM19N")
+# master.crs <- crs(AOI)
 
 ### load EVI composite for grid and process for ISA grid
 # evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI.tif") ## this is the July 2010-2012 AOI EVI composite
 # evi.r <- projectRaster(from=evi.r, crs=master.crs, res = 30, method = "ngb")
 # writeRaster(evi.r, filename="processed/EVI/030005-6_2010-2012_EVI_NAD83.tif", format="GTiff", overwrite=T)
+evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif")
 
 #### The following should eventually be redone using the arcpy snap-to functionality -- could be artifacts with how this was made
 ### process ISA fraction per 30 m EVI gridcell (~Urban intensity?)
@@ -136,13 +140,12 @@ isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
 # }
 # isa.na <- calc(isa, fun)
 # isa.na.agg <- aggregate(isa.na, fact=30, fun=mean, na.rm=FALSE) # get mean ISA per 30 m footprint
-# isa.na.agg <- projectRaster(isa.na.agg, crs=master.crs)
-# writeRaster(isa.na.agg, filename="processed/isa.30m.NAD83.tif", format="GTiff", overwrite=T)
+# writeRaster(isa.na.agg, filename="processed/isa.30m.tif", format="GTiff", overwrite=T)
 
-### read in 30 m ISA, align to the EVI grid and stack
+### align isa and evi rasters
 isa.na.agg <- raster("processed/isa.30m.NAD83.tif")
-evi.r <- raster("E:/FragEVI/processed/EVI/030005-6_2010-2012_EVI_NAD83.tif") ## this is the July 2010-2012 AOI EVI composite
-isa.pr <- projectRaster(isa.na.agg, evi.r, method="ngb", filename="processed/isa.30m.NAD83.tif", format="GTiff", overwrite=T)
+evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif") ## this is the July 2010-2012 AOI EVI composite
+isa.pr <- projectRaster(isa.na.agg, evi.r, method="bilinear", filename="processed/isa.30m.NAD83.tif", format="GTiff", overwrite=T)
 
 frag.stack <- stack(evi.r, isa.pr)
 frag.stack <- crop(frag.stack, AOI)
