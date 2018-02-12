@@ -4,7 +4,6 @@ library(rgdal)
 library(rgeos)
 library(raster)
 library(data.table)
-library(rPython)
 
 
 #########
@@ -118,8 +117,8 @@ writeRaster(bos.stack, "processed/bos.stack.1m.tif", format="GTiff", overwrite=T
 ####
 ### 30 m aggregate to Landsat grid
 ### read in AOI for crs description
-# AOI <- readOGR(dsn="/projectnb/buultra/atrlica/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/", layer="AOI_simple_NAD83UTM19N")
-# master.crs <- crs(AOI)
+AOI <- readOGR(dsn="/projectnb/buultra/atrlica/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/", layer="AOI_simple_NAD83UTM19N")
+master.crs <- crs(AOI)
 
 ### load EVI composite for grid and process for ISA grid
 # evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI.tif") ## this is the July 2010-2012 AOI EVI composite
@@ -134,16 +133,21 @@ isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
 
 ### raster-native approach -- takes a long time
 ### correct the 16 values to NA to get a proper aggregated mean value per cell (0 = not impervious, 1 = impervious)
-# fun <- function(x){
-#   x[x==16] <- NA
-#   return(x)
-# }
-# isa.na <- calc(isa, fun)
-# isa.na.agg <- aggregate(isa.na, fact=30, fun=mean, na.rm=FALSE) # get mean ISA per 30 m footprint
-# writeRaster(isa.na.agg, filename="processed/isa.30m.tif", format="GTiff", overwrite=T)
+fun <- function(x){
+  x[x==16] <- NA
+  return(x)
+}
+isa.na <- calc(isa, fun)
+isa.na.agg <- aggregate(isa.na, fact=30, fun=mean, na.rm=FALSE) # get mean ISA per 30 m footprint
+writeRaster(isa.na.agg, filename="processed/isa.30m.tif", format="GTiff", overwrite=T)
 
 ### align isa and evi rasters
-isa.na.agg <- raster("processed/isa.30m.NAD83.tif")
+### call python script for resampling 30m ISA to EVI grid
+pyth.path = './Rscripts/AOIISA_resamp.py'
+output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
+print(output)
+
+isa.na.agg <- raster("processed/isa30m_evigrd.tif")
 evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif") ## this is the July 2010-2012 AOI EVI composite
 isa.pr <- projectRaster(isa.na.agg, evi.r, method="bilinear", filename="processed/isa.30m.NAD83.tif", format="GTiff", overwrite=T)
 
