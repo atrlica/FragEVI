@@ -11,10 +11,10 @@ library(data.table)
 ### combine 2.4m NDVI and canopy map to produce 1m veg classification map
 ### use Arcmap to resample + snap to 1m grid (bilinear) for NDVI 2.4m -- get good alignment with original data and features in canopy map
 
-### step 1: 1m Canopy presence/absence map 
-bos.can <- raster("data/dataverse_files/bostoncanopy_1m.tif")
+# ### step 1: 1m Canopy presence/absence map 
+# bos.can <- raster("data/dataverse_files/bostoncanopy_1m.tif")
 
-### set no canopy (0) values to NA
+# ### set no canopy (0) values to NA
 # bos.can.dat <- as.data.table(as.data.frame(bos.can))
 # bos.can.dat[bostoncanopy_1m==0,] <- NA
 # bos.can.na <- raster(bos.can)
@@ -22,70 +22,70 @@ bos.can <- raster("data/dataverse_files/bostoncanopy_1m.tif")
 # writeRaster(bos.can.na, "E:/FragEVI/data/dataverse_files/bostoncanopy_1m_na.tif", format="GTiff", overwrite=T, datatype="INT1U")
 # bos.can.na <- raster("E:/FragEVI/data/dataverse_files/bostoncanopy_1m_na.tif")
 
-### step 3 (must be performed on desktop): put NDVI.img through Arc and resample+snap to grid for 1m canopy map - be sure the end product is NAD83 UTM19N
-pyth.path = './Rscripts/NDVI_resamp.py'
-output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
-print(paste("ArcPy working on NDVI resample: ", output))
+# ### step 3 (must be performed on desktop): put NDVI.img through Arc and resample+snap to grid for 1m canopy map - be sure the end product is NAD83 UTM19N
+# pyth.path = './Rscripts/NDVI_resamp.py'
+# output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
+# print(paste("ArcPy working on NDVI resample: ", output))
 
-### step 4: land cover classification for Boston using the 1m resampled NDVI (0 = barren, 1 = grass, 2 = canopy)
-bos.ndvi <- raster("data/NDVI/NDVI_1m_res_cangrid.tif")
-bos.can.na <- raster("data/dataverse_files/bostoncanopy_1m_na.tif")
-bos.ndvi <- crop(bos.ndvi, bos.can.na)
-cover.bl <- function(x, y, filename) { # x is canopy, y is ndvi
-  if(file.exists("processed/bos.cov.tif")){file.remove("processed/bos.cov.tif")}
-  out <- raster(x)
-  bs <- blockSize(out)
-  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
-  for (i in 1:bs$n) {
-    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## canopy map
-    g <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## ndvi map
-    cov <- v
-    cov[g>=0.2 & v==0] <- 1
-    cov[v==1] <- 2
-    out <- writeValues(out, cov, bs$row[i])
-    print(paste("finished 1m cover block", i, "of", bs$n))
-  }
-  out <- writeStop(out)
-  return(out)
-}
-bos.cov <- cover.bl(bos.can, bos.ndvi, filename="processed/bos.cov.tif")
+# ### step 4: land cover classification for Boston using the 1m resampled NDVI (0 = barren, 1 = grass, 2 = canopy)
+# bos.ndvi <- raster("data/NDVI/NDVI_1m_res_cangrid.tif")
+# bos.can.na <- raster("data/dataverse_files/bostoncanopy_1m_na.tif")
+# bos.ndvi <- crop(bos.ndvi, bos.can.na)
+# cover.bl <- function(x, y, filename) { # x is canopy, y is ndvi
+#   if(file.exists("processed/bos.cov.tif")){file.remove("processed/bos.cov.tif")}
+#   out <- raster(x)
+#   bs <- blockSize(out)
+#   out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+#   for (i in 1:bs$n) {
+#     v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## canopy map
+#     g <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## ndvi map
+#     cov <- v
+#     cov[g>=0.2 & v==0] <- 1
+#     cov[v==1] <- 2
+#     out <- writeValues(out, cov, bs$row[i])
+#     print(paste("finished 1m cover block", i, "of", bs$n))
+#   }
+#   out <- writeStop(out)
+#   return(out)
+# }
+# bos.cov <- cover.bl(bos.can, bos.ndvi, filename="processed/bos.cov.tif")
 
-### Processing for 1m canopy map for edge class
-### call python script for identifying canopy edge distance (desktop only)
-pyth.path = './Rscripts/canopy_process.py'
-output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
-print(output)
-
-### read in edge rasters and correct classifications to produce raster of edge rings (>10, 10-20, 20-30, >30)
-bos.cov <- raster("processed/bos.cov.tif")
-ed1 <- raster("processed/nocan_10mbuff.tif")
-ed2 <- raster("processed/nocan_20mbuff.tif")
-ed3 <- raster("processed/nocan_30mbuff.tif")
-ed1 <- extend(ed1, bos.cov) # edge and cover on same grid already
-ed2 <- extend(ed2, bos.cov)
-ed3 <- extend(ed3, bos.cov)
-# edges <- stack(ed1, ed2, ed3, bos.cov) # just to make damn sure everything lines up
-
-edges.bl <- function(x, y, filename) { # x is edge class, y is cover class
-  out <- raster(x)
-  bs <- blockSize(out)
-  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
-  for (i in 1:bs$n) {
-    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## edge class
-    g <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## cover map
-    v[v!=0] <- NA # kill any weird values that aren't coming from the nocan==0 buffer map
-    v[g!=2] <- NA # cancel edge ID for non-canopy
-    v[v==0] <- 1 # ID edge pixels as 1
-    v[v!=1] <- 0 ## set non-edge values to 0 to hold space
-    out <- writeValues(out, v, bs$row[i])
-    print(paste("finished block", i, "of", bs$n))
-  }
-  out <- writeStop(out)
-  return(out)
-}
-s <- edges.bl(ed1, bos.cov, filename="processed/edge10m.tif")
-t <- edges.bl(ed2, bos.cov, filename="processed/edge20m.tif")
-u <- edges.bl(ed3, bos.cov, filename="processed/edge30m.tif")
+# ### Processing 1m canopy map for edge class
+# ### call python script for identifying canopy edge distance (desktop only)
+# pyth.path = './Rscripts/canopy_process.py'
+# output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
+# print(output)
+# 
+# ### read in edge rasters and correct classifications to produce raster of edge rings (>10, 10-20, 20-30, >30)
+# bos.cov <- raster("processed/bos.cov.tif")
+# ed1 <- raster("processed/nocan_10mbuff.tif")
+# ed2 <- raster("processed/nocan_20mbuff.tif")
+# ed3 <- raster("processed/nocan_30mbuff.tif")
+# ed1 <- extend(ed1, bos.cov) # edge and cover on same grid already
+# ed2 <- extend(ed2, bos.cov)
+# ed3 <- extend(ed3, bos.cov)
+# # edges <- stack(ed1, ed2, ed3, bos.cov) # just to make damn sure everything lines up
+# 
+# edges.bl <- function(x, y, filename) { # x is edge class, y is cover class
+#   out <- raster(x)
+#   bs <- blockSize(out)
+#   out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+#   for (i in 1:bs$n) {
+#     v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## edge class
+#     g <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## cover map
+#     v[v!=0] <- NA # kill any weird values that aren't coming from the nocan==0 buffer map
+#     v[g!=2] <- NA # cancel edge ID for non-canopy
+#     v[v==0] <- 1 # ID edge pixels as 1
+#     v[v!=1] <- 0 ## set non-edge values to 0 to hold space
+#     out <- writeValues(out, v, bs$row[i])
+#     print(paste("finished block", i, "of", bs$n))
+#   }
+#   out <- writeStop(out)
+#   return(out)
+# }
+# s <- edges.bl(ed1, bos.cov, filename="processed/edge10m.tif")
+# t <- edges.bl(ed2, bos.cov, filename="processed/edge20m.tif")
+# u <- edges.bl(ed3, bos.cov, filename="processed/edge30m.tif")
 
 ### package up all the 1m data for Boston and write to disk
 ed10 <- raster("processed/edge10m.tif")
@@ -104,8 +104,8 @@ bos.ndvi <- crop(bos.ndvi, bos.can)
 # bos.isa <- crop(isa, bos.bord)
 # writeRaster(bos.isa, filename="processed/bos_isa_1m.tif", format="GTiff", overwrite=T)
 # # python.load("Rscripts/bosISA_resamp.py") ### test this
-# bos.isa <- raster("processed/isa_cangrid.tif")
-# bos.isa <- crop(bos.isa, bos.can)
+bos.isa <- raster("processed/isa_cangrid.tif")
+bos.isa <- crop(bos.isa, bos.can)
 
 bos.stack <- stack(bos.can, bos.ndvi, bos.cov, bos.isa, ed10, ed20, ed30)
 writeRaster(bos.stack, "processed/bos.stack.1m.tif", format="GTiff", overwrite=T)
@@ -124,7 +124,7 @@ writeRaster(bos.stack, "processed/bos.stack.1m.tif", format="GTiff", overwrite=T
 # evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI.tif") ## this is the July 2010-2012 AOI EVI composite
 # evi.r <- projectRaster(from=evi.r, crs=master.crs, res = 30, method = "ngb")
 # writeRaster(evi.r, filename="processed/EVI/030005-6_2010-2012_EVI_NAD83.tif", format="GTiff", overwrite=T)
-evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif")
+# evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif")
 
 # ### aggregate raw 1m ISA to 30m
 # ### don't fart around with the ISA grid until it's stacked with a 30 m EVI and cropped -- too hard to monkey with, leave in its native state until the end
@@ -158,13 +158,12 @@ AOI.r <- raster("processed/AOI.r.tif")
 # ### prep LULC --> EVI grid
 # pyth.path = './Rscripts/LULC_EVIgrid.py'
 # output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
-
 LULC.r <- raster("processed/LULC30m.tif")
-LULC.r <- extend(LULC.r, evi.r)
 
-evi.r <- crop(evi.r, isa.r)
-AOI.r <- crop(evi.r, isa.r)
 LULC.r <- extend(LULC.r, isa.r)
+evi.r <- crop(evi.r, isa.r)
+AOI.r <- crop(AOI.r, isa.r)
+evi.r <- mask(evi.r, mask = AOI.r)
 
 evi.stack <- stack(evi.r, isa.r, LULC.r, AOI.r)
 writeRaster(evi.stack, filename="processed/EVI30m.stack.tif", format="GTiff", overwrite=T)

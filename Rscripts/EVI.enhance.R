@@ -63,15 +63,71 @@ dev.off()
 
 ### analysis of 1m data with edge classes
 ## look at NDVI vs edge class in 1 m data (will need to extract from sub-polys)
-### read in various 1m maps
-bos.cov <- raster("processed/bos.cov.tif")
-bos.ndvi <- crop(raster("data/NDVI/NDVI_1m_res_cangrid.tif"), bos.cov) ## extent is larger than boston cover map
-bos.ed1 <- raster("processed/edge10m.tif")
-bos.ed2 <- raster("processed/edge20m.tif")
-bos.ed3 <- raster("processed/edge30m.tif")
+bos.stack <- stack("processed/bos.stack.1m.tif")
+names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
 
-bos.stack <- stack(bos.cov, bos.ndvi, bos.ed1, bos.ed2, bos.ed3)
-names(bos.stack) <- c("cov", "ndvi", "ed10", "ed20", "ed30")
+### load up test polygons for different areas of the city
+rox <- readOGR(dsn = "processed/roxbury_test1.shp", layer="roxbury_test1")
+sb <- readOGR(dsn = "processed/stonybrook_test1.shp", layer="stonybrook_test1")
+allan <- readOGR(dsn = "processed/allandale_test1.shp", layer="allandale_test1")
+com <- readOGR(dsn = "processed/commons_test1.shp", layer="commons_test1")
+
+### roxbury
+rox.dat <- extract(bos.stack, rox, df=T)
+rox.dat <- as.data.table(rox.dat)
+
+rox.dat[cov==2 & ed10==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(rox.dat[cov==2,])[1])] ## ndvi and relative canopy % of 10m
+rox.dat[cov==2 & is.na(ed10) & ed20==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(rox.dat[cov==2,])[1])] ## ndvi and relative canopy % of 10-20m
+rox.dat[cov==2 & is.na(ed10) & is.na(ed20) & ed30==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(rox.dat[cov==2,])[1])] ## ndvi and relative canopy % of 20-30m
+rox.dat[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), .(median(ndvi, na.rm=T), length(ndvi)/dim(rox.dat[cov==2,])[1])] ## ndvi and relative canopy % of >30m
+rox.dat[, .(median(ndvi, na.rm=T), length(ndvi)/dim(rox.dat)[1]), by=cov] ### ndvi by cover and relative total fraction
+rox.dat[cov==0 & isa==1, .(median(ndvi), length(ndvi)/dim(rox.dat[cov==0])[1])] ## ndvi of isa, relative fraction of barren
+rox.dat[cov==0 & isa==0, .(median(ndvi), length(ndvi)/dim(rox.dat[cov==0])[1])] ## ndvi of non-impervious barren, relative fraction of barren
+
+### allandale reserve
+plot(allan, add=T)
+allan.dat <- extract(bos.stack, allan, df=T)
+allan.dat <- as.data.table(allan.dat)
+
+allan.dat[cov==2 & ed10==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(allan.dat[cov==2,])[1])] ## ndvi and relative canopy % of 10m
+allan.dat[cov==2 & is.na(ed10) & ed20==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(allan.dat[cov==2,])[1])] ## ndvi and relative canopy % of 10-20m
+allan.dat[cov==2 & is.na(ed10) & is.na(ed20) & ed30==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(allan.dat[cov==2,])[1])] ## ndvi and relative canopy % of 20-30m
+allan.dat[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), .(median(ndvi, na.rm=T), length(ndvi)/dim(allan.dat[cov==2,])[1])] ## ndvi and relative canopy % of >30m
+allan.dat[, .(median(ndvi, na.rm=T), length(ndvi)/dim(allan.dat)[1]), by=cov] ### ndvi by cover and relative total fraction
+allan.dat[cov==0 & isa==1, .(median(ndvi), length(ndvi)/dim(allan.dat[cov==0])[1])] ## ndvi of isa, relative fraction of barren
+allan.dat[cov==0 & isa==0, .(median(ndvi), length(ndvi)/dim(allan.dat[cov==0])[1])] ## ndvi of non-impervious barren, relative fraction of barren
+
+### stonybrook
+plot(sb, add=T)
+sb.dat <- extract(bos.stack, sb, df=T)
+sb.dat <- as.data.table(sb.dat)
+
+sb.dat[cov==2 & ed10==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(sb.dat[cov==2,])[1])] ## ndvi and relative canopy % of 10m
+sb.dat[cov==2 & is.na(ed10) & ed20==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(sb.dat[cov==2,])[1])] ## ndvi and relative canopy % of 10-20m
+sb.dat[cov==2 & is.na(ed10) & is.na(ed20) & ed30==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(sb.dat[cov==2,])[1])] ## ndvi and relative canopy % of 20-30m
+sb.dat[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), .(median(ndvi, na.rm=T), length(ndvi)/dim(sb.dat[cov==2,])[1])] ## ndvi and relative canopy % of >30m
+sb.dat[, .(median(ndvi, na.rm=T), length(ndvi)/dim(sb.dat)[1]), by=cov] ### ndvi by cover and relative total fraction
+sb.dat[cov==0 & isa==1, .(median(ndvi), length(ndvi)/dim(sb.dat[cov==0])[1])] ## ndvi of isa, relative fraction of barren
+sb.dat[cov==0 & isa==0, .(median(ndvi), length(ndvi)/dim(sb.dat[cov==0])[1])] ## ndvi of non-impervious barren, relative fraction of barren
+
+### commons
+plot(com, add=T)
+com.dat <- extract(bos.stack, com, df=T)
+com.dat <- as.data.table(com.dat)
+
+com.dat[cov==2 & ed10==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(com.dat[cov==2,])[1])] ## ndvi and relative canopy % of 10m
+com.dat[cov==2 & is.na(ed10) & ed20==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(com.dat[cov==2,])[1])] ## ndvi and relative canopy % of 10-20m
+com.dat[cov==2 & is.na(ed10) & is.na(ed20) & ed30==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(com.dat[cov==2,])[1])] ## ndvi and relative canopy % of 20-30m
+com.dat[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), .(median(ndvi, na.rm=T), length(ndvi)/dim(com.dat[cov==2,])[1])] ## ndvi and relative canopy % of >30m
+com.dat[, .(median(ndvi, na.rm=T), length(ndvi)/dim(com.dat)[1]), by=cov] ### ndvi by cover and relative total fraction
+com.dat[cov==0 & isa==1, .(median(ndvi), length(ndvi)/dim(com.dat[cov==0])[1])] ## ndvi of isa, relative fraction of barren
+com.dat[cov==0 & isa==0, .(median(ndvi), length(ndvi)/dim(com.dat[cov==0])[1])] ## ndvi of non-impervious barren, relative fraction of barren
+
+
+
+
+
+
 
 ### extract test values from AOI over Stonybrook reserve
 sb <- readOGR(dsn = "processed/stonybrook_AOI.shp", layer = "stonybrook_AOI")
