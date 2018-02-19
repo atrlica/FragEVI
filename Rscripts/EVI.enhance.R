@@ -18,12 +18,11 @@ library(sp)
 #
 # dat.r <- stack(dat.r, lulc, AOI.r)
 # writeRaster(dat.r, filename="processed/EVI_enhance_stack.tif", format="GTiff", overwrite=T)
-dat.r <- stack("processed/EVI_enhance_stack.tif")
+dat.r <- stack("processed/EVI30m.stack.tif")
 names(dat.r) <-  c("evi", "isa", "lulc", "AOI")
 dat <- as.data.table(as.data.frame(dat.r))
 
-### set up framework from Zhao to find Vzi
-### find values for end members
+### Zhao framework to find Vzi
 
 ### this approach controls for which pixels to include as end-members, but not sure that makes sense and creates discontinuities at the ends of the Vzi curve vs. the binned averages
 # veg <- dat[isa<0.01 & lulc%in%c(3,37), mean(evi, na.rm=T)]
@@ -58,9 +57,6 @@ lines(beta.range, Vzi, col="red", lwd=2, lty=2)
 dev.off()
 
 
-
-
-
 ### analysis of 1m data with edge classes
 ## look at NDVI vs edge class in 1 m data (will need to extract from sub-polys)
 bos.stack <- stack("processed/bos.stack.1m.tif")
@@ -71,7 +67,95 @@ rox <- readOGR(dsn = "processed/roxbury_test1.shp", layer="roxbury_test1")
 sb <- readOGR(dsn = "processed/stonybrook_test1.shp", layer="stonybrook_test1")
 allan <- readOGR(dsn = "processed/allandale_test1.shp", layer="allandale_test1")
 com <- readOGR(dsn = "processed/commons_test1.shp", layer="commons_test1")
+matt <- readOGR(dsn = "processed/mattapan_test1.shp", layer="mattapan_test1")
+golf <- readOGR(dsn = "processed/gwrightgolf_test1.shp", layer="gwrightgolf_test1")
+ncc <- readOGR(dsn = "processed/newcalvcem_test1.shp", layer="newcalvcem_test1")
+wrox <- readOGR(dsn = "processed/wroxbury_test1.shp", layer="wroxbury_test1")
+dor <- readOGR(dsn = "processed/dorchester_test1.shp", layer="dorchester_test1")
+beach <- readOGR(dsn = "processed/beachmont_test1.shp", layer="beachmont_test1")
+send <- readOGR(dsn = "processed/southend_test1.shp", layer="southend_test1")
+allst <- readOGR(dsn = "processed/allston_test1.shp", layer="allston_test1")
 
+objs <- list(rox, sb, allan, com, matt, golf, ncc, wrox, dor, beach, send, allst)
+tests <- c("Roxbury", "Stonybrook", "Allandale", "Commons", "Mattapan", "GWGolf", "NewCalvCem", "WRoxbury", "Dorchester", "Beachmont", "Southend", "Allston")
+types <- c("residential", "forest", "forest", "park", "residential", "golf", "cemetery", "residential", "residential", "non-forest", "residential", "residential")
+areas <- numeric()
+g <- data.frame()
+print("starting loop through test zones")
+### loop the test polygons, extract and produce summary NDVI statistics
+for(m in 1:length(objs)){
+  dat <- extract(bos.stack, objs[[m]], df=T)
+  dat <- as.data.table(dat)
+  a <- round(dim(dat)[1]/10000, 1) ## area in ha
+  e10.sum <- round(dat[cov==2 & ed10==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(dat[cov==2])[1])], 4)
+  if(dim(e10.sum)[1]==0){e10.sum <- cbind(0, 0)}
+  e20.sum <- round(dat[cov==2 & is.na(ed10) & ed20==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(dat[cov==2])[1])],4)
+  if(dim(e20.sum)[1]==0){e20.sum <- cbind(0, 0)}
+  e30.sum <- round(dat[cov==2 & is.na(ed10) & is.na(ed20) & ed30==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(dat[cov==2])[1])], 4)
+  if(dim(e30.sum)[1]==0){e30.sum <- cbind(0, 0)}
+  e40.sum <- round(dat[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), .(median(ndvi, na.rm=T), length(ndvi)/dim(dat[cov==2])[1])], 4)
+  if(dim(e40.sum)[1]==0){e40.sum <- cbind(0, 0)}
+  can.a <- round(dim(dat[cov==2,])[1]/dim(dat)[1], 2)
+  grass.sum <- round(dat[cov==1, .(median(ndvi, na.rm=T), dim(dat[cov==1,])[1]/dim(dat[,])[1])], 4)
+  if(dim(grass.sum)[1]==0){grass.sum <- cbind(0, 0)}
+  imp.sum <- round(dat[cov==0 & isa==1, .(median(ndvi), length(ndvi)/dim(dat[cov==0])[1])], 4) ## ndvi of isa, relative fraction of barren
+  if(dim(imp.sum)[1]==0){imp.sum <- cbind(0, 0)}
+  barr.sum <- round(dat[cov==0 & isa==0, .(median(ndvi), length(ndvi)/dim(dat[cov==0])[1])], 4) ## ndvi of non-impervious barren, relative fraction of barren
+  if(dim(barr.sum)[1]==0){barr.sum <- cbind(0, 0)}
+  isa.a <- round(dim(dat[cov==0,])[1]/dim(dat)[1],2)
+  
+  d <- c(cbind(a, e10.sum, e20.sum, e30.sum, e40.sum, can.a, grass.sum, imp.sum, barr.sum, isa.a))
+  names(d) <- names(g)
+  g <- rbind(g, d)
+  print(paste("finished summary of zone", m))
+}
+
+b <- cbind(tests, types, g)
+colnames(b) <- c("Zone", "type", "Area (ha)", "edge10", "edge10 frac", "edge20", "edge20 frac",
+                 "edge30", "edge30 frac", "edgeInt", "edgeInt frac",
+                 "canopy Tfrac", "grass", "grass Tfrac", "imp", "imp frac", "nonimp", "nonimp frac", "barren Tfrac")
+
+### clustered boxplots
+library(ggplot2)
+library(data.table)
+objs <- list(rox, sb, allan, com, matt, golf, ncc, wrox, dor, beach, send, allst)
+tests <- c("Roxbury", "Stonybrook", "Allandale", "Commons", "Mattapan", "GWGolf", "NewCalvCem", "WRoxbury", "Dorchester", "Beachmont", "Southend", "Allston")
+types <- c("residential", "forest", "forest", "park", "residential", "golf", "cemetery", "residential", "residential", "non-forest", "residential", "residential")
+areas <- numeric()
+g <- data.frame()
+print("starting loop through test zones")
+### loop the test polygons, extract and produce summary NDVI statistics
+for(m in 1:length(objs)){
+  dat <- extract(bos.stack, objs[[m]], df=T)
+  dat$zone <- as.factor(m)
+  g <- rbind(g, dat)
+}
+
+## make new class scheme including forest and barren positions
+### this combined data frame may be too large to work with (~1M pixels per test area)
+g <- as.data.table(g)
+g[,cov.ed:=0] ## barren, nonimpervious
+g[cov==1, cov.ed:=1] ## grass
+g[cov==2 & ed10==1, cov.ed:=2] ## 10m canopy
+g[cov==2 & is.na(ed10) & ed20==1, cov.ed:=3] ## 20m canopy
+g[cov==2 & is.na(ed10) & is.na(ed20) & ed30==1, cov.ed:=4] ## 30m canopy
+g[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), cov.ed:=5] ## >30m canopy
+g[cov==0 & isa==1, cov.ed:=6] ## barren, impervious
+fill.pal <- c("sandybrown", "lightgreen", "darksalmon", "orange", "yellow3", "darkgreen", "gray60")
+zone.names <- tests
+p <- ggplot(g, aes(x=cov.ed, y=ndvi, fill=cov.ed))+
+  geom_boxplot()
+p
+
+
++
+  scale_fill_manual(values=fill.pal)+
+  labs(title="NDVI by edge+cover, 1m", x=zone.names, y="NDVI 1m")+
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+p
+
+#####
+#### individual area analyses
 ### roxbury
 rox.dat <- extract(bos.stack, rox, df=T)
 rox.dat <- as.data.table(rox.dat)
@@ -122,8 +206,6 @@ com.dat[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), .(median(ndvi, na.rm=T
 com.dat[, .(median(ndvi, na.rm=T), length(ndvi)/dim(com.dat)[1]), by=cov] ### ndvi by cover and relative total fraction
 com.dat[cov==0 & isa==1, .(median(ndvi), length(ndvi)/dim(com.dat[cov==0])[1])] ## ndvi of isa, relative fraction of barren
 com.dat[cov==0 & isa==0, .(median(ndvi), length(ndvi)/dim(com.dat[cov==0])[1])] ## ndvi of non-impervious barren, relative fraction of barren
-
-
 
 
 
