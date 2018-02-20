@@ -1,9 +1,10 @@
 library(raster)
 library(data.table)
-library(lattice)
 library(rgeos)
 library(rgdal)
 library(sp)
+library(ggplot2)
+library(knitr)
 
 ### Stack 30m layers and crop to AOI
 # dat.r <- stack("processed/evi.isa.30m.tif") ## just EVI and ISA
@@ -63,27 +64,28 @@ bos.stack <- stack("processed/bos.stack.1m.tif")
 names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
 
 ### load up test polygons for different areas of the city
-rox <- readOGR(dsn = "processed/roxbury_test1.shp", layer="roxbury_test1")
-sb <- readOGR(dsn = "processed/stonybrook_test1.shp", layer="stonybrook_test1")
-allan <- readOGR(dsn = "processed/allandale_test1.shp", layer="allandale_test1")
-com <- readOGR(dsn = "processed/commons_test1.shp", layer="commons_test1")
-matt <- readOGR(dsn = "processed/mattapan_test1.shp", layer="mattapan_test1")
-golf <- readOGR(dsn = "processed/gwrightgolf_test1.shp", layer="gwrightgolf_test1")
-ncc <- readOGR(dsn = "processed/newcalvcem_test1.shp", layer="newcalvcem_test1")
-wrox <- readOGR(dsn = "processed/wroxbury_test1.shp", layer="wroxbury_test1")
-dor <- readOGR(dsn = "processed/dorchester_test1.shp", layer="dorchester_test1")
-beach <- readOGR(dsn = "processed/beachmont_test1.shp", layer="beachmont_test1")
-send <- readOGR(dsn = "processed/southend_test1.shp", layer="southend_test1")
-allst <- readOGR(dsn = "processed/allston_test1.shp", layer="allston_test1")
+rox <- readOGR(dsn = "processed/zones/roxbury_test1.shp", layer="roxbury_test1")
+sb <- readOGR(dsn = "processed/zones/stonybrook_test1.shp", layer="stonybrook_test1")
+allan <- readOGR(dsn = "processed/zones/allandale_test1.shp", layer="allandale_test1")
+com <- readOGR(dsn = "processed/zones/commons_test1.shp", layer="commons_test1")
+matt <- readOGR(dsn = "processed/zones/mattapan_test1.shp", layer="mattapan_test1")
+golf <- readOGR(dsn = "processed/zones/gwrightgolf_test1.shp", layer="gwrightgolf_test1")
+ncc <- readOGR(dsn = "processed/zones/newcalvcem_test1.shp", layer="newcalvcem_test1")
+wrox <- readOGR(dsn = "processed/zones/wroxbury_test1.shp", layer="wroxbury_test1")
+dor <- readOGR(dsn = "processed/zones/dorchester_test1.shp", layer="dorchester_test1")
+beach <- readOGR(dsn = "processed/zones/beachmont_test1.shp", layer="beachmont_test1")
+send <- readOGR(dsn = "processed/zones/southend_test1.shp", layer="southend_test1")
+allst <- readOGR(dsn = "processed/zones/allston_test1.shp", layer="allston_test1")
 
 objs <- list(rox, sb, allan, com, matt, golf, ncc, wrox, dor, beach, send, allst)
 tests <- c("Roxbury", "Stonybrook", "Allandale", "Commons", "Mattapan", "GWGolf", "NewCalvCem", "WRoxbury", "Dorchester", "Beachmont", "Southend", "Allston")
 types <- c("residential", "forest", "forest", "park", "residential", "golf", "cemetery", "residential", "residential", "non-forest", "residential", "residential")
 areas <- numeric()
 g <- data.frame()
+y <- data.frame()
 print("starting loop through test zones")
 ### loop the test polygons, extract and produce summary NDVI statistics
-for(m in 1:length(objs)){
+for(m in 3:length(objs)){
   dat <- extract(bos.stack, objs[[m]], df=T)
   dat <- as.data.table(dat)
   a <- round(dim(dat)[1]/10000, 1) ## area in ha
@@ -98,149 +100,59 @@ for(m in 1:length(objs)){
   can.a <- round(dim(dat[cov==2,])[1]/dim(dat)[1], 2)
   grass.sum <- round(dat[cov==1, .(median(ndvi, na.rm=T), dim(dat[cov==1,])[1]/dim(dat[,])[1])], 4)
   if(dim(grass.sum)[1]==0){grass.sum <- cbind(0, 0)}
-  imp.sum <- round(dat[cov==0 & isa==1, .(median(ndvi), length(ndvi)/dim(dat[cov==0])[1])], 4) ## ndvi of isa, relative fraction of barren
+  imp.sum <- round(dat[cov==0 & isa==1, .(median(ndvi), length(ndvi)/dim(dat[cov==0,])[1])], 4) ## ndvi of isa, relative fraction of barren
   if(dim(imp.sum)[1]==0){imp.sum <- cbind(0, 0)}
-  barr.sum <- round(dat[cov==0 & isa==0, .(median(ndvi), length(ndvi)/dim(dat[cov==0])[1])], 4) ## ndvi of non-impervious barren, relative fraction of barren
+  barr.sum <- round(dat[cov==0 & isa==0, .(median(ndvi), length(ndvi)/dim(dat[cov==0,])[1])], 4) ## ndvi of non-impervious barren, relative fraction of barren
   if(dim(barr.sum)[1]==0){barr.sum <- cbind(0, 0)}
   isa.a <- round(dim(dat[cov==0,])[1]/dim(dat)[1],2)
   
-  d <- c(cbind(a, e10.sum, e20.sum, e30.sum, e40.sum, can.a, grass.sum, imp.sum, barr.sum, isa.a))
-  names(d) <- names(g)
+  d <- unname(as.vector(c(cbind(a, e10.sum, e20.sum, e30.sum, e40.sum, can.a, grass.sum, imp.sum, barr.sum, isa.a))))
   g <- rbind(g, d)
   print(paste("finished summary of zone", m))
-}
-
-b <- cbind(tests, types, g)
-colnames(b) <- c("Zone", "type", "Area (ha)", "edge10", "edge10 frac", "edge20", "edge20 frac",
-                 "edge30", "edge30 frac", "edgeInt", "edgeInt frac",
-                 "canopy Tfrac", "grass", "grass Tfrac", "imp", "imp frac", "nonimp", "nonimp frac", "barren Tfrac")
-
-### clustered boxplots
-library(ggplot2)
-library(data.table)
-objs <- list(rox, sb, allan, com, matt, golf, ncc, wrox, dor, beach, send, allst)
-tests <- c("Roxbury", "Stonybrook", "Allandale", "Commons", "Mattapan", "GWGolf", "NewCalvCem", "WRoxbury", "Dorchester", "Beachmont", "Southend", "Allston")
-types <- c("residential", "forest", "forest", "park", "residential", "golf", "cemetery", "residential", "residential", "non-forest", "residential", "residential")
-areas <- numeric()
-g <- data.frame()
-print("starting loop through test zones")
-### loop the test polygons, extract and produce summary NDVI statistics
-for(m in 1:length(objs)){
-  dat <- extract(bos.stack, objs[[m]], df=T)
+  
   dat$zone <- as.factor(m)
-  g <- rbind(g, dat)
+  y <- rbind(y, dat)
+  print(paste("integrated data from zone ", m))
 }
+colnames(g) <- c("Area(ha)", "NDVI.10m", "10m.frac", "NDVI.20m", "20m.frac", "NDVI.30m", "30m.frac", "NDVI.Cint", "Cint.frac", "Can.Tfrac", "NDVI.grass", "grass.Tfrac", "NDVI.imp", "imp.frac", "NDVI.nonimp", "nonimp.frac", "barren.Tfrac")
+b <- cbind(tests, types, g)
+colnames(b)[1:2] <- c("Zone", "type")
+write.csv(b, "processed/bos.zones.summ.csv")
 
+####
+### clustered boxplots
 ## make new class scheme including forest and barren positions
 ### this combined data frame may be too large to work with (~1M pixels per test area)
-g <- as.data.table(g)
-g[,cov.ed:=0] ## barren, nonimpervious
-g[cov==1, cov.ed:=1] ## grass
-g[cov==2 & ed10==1, cov.ed:=2] ## 10m canopy
-g[cov==2 & is.na(ed10) & ed20==1, cov.ed:=3] ## 20m canopy
-g[cov==2 & is.na(ed10) & is.na(ed20) & ed30==1, cov.ed:=4] ## 30m canopy
-g[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), cov.ed:=5] ## >30m canopy
-g[cov==0 & isa==1, cov.ed:=6] ## barren, impervious
-fill.pal <- c("sandybrown", "lightgreen", "darksalmon", "orange", "yellow3", "darkgreen", "gray60")
-zone.names <- tests
-p <- ggplot(g, aes(x=cov.ed, y=ndvi, fill=cov.ed))+
-  geom_boxplot()
+y <- as.data.table(y)
+y[,cov.ed:=0] ## barren, nonimpervious
+y[cov==1, cov.ed:=1] ## grass
+y[cov==2 & ed10==1, cov.ed:=2] ## 10m canopy
+y[cov==2 & is.na(ed10) & ed20==1, cov.ed:=3] ## 20m canopy
+y[cov==2 & is.na(ed10) & is.na(ed20) & ed30==1, cov.ed:=4] ## 30m canopy
+y[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), cov.ed:=5] ## >30m canopy
+y[cov==0 & isa==1, cov.ed:=6] ## barren, impervious
+fill.pal <- c("gray80", "lightgreen", "darksalmon", "orange", "yellow3", "darkgreen", "gray40")
+# y$cov.ed <- as.factor(y$cov.ed)
+# y[zone==1, zone.name:="Roxbury"]
+# y[zone==2, zone.name:="Stonybrook"]
+# y[zone==3, zone.name:="Allandale"]
+# y[zone==4, zone.name:="Commons"]
+# y[zone==5, zone.name:="Mattapan"]
+# y[zone==6, zone.name:="GWGolf"]
+# y[zone==7, zone.name:="NewCalvCem"]
+# y[zone==8, zone.name:="WRoxbury"]
+# y[zone==9, zone.name:="Dorchester"]
+# y[zone==10, zone.name:="Beachmont"]
+# y[zone==11, zone.name:="Southend"]
+# y[zone==12, zone.name:="Allston"]
+# y$zone.name <- as.factor(y$zone.name)
+# write.csv(y, "processed/Bos.tests.extract.data.csv")
+p <- ggplot(aes(x=zone, y=ndvi, fill=cov.ed), data=y)+
+  geom_boxplot(outlier.shape = NA, position = position_dodge(width=.8))+
+  scale_fill_manual(values=fill.pal, labels=c("barren", "grass", "10m", "20m", "30m", ">30m", "imperv."))+
+  labs(title="NDVI by edge+cover, 1m", y="NDVI 1m")+
+  theme(axis.text.x = element_text(angle=90, hjust=1))+
+  scale_x_discrete(name="Test Zone", labels=tests)
 p
 
 
-+
-  scale_fill_manual(values=fill.pal)+
-  labs(title="NDVI by edge+cover, 1m", x=zone.names, y="NDVI 1m")+
-  theme(axis.text.x = element_text(angle=90, hjust=1))
-p
-
-#####
-#### individual area analyses
-### roxbury
-rox.dat <- extract(bos.stack, rox, df=T)
-rox.dat <- as.data.table(rox.dat)
-
-rox.dat[cov==2 & ed10==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(rox.dat[cov==2,])[1])] ## ndvi and relative canopy % of 10m
-rox.dat[cov==2 & is.na(ed10) & ed20==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(rox.dat[cov==2,])[1])] ## ndvi and relative canopy % of 10-20m
-rox.dat[cov==2 & is.na(ed10) & is.na(ed20) & ed30==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(rox.dat[cov==2,])[1])] ## ndvi and relative canopy % of 20-30m
-rox.dat[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), .(median(ndvi, na.rm=T), length(ndvi)/dim(rox.dat[cov==2,])[1])] ## ndvi and relative canopy % of >30m
-rox.dat[, .(median(ndvi, na.rm=T), length(ndvi)/dim(rox.dat)[1]), by=cov] ### ndvi by cover and relative total fraction
-rox.dat[cov==0 & isa==1, .(median(ndvi), length(ndvi)/dim(rox.dat[cov==0])[1])] ## ndvi of isa, relative fraction of barren
-rox.dat[cov==0 & isa==0, .(median(ndvi), length(ndvi)/dim(rox.dat[cov==0])[1])] ## ndvi of non-impervious barren, relative fraction of barren
-
-### allandale reserve
-plot(allan, add=T)
-allan.dat <- extract(bos.stack, allan, df=T)
-allan.dat <- as.data.table(allan.dat)
-
-allan.dat[cov==2 & ed10==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(allan.dat[cov==2,])[1])] ## ndvi and relative canopy % of 10m
-allan.dat[cov==2 & is.na(ed10) & ed20==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(allan.dat[cov==2,])[1])] ## ndvi and relative canopy % of 10-20m
-allan.dat[cov==2 & is.na(ed10) & is.na(ed20) & ed30==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(allan.dat[cov==2,])[1])] ## ndvi and relative canopy % of 20-30m
-allan.dat[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), .(median(ndvi, na.rm=T), length(ndvi)/dim(allan.dat[cov==2,])[1])] ## ndvi and relative canopy % of >30m
-allan.dat[, .(median(ndvi, na.rm=T), length(ndvi)/dim(allan.dat)[1]), by=cov] ### ndvi by cover and relative total fraction
-allan.dat[cov==0 & isa==1, .(median(ndvi), length(ndvi)/dim(allan.dat[cov==0])[1])] ## ndvi of isa, relative fraction of barren
-allan.dat[cov==0 & isa==0, .(median(ndvi), length(ndvi)/dim(allan.dat[cov==0])[1])] ## ndvi of non-impervious barren, relative fraction of barren
-
-### stonybrook
-plot(sb, add=T)
-sb.dat <- extract(bos.stack, sb, df=T)
-sb.dat <- as.data.table(sb.dat)
-
-sb.dat[cov==2 & ed10==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(sb.dat[cov==2,])[1])] ## ndvi and relative canopy % of 10m
-sb.dat[cov==2 & is.na(ed10) & ed20==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(sb.dat[cov==2,])[1])] ## ndvi and relative canopy % of 10-20m
-sb.dat[cov==2 & is.na(ed10) & is.na(ed20) & ed30==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(sb.dat[cov==2,])[1])] ## ndvi and relative canopy % of 20-30m
-sb.dat[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), .(median(ndvi, na.rm=T), length(ndvi)/dim(sb.dat[cov==2,])[1])] ## ndvi and relative canopy % of >30m
-sb.dat[, .(median(ndvi, na.rm=T), length(ndvi)/dim(sb.dat)[1]), by=cov] ### ndvi by cover and relative total fraction
-sb.dat[cov==0 & isa==1, .(median(ndvi), length(ndvi)/dim(sb.dat[cov==0])[1])] ## ndvi of isa, relative fraction of barren
-sb.dat[cov==0 & isa==0, .(median(ndvi), length(ndvi)/dim(sb.dat[cov==0])[1])] ## ndvi of non-impervious barren, relative fraction of barren
-
-### commons
-plot(com, add=T)
-com.dat <- extract(bos.stack, com, df=T)
-com.dat <- as.data.table(com.dat)
-
-com.dat[cov==2 & ed10==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(com.dat[cov==2,])[1])] ## ndvi and relative canopy % of 10m
-com.dat[cov==2 & is.na(ed10) & ed20==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(com.dat[cov==2,])[1])] ## ndvi and relative canopy % of 10-20m
-com.dat[cov==2 & is.na(ed10) & is.na(ed20) & ed30==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(com.dat[cov==2,])[1])] ## ndvi and relative canopy % of 20-30m
-com.dat[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), .(median(ndvi, na.rm=T), length(ndvi)/dim(com.dat[cov==2,])[1])] ## ndvi and relative canopy % of >30m
-com.dat[, .(median(ndvi, na.rm=T), length(ndvi)/dim(com.dat)[1]), by=cov] ### ndvi by cover and relative total fraction
-com.dat[cov==0 & isa==1, .(median(ndvi), length(ndvi)/dim(com.dat[cov==0])[1])] ## ndvi of isa, relative fraction of barren
-com.dat[cov==0 & isa==0, .(median(ndvi), length(ndvi)/dim(com.dat[cov==0])[1])] ## ndvi of non-impervious barren, relative fraction of barren
-
-
-
-
-
-### extract test values from AOI over Stonybrook reserve
-sb <- readOGR(dsn = "processed/stonybrook_AOI.shp", layer = "stonybrook_AOI")
-sb.dat <- extract(bos.stack, sb, df=T)
-sb.dat <- as.data.table(sb.dat)
-
-sb.dat[cov==2 & ed10==1, median(ndvi)]
-hist(sb.dat[cov==2 & ed10==1, ndvi])
-
-sb.dat[cov==2 & ed20==1, median(ndvi)]
-hist(sb.dat[cov==2 & ed20==1, ndvi])
-
-sb.dat[cov==2 & ed30==1, median(ndvi)]
-hist(sb.dat[cov==2 & ed30==1, ndvi])
-
-### only interior canopy
-sb.dat[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), median(ndvi)] ### higher than 
-hist(sb.dat[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), ndvi])
-
-sb.dat[ed30==1 & is.na(ed20) & is.na(ed10), ring:=3]
-sb.dat[ed20==1 & is.na(ed10), ring:=2]
-sb.dat[ed10==1, ring:=1]
-sb.dat[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), ring:=4]
-sb.dat[cov==1, ring:=5]
-sb.dat[cov==0, ring:=6]
-
-par(mar=c(1,4,2,1), mgp=c(2,1,0))
-png(filename="images/SB_test_NDVI_boxpl.png", width = 6, height = 6, units = "in", res=108)
-boxplot(sb.dat[, ndvi]~sb.dat[,ring], 
-        col=c("pink", "orange", "yellow", "forestgreen", "lightgreen", "grey50"), xaxt="n",
-        main="NDVI by edge distance and cover class", ylab="NDVI")
-legend(x = 3, y = 0, legend = c("10m", "20m", "30m", ">30m", "grass", "barren"), 
-       fill = c("pink", "orange", "yellow", "forestgreen", "lightgreen", "grey50"), cex=0.84)
-dev.off()
