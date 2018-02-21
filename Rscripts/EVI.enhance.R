@@ -7,18 +7,6 @@ library(ggplot2)
 library(knitr)
 
 ### Stack 30m layers and crop to AOI
-# dat.r <- stack("processed/evi.isa.30m.tif") ## just EVI and ISA
-# 
-# ### read in the LULC map to help constrain the pixel selection for the end members
-# lulc <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/LU_polys/LU_rast_full.tif")
-# lulc <- projectRaster(lulc, dat.r, method = "ngb")
-# 
-# ### AOI boundaries
-# AOI <- readOGR(dsn="/projectnb/buultra/atrlica/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/", layer="AOI_simple_NAD83UTM19N")
-# AOI.r <- rasterize(AOI, dat.r)
-#
-# dat.r <- stack(dat.r, lulc, AOI.r)
-# writeRaster(dat.r, filename="processed/EVI_enhance_stack.tif", format="GTiff", overwrite=T)
 dat.r <- stack("processed/EVI30m.stack.tif")
 names(dat.r) <-  c("evi", "isa", "lulc", "AOI")
 dat <- as.data.table(as.data.frame(dat.r))
@@ -57,6 +45,49 @@ plot(chunk[,i.bin], chunk[,med],
 lines(beta.range, Vzi, col="red", lwd=2, lty=2)
 dev.off()
 
+#### look at EVI vs. ISA plot by subtype
+beta.range <- seq(from=0, to=1, by=0.01) 
+vtypes <- dat[,unique(lulc)]
+vtypes <- vtypes[!is.na(vtypes)]
+vtypes <- vtypes[!vtypes==20]
+vnum <- c(1:20, 23:26, 29, 31, 34:40)
+vnames <- c("Crop", "Pasture", "Forest", "NFwet", "Mining", "Open", "PartRec", 
+            "SpectRec", "WBRec", "MFResid", "HDResid", "MDResid", "LDResid", "SWwet",
+            "Comm", "Ind", "Tran", "Transp", "Waste", "Water", "CBog", "Util", 
+            "SWBeach", "Golf", "Marina", "PubInst", "Cem", "Orch", "Nurs", "FWet", "VLDResid", 
+            "Junk", "Brush")
+vlook <- data.frame(cbind(vnum, vnames))
+pal <- rainbow(length(vtypes))
+for(v in 1:length(vtypes)){
+  veg <- dat[isa<0.01 & AOI==1 & lulc!=20 & lulc==vtypes[v], median(evi, na.rm=T)]
+  veg.err <- dat[isa<0.01  & lulc!=20 & AOI==1 & lulc==vtypes[v], sd(evi, na.rm=T)/sqrt(length(evi))]
+  veg.n <- dat[isa<0.01  & lulc!=20 & AOI==1 & lulc==vtypes[v], length(evi)]
+  noveg <- dat[isa>=0.99 & lulc!=20 & AOI==1 & lulc==vtypes[v], median(evi, na.rm=T)]
+  noveg.err <- dat[isa>=0.99 & lulc!=20 & AOI==1 & lulc==vtypes[v], sd(evi, na.rm=T)/sqrt(length(evi))]
+  noveg.n <- dat[isa>=0.99 & lulc!=20 & AOI==1 & lulc==vtypes[v], length(evi)]
+  Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
+  dat[AOI==1 & lulc!=20  & lulc==vtypes[v], bin:=findInterval(isa, beta.range, all.inside=T)]
+  chunk <- dat[lulc!=20 & AOI==1 & lulc==vtypes[v], list(.N, m=mean(evi, na.rm=T), med=median(evi, na.rm=T), i.bin=median(isa, na.rm=T)), by=bin]
+  par(mar=c(4,4,2,1), mgp=c(2,1,0))
+  if(is.na(noveg)){noveg <- 0}
+  if(is.na(veg)){veg <- 0.6}
+  plot(chunk[,i.bin], chunk[,med], 
+       ylim=c(noveg-0.05, veg+0.05),
+       main=paste("EVI vs. ISA", vlook[vnum==vtypes[v], "vnames"]), 
+       xlab="", ylab="",
+       pch=15, col=pal[v])
+  lines(beta.range, Vzi, col="red", lwd=2, lty=2)
+}
+
+### fractional cover by LULC
+vfracs <- dat[!is.na(AOI),length(evi), by=lulc]
+vfracs.t <- vfracs
+vfracs.t$lulc.name <- NA
+for(h in 1:dim(vfracs.t)[1]){
+  hunt <- vfracs.t$lulc[h]
+  vfracs.t$lulc.name[h] <- as.character(vlook$vnames[vlook$vnum==hunt])
+}
+vfracs.t$Tfrac <- round(vfracs$V1/dat[!is.na(AOI),length(evi)], digits=3)
 
 ### analysis of 1m data with edge classes
 ## look at NDVI vs edge class in 1 m data (will need to extract from sub-polys)
