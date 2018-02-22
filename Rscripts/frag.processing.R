@@ -203,3 +203,41 @@ naip.dat[, ndvi:=((band4-band1)/(band4+band1))]
 ndvi.r <- raster(naip.test[[1]])
 ndvi.r <- setValues(x = ndvi.r, values=naip.dat[,ndvi])
 writeRaster(ndvi.r, filename="processed/NAIP.ndvi.test.tif", format="GTiff", overwrite=T)
+
+
+#### Test: Retrieve EVI from 4-band Quickbird imagery
+#### the below raw pan-sharpened data is 60cm, but is reported XXXXX integer -- assume this is corrected/orthorectified reflectance in integer form?
+qb <- stack("Z:/Ultra1/Data/Remote_Sensing/Quickbird/Mosaic_pansharp/Boston_pan.tif")
+names(qb) <- c("blue", "green", "red", "nir")
+qb.evi <- function(x,y,z,filename){ ### enter as red blue nir
+  out <- raster(x)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=T, format="GTiff")
+  for(i in 1:bs$n){
+    red <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## red band
+    red <- red/100000
+    blue <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## blue band
+    blue <- blue/100000
+    nir <- getValues(z, row=bs$row[i], nrows=bs$nrows[i]) ## nir band
+    nir <- nir/100000
+    ## kill values that are all 0 (=NA)
+    red.na <- red
+    red.na[red==0 & blue==0 & nir==0] <- NA
+    blue.na <- blue
+    blue.na[red==0 & blue==0 & nir==0] <- NA
+    nir.na <- nir
+    nir.na[red==0 & blue==0 & nir==0] <- NA
+    evi.calc <- 2.5*((nir.na-red.na)/(nir.na+6*red.na-7.5*blue.na+1))
+    out <- writeValues(out, evi.calc, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+s <- qb.evi(qb[["red"]], qb[["blue"]], qb[["nir"]], filename="processed/bos.evi.1m.tif")
+
+## this seems to give reasonable EVI values but seem pretty low even in dense canopy (~0.25 where NDVI values show 0.6)
+## also there is a difference in registration (several meters) between this file and the other 1m boston rasters.
+evi.bos <- raster("processed/bos.evi.1m.tif")
+
+bos.stack <- stack("processed/bos.stack.1m.tif")
