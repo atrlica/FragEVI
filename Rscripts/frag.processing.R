@@ -108,14 +108,158 @@ bos.isa <- raster("processed/isa_cangrid.tif")
 bos.isa <- crop(bos.isa, bos.can)
 
 bos.stack <- stack(bos.can, bos.ndvi, bos.cov, bos.isa, ed10, ed20, ed30)
-writeRaster(bos.stack, "processed/bos.stack.1m.tif", format="GTiff", overwrite=T)
-### do I add a 1m raster version of the LULC layer here? at all useful past the bos.cov information?
+# writeRaster(bos.stack, "processed/boston/bos.stack.1m.tif", format="GTiff", overwrite=T)
+
+##### work to get 1m boston data aggregated to 30m EVI grid
+evi.stack <- stack("processed/EVI30m.stack.tif")
+bos.stack <- stack("processed/boston/bos.stack.1m.tif")
+names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
+# plot(bos.stack)
+
+### get Boston limits, raterize to EVI 30m grid
+towns <- readOGR(dsn = "F:/BosAlbedo/data/towns/town_AOI.shp", layer = "town_AOI" )
+bos.AOI <- towns[towns@data$TOWN=="BOSTON",]
+bos.AOI <- bos.AOI[bos.AOI@data$SHAPE_AREA>1E07,] ## remove Harbor Islands
+bos.AOI <- spTransform(bos.AOI, crs(bos.stack))
+bos.AOI@data$include <- 1
+# bos.AOI.r <- rasterize(bos.AOI[bos.AOI@data$include], evi.stack[[1]])
+# bos.AOI.r <- crop(bos.AOI.r, bos.AOI)
+# ba.dat <- as.data.table(as.data.frame(bos.AOI.r))
+# ba.dat[!is.na(OBJECTID) | !is.na(OBJECTID.1), dogshit:=1] ## set all areas to same value
+# bos.AOI.r <- setValues(bos.AOI.r, ba.dat$dogshit)
+# 
+# bos.evi <- crop(evi.stack, bos.AOI.r)
+# bos.evi <- mask(bos.evi, bos.AOI.r)
+# names(bos.evi) <- c("evi", "isa", "lulc", "AOI") ### the Boston city limits in 30m grid
+# sum(getValues(bos.evi[["AOI"]]), na.rm=T) ## 138k pixels
+
+##### Work boston 1m layers out into separate 0/1 classified files
+### make 1m Boston AOI raster mask
+bos.AOI.1m <- rasterize(bos.AOI[bos.AOI@data$include], bos.stack[[1]])
+bos.AOI.1m <- crop(bos.AOI.1m, bos.AOI)
+bos.AOI.1mf <- raster(bos.AOI.1m)
+bos.AOI.1mf <- setValues(bos.AOI.1mf, values = rep(1, length=ncell(bos.AOI.1m)))
+bos.AOI.1mf <- mask(bos.AOI.1mf, bos.AOI.1m)
+writeRaster(bos.AOI.1mf, filename="processed/boston/bos.aoi_only.tif", format="GTiff", overwrite=T)
+bos.aoi <- raster("processed/boston/")
+
+# ### get separate layers for each with cover=0/1 (vs. cover=0,1,2)
+# bos.stack <- stack("processed/boston/bos.stack.1m.tif")
+# names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
+# 
+# grass.find <- function(x){
+#   x[x!=1] <- 0
+#   return(x)
+# }
+# grass.only <- calc(bos.stack[["cov"]], fun=grass.find, filename="processed/boston/bos.grass_only.tif", format="GTiff", overwrite=T)
+# 
+# barr.find <- function(x){
+#   x[x==0] <- 10
+#   x[x!=10] <- 0
+#   x[] <- x[]/10
+# }
+# barr.only <- calc(bos.stack[["cov"]], barr.find, filename="processed/boston/bos.barr_only.tif", format="GTiff", overwrite=T)
+
+# can.find <- function(x){
+#   x[x==2] <- 10
+#   x[x!=10] <- 0
+#   x[] <- x[]/10
+#   return(x)
+# }
+# can <- calc(bos.stack[["cov"]], can.find, filename="processed/bos.can_only.tif", format="GTiff", overwrite=T)
+
+# can.only <- raster("processed/bos.can_only.tif")
+grass.only <- raster("processed/boston/bos.grass_only.tif")
+barr.only <- raster("processed/boston/bos.barr_only.tif")
+
+# nonimp.only <- overlay(barr.only, bos.stack[["isa"]], fun=function(x,y){return(x-y)}, filename="processed/boston/bos.nonimp_only.tif", overwrite=T, format="GTiff")
+nonimp.only <- raster("processed/boston/bos.nonimp_only.tif")
+
+# # test if can_only == can
+# can.test <- overlay(bos.stack[["can"]], can.only, fun=function(x,y){return(x-y)})
+# plot(can.test) # yes they are identical
+
+### make map of individual buffer rings
+bos.stack <- stack("processed/boston/bos.stack.1m.tif")
+names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
+bos.aoi <- raster("processed/boston/bos.aoi_only.tif")
+
+### first need to reclass the edge maps to 0/1 (are in 1/NA)
+fix.buff <- function(x){ # x is buffer, y is next smallest buffer
+  x[is.na(x)] <- 0
+  return(x)
+}
+bos.stack[["ed10"]] <- calc(bos.stack[["ed10"]], fun=fix.buff)
+bos.stack[["ed20"]] <- calc(bos.stack[["ed20"]], fun=fix.buff)
+bos.stack[["ed30"]] <- calc(bos.stack[["ed30"]], fun=fix.buff)
+bos.stack <- mask(bos.stack, bos.aoi)
+
+### 10m ring is already done in ed10
+
+### 20m ring
+buff.20only <- overlay(bos.stack, buff.20only, fun=function(x,y){return(y-x)})
+
+### 30m ring
+buff.30only <- calc(bos.stack[["ed30"]], fix.buff)
+buff.30only <- overlay(buff.20only, buff.30only, fun=function(x,y){return(y-x)})
+
+### interior (buff.30only is already 0/1 classed)
+buff.Intonly <- overlay(buff.30only, bos.stack[["can"]], fun=function(x,y){return(y-x)})
+
+buffs.only <- stack(buff.10only, buff.20only, buff.30only, buff.Intonly)
+buffs.only <- mask(buffs.only, bos.stack[["aoi"]])
+writeRaster(buffs.only, filename="processed/bos.buffs_only.tif", format="GTiff", overwrite=T)
+
+bos.stack <- stack(bos.stack, buffs.only)
+writeRaster(bos.stack, filename="procesed/bos.stack.tif", format="GTiff", overwrite=T)
+### boston stack is now: names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30", "aoi", "grass", "barr", "nonimp")
 
 
+### fix inclusive buffer rings 0-20m and 0-30m to 0/1
+bos.stack <- stack("processed/bos.stack.tif")
+names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30", "aoi", "grass", "barr", "nonimp", "ed10only", "ed20only", "ed30only", "Intonly")
+
+ed20.f <- fix.buff(bos.stack[["ed20"]])
+ed20.f <- mask(ed20.f, )
 
 
+bos.stack <- crop(bos.stack, bos.AOI.1mf)
+bos.stack <- stack(bos.stack, bos.AOI.1mf)
+bos.stack <- mask(bos.stack, bos.AOI.1m) ## masks the NA/1 AOI by the 1/2 AOI
+writeRaster(bos.stack, filename="processed/bos.stack.1m.tif", overwrite=T, format="GTiff")
+
+### final 1m stack for fractional cover (0/1 classified) should be can, ndvi, isa, nonimp, barr, aoi, <10edge, <20edge, <30edge, >30edge, 
+## get fractional area of each cover class per 30m aggregate cell
+bos.AOI.sizes <- aggregate(bos.stack[["aoi"]], fact=30, fun=sum, na.rm=T) ## gives the size of each cell within the boston AOI
+bos.stack.30m <- aggregate(bos.stack, fun=mean, na.rm=T) ## gives the mean (ndvi) or or total area (can/isa/edge/cover) per cell within the boundaries
+
+
+stack.frac <- function(x, y, filename) { # x is 1m boston input, y is cell area
+  out <- raster(x)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    r <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## input class area
+    a <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## total inside-AOI area
+    v[v!=0] <- NA # kill any weird values that aren't coming from the nocan==0 buffer map
+    v[g!=2] <- NA # cancel edge ID for non-canopy
+    v[v==0] <- 1 # ID edge pixels as 1
+    v[v!=1] <- 0 ## set non-edge values to 0 to hold space
+    frac <- r/a
+    out <- writeValues(out, frac, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+# s <- edges.bl(ed1, bos.cov, filename="processed/edge10m.tif")
+# t <- edges.bl(ed2, bos.cov, filename="processed/edge20m.tif")
+# u <- edges.bl(ed3, bos.cov, filename="processed/edge30m.tif")
+
+
+######
 ####
-### 30 m aggregate to Landsat grid
+### AOI aggregate to 30 m Landsat grid -- only have ISA AOI LULC and EVI as of Feb 22 2018
 # ### read in AOI for crs description
 # AOI <- readOGR(dsn="/projectnb/buultra/atrlica/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/", layer="AOI_simple_NAD83UTM19N")
 # master.crs <- crs(AOI)
@@ -128,7 +272,7 @@ writeRaster(bos.stack, "processed/bos.stack.1m.tif", format="GTiff", overwrite=T
 
 # ### aggregate raw 1m ISA to 30m
 # ### don't fart around with the ISA grid until it's stacked with a 30 m EVI and cropped -- too hard to monkey with, leave in its native state until the end
-# ### raster-native approach -- takes a long time
+# ### raster-native approach required, file too large for data.table -- takes a long time
 # ### correct the 16 values to NA to get a proper aggregated mean value per cell (0 = not impervious, 1 = impervious)
 # isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
 # fun <- function(x){
@@ -169,28 +313,7 @@ evi.stack <- stack(evi.r, isa.r, LULC.r, AOI.r)
 writeRaster(evi.stack, filename="processed/EVI30m.stack.tif", format="GTiff", overwrite=T)
 
 
-#### pull out cover classes as individual layers to assist with aggregated area in 30 m pixels
-# ## get labeled values for grass/canopy/barren, export to arc for aggregation to landsat grid
-# grass.find <- function(x){
-#   x[x!=1] <- 0
-#   return(x) ## this give 900 for areas that are 100% grass
-# }
-# grass <- calc(bos.cov, fun=grass.find, filename="E:/FragEVI/processed/bos.grass_only.tif", format="GTiff", overwrite=T)
-# 
-# barr.find <- function(x){
-#   x[x==0] <- 10
-#   x[x!=10] <- 0
-#   x[] <- x[]/10
-# }
-# barr <- calc(bos.cov, barr.find, filename="E:/FragEVI/processed/bos.barr_only.tif", format="GTiff", overwrite=T)
-# 
-# can.find <- function(x){
-#   x[x==2] <- 10
-#   x[x!=10] <- 0
-#   x[] <- x[]/10
-#   return(x)
-# }
-# can <- calc(bos.cov, can.find, filename="E:/FragEVI/processed/bos.can_only.tif", format="GTiff", overwrite=T)
+
 
 
 
@@ -205,7 +328,7 @@ ndvi.r <- setValues(x = ndvi.r, values=naip.dat[,ndvi])
 writeRaster(ndvi.r, filename="processed/NAIP.ndvi.test.tif", format="GTiff", overwrite=T)
 
 
-#### Test: Retrieve EVI from 4-band Quickbird imagery
+#### Test Code: Retrieve EVI from 4-band Quickbird imagery
 #### the below raw pan-sharpened data is 60cm, but is reported XXXXX integer -- assume this is corrected/orthorectified reflectance in integer form?
 qb <- stack("Z:/Ultra1/Data/Remote_Sensing/Quickbird/Mosaic_pansharp/Boston_pan.tif")
 names(qb) <- c("blue", "green", "red", "nir")

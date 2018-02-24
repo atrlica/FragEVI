@@ -62,43 +62,6 @@ for(f in 1:length(files)){
                 format="GTiff", overwrite=T)
     }
   print(paste("finished with ", scn.ID, sep=""))
-  
-  # ### alternate raster-based calculations -- take a very long time
-  # ### carve out saturated values
-  # temp.sat <- function(x){
-  #   x[x>10000] <- NA
-  #   return(x)
-  # }
-  # temp <- calc(temp, fun=temp.sat)
-  # 
-  # ## scale reflectance values
-  # temp.scale <- function(x){x*0.0001}
-  # temp <- calc(temp, fun=temp.scale)
-  # 
-  # ## fix qa to common mask values (keeping only qa codes 66, 130 --> clear, low-med prob of cloud)
-  # qa <- raster(paste(dir, bands.qa, sep="/"))
-  # qa <- calc(qa, fun = function(x){x[x%in%c(66,130)] <- 5555; return(x)})
-  # 
-  # ### apply qa filter mask
-  # temp <- mask(temp, qa, maskvalue=5555, inverse=T)
-  # 
-  # ### calculate NDVI, EVI
-  # ndvi.fun <- function(x,y){
-  #   return((x-y)/(x+y))
-  # }
-  # ndvi <- overlay(temp[[4]], temp[[3]], fun=ndvi.fun)
-  # writeRaster(ndvi, 
-  #             filename=paste("processed/NDVI/ARD_", scn.ID, "_NDVI.tif", sep=""),
-  #             format="GTiff")
-  # 
-  # evi.fun <- function(x,y,z){
-  #   return(2.5*((x-y)/(x+6*y-7.5*z+1)))
-  # }
-  # evi <- overlay(temp[[4]], temp[[3]], temp[[1]], fun=evi.fun)
-  # writeRaster(evi, 
-  #             filename=paste("processed/EVI/ARD_", scn.ID, "_EVI.tif", sep=""),
-  #             format="GTiff")
-  
 }
 
 ## load up rasters, strip, combine, and mosaic
