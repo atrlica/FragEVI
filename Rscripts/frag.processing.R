@@ -201,6 +201,36 @@ buff.Intonly <- overlay(bos.stack[["ed30"]], bos.stack[["can"]], fun=function(x,
 buffs.only <- stack(buff.20only, buff.30only, buff.Intonly)
 writeRaster(buffs.only, filename="processed/boston/bos.buffs_only.tif", format="GTiff", overwrite=T)
 
+### add LULC 1m raster info
+# ### call python script for rasterize LULC in Boston to 1m canopy grid
+# pyth.path = './Rscripts/LULC_bos_rast.py'
+# output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
+# print(output)
+
+bos.lulc <- raster("processed/boston/LU_bos_r1m.tif")
+bos.aoi <- raster("processed/boston/bos.aoi_only.tif")
+bos.lulc <- crop(bos.lulc, bos.aoi)
+bos.lulc <- mask(bos.lulc, bos.aoi)
+
+water.lulc <- function(x, filename) { # x is edge class, y is cover class
+  out <- raster(x)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## edge class
+    o <- rep(0, length(v))
+    o[v==20] <- 1
+    out <- writeValues(out, o, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+s <- water.lulc(bos.lulc, filename="processed/boston/bos.water_only.tif")
+
+
+
+
 ### bring it all together
 grass.only <- raster("processed/boston/bos.grass_only.tif")
 barr.only <- raster("processed/boston/bos.barr_only.tif")
