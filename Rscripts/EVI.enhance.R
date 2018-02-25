@@ -35,6 +35,7 @@ Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
 dat[AOI==1 & lulc!=20, bin:=findInterval(isa, beta.range, all.inside=T)]
 chunk <- dat[lulc!=20 & AOI==1, list(.N, m=mean(evi, na.rm=T), med=median(evi, na.rm=T), i.bin=median(isa, na.rm=T)), by=bin]
 
+### binned EVI vs. ISA, all LULC
 par(mar=c(4,4,2,1), mgp=c(2,1,0))
 pdf(file = "images/EVI_ISA_binned30m.pdf", width = 6, height = 6)
 plot(chunk[,i.bin], chunk[,med], 
@@ -89,8 +90,9 @@ for(h in 1:dim(vfracs.t)[1]){
 }
 vfracs.t$Tfrac <- round(vfracs$V1/dat[!is.na(AOI),length(evi)], digits=3)
 
-### analysis of 1m data with edge classes
-## look at NDVI vs edge class in 1 m data (will need to extract from sub-polys)
+
+
+### analysis of 1m data with edge classes, select zones of Boston city limits
 bos.stack <- stack("processed/bos.stack.1m.tif")
 names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
 
