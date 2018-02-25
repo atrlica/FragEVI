@@ -89,7 +89,7 @@ for(h in 1:dim(vfracs.t)[1]){
   vfracs.t$lulc.name[h] <- as.character(vlook$vnames[vlook$vnum==hunt])
 }
 vfracs.t$Tfrac <- round(vfracs$V1/dat[!is.na(AOI),length(evi)], digits=3)
-
+vfracs.t[order(Tfrac, decreasing = T),]
 
 
 ### analysis of 1m data with edge classes, select zones of Boston city limits
