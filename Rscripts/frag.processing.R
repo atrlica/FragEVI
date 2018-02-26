@@ -114,8 +114,6 @@ library(data.table)
 ##### work to get 1m boston data aggregated to 30m EVI grid
 bos.stack <- stack("processed/boston/bos.stack.1m.tif")
 names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
-# plot(bos.stack)
-writeRaster(bos.stack[["isa"]], filename="processed/boston/bos.isa_only.tif", format="GTiff", overwrite=T)
 
 ### get Boston limits, raterize to EVI 30m grid
 # towns <- readOGR(dsn = "F:/BosAlbedo/data/towns/town_AOI.shp", layer = "town_AOI" )
@@ -141,7 +139,7 @@ writeRaster(bos.stack[["isa"]], filename="processed/boston/bos.isa_only.tif", fo
 # bos.AOI.1mf <- raster(bos.AOI.1m)
 # bos.AOI.1mf <- setValues(bos.AOI.1mf, values = rep(1, length=ncell(bos.AOI.1m)))
 # bos.AOI.1mf <- mask(bos.AOI.1mf, bos.AOI.1m)
-# writeRaster(bos.AOI.1mf, filename="processed/boston/bos.aoi_only.tif", format="GTiff", overwrite=T)
+# writeRaster(bos.AOI.1mf, filename="processed/boston/bos.aoi.tif", format="GTiff", overwrite=T)
 
 # ### get separate layers for each with cover=0/1 (vs. cover=0,1,2)
 # bos.stack <- stack("processed/boston/bos.stack.1m.tif")
@@ -151,14 +149,14 @@ writeRaster(bos.stack[["isa"]], filename="processed/boston/bos.isa_only.tif", fo
 #   x[x!=1] <- 0
 #   return(x)
 # }
-# grass.only <- calc(bos.stack[["cov"]], fun=grass.find, filename="processed/boston/bos.grass_only.tif", format="GTiff", overwrite=T)
+# grass.only <- calc(bos.stack[["cov"]], fun=grass.find, filename="processed/boston/bos.grass.tif", format="GTiff", overwrite=T)
 # 
 # barr.find <- function(x){
 #   x[x==0] <- 10
 #   x[x!=10] <- 0
 #   x[] <- x[]/10
 # }
-# barr.only <- calc(bos.stack[["cov"]], barr.find, filename="processed/boston/bos.barr_only.tif", format="GTiff", overwrite=T)
+# barr.only <- calc(bos.stack[["cov"]], barr.find, filename="processed/boston/bos.barr.tif", format="GTiff", overwrite=T)
 
 # can.find <- function(x){
 #   x[x==2] <- 10
@@ -166,14 +164,42 @@ writeRaster(bos.stack[["isa"]], filename="processed/boston/bos.isa_only.tif", fo
 #   x[] <- x[]/10
 #   return(x)
 # }
-# can <- calc(bos.stack[["cov"]], can.find, filename="processed/bos.can_only.tif", format="GTiff", overwrite=T)
-# can.only <- raster("processed/bos.can_only.tif")
+# can <- calc(bos.stack[["cov"]], can.find, filename="processed/bos.can.tif", format="GTiff", overwrite=T)
+# can.only <- raster("processed/bos.can.tif")
 # # test if can_only == can
 # can.test <- overlay(bos.stack[["can"]], can.only, fun=function(x,y){return(x-y)})
 # plot(can.test) # yes they are identical
 
-### identify non-impervious fraction of barren ## Feb 24 this is not quite working right
+## identify non-impervious fraction of barren ## Feb 24 this is not quite working right
 # nonimp.only <- overlay(barr.only, bos.stack[["isa"]], fun=function(x,y){return(x-y)}, filename="processed/boston/bos.nonimp_only.tif", overwrite=T, format="GTiff")
+
+### need to split this further -- 1 = non-impervious+barren, -1 = vegetated+paved
+nonimp.only <- raster("processed/boston/bos.nonimp.tif")
+nonimp.find <- function(x, filename.nonimpbarr, filename.vegisa) { # x is first-pass nonimp
+  out1 <- raster(x)
+  out2 <- raster(x)
+  bs <- blockSize(out1)
+  out1 <- writeStart(out1, filename.nonimpbarr, overwrite=TRUE, format="GTiff")
+  out2<- writeStart(out2, filename.vegisa, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## original raster
+    d <- rep(0, length(v)) ## create blank 0 raster
+    e <- d
+    d[v==1] <- 1
+    e[v==(-1)] <- 1
+    out1 <- writeValues(out1, d, bs$row[i])
+    out2 <- writeValues(out2, e, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out1 <- writeStop(out1)
+  out2 <- writeStop(out2)
+  return(out1)
+  return(out2)
+}
+nonimp.find(nonimp.only, filename.nonimp="processed/boston/bos.nonimpbarr.tif", filename.vegisa = "processed/boston/bos.vegisa.tif")
+nonimpbarr.only <- raster("processed/boston/bos.nonimpbarr.tif")
+vegisa.only <- raster("processed/boston/bos.vegisa.tif")
+
 
 ### make map of individual buffer rings
 bos.stack <- stack("processed/boston/bos.stack.1m.tif")
@@ -190,12 +216,13 @@ bos.stack[["ed20"]] <- calc(bos.stack[["ed20"]], fun=fix.buff)
 bos.stack[["ed30"]] <- calc(bos.stack[["ed30"]], fun=fix.buff)
 ### these need masking
 bos.stack <- crop(bos.stack, bos.aoi)
-bos.stack[["ed10"]] <- mask(bos.stack[["ed10"]], bos.aoi)
-bos.stack[["ed20"]] <- mask(bos.stack[["ed20"]], bos.aoi)
-bos.stack[["ed30"]] <- mask(bos.stack[["ed30"]], bos.aoi)
+bos.stack <- mask(bos.stack, bos.aoi)
 writeRaster(bos.stack, filename="processed/boston/bos.stack.1m.tif", format="GTiff", overwrite=T)
+plot(bos.stack)
 
 bos.stack <- stack("processed/boston/bos.stack.1m.tif")
+names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
+
 ### 10m ring is already done in ed10
 
 ### 20m ring
@@ -221,10 +248,11 @@ bos.lulc <- raster("processed/boston/LU_bos_r1m.tif")
 bos.aoi <- raster("processed/boston/bos.aoi_only.tif")
 bos.lulc <- crop(bos.lulc, bos.aoi)
 bos.lulc <- mask(bos.lulc, bos.aoi)
+writeRaster(bos.lulc, filename="processed/boston/bos.lulc_only.tif", format="GTiff", overwrite=T)
 
 ## decide on a collapsed LULC scheme to flag for area fraction
 lu.classnames <- c("forest", "dev", "hd.res", "med.res", "low.res", "lowveg", "other", "water")
-lu.for <- c(3,37) # Forest, FWet
+lu.forest <- c(3,37) # Forest, FWet
 lu.dev <- c(15,16,7,8,18,39,24,31,19,9,29) # Comm, Ind, PartRec, SpectRec, Transp., Junk, Util, PubInst, Waste, WBRec, Marina
 lu.hdres <- c(11,10) # HDResid., MFResid., 
 lu.medres <- c(12) # MDResid.
@@ -262,54 +290,85 @@ for(l in 1:length(lulc.tot)){
   writeRaster(tmp, filename=paste("processed/boston/bos.", lu.classnames[l], "_only.tif", sep=""), format="GTiff", overwrite=T)
 }
 
-bos.for <- raster("processed/boston/bos.forest_only.tif")
-bos.dev <- raster("processed/boston/bos.dev_only.tif")
-bos.hd.res <- raster("processed/boston/bos.hd.res_only.tif")
-bos.med.res <- raster("processed/boston/bos.med.res_only.tif")
-bos.low.res <- raster("processed/boston/bos.low.res_only.tif")
-bos.lowveg <- raster("processed/boston/bos.lowveg_only.tif")
-bos.other <- raster("processed/boston/bos.other_only.tif")
-bos.water <- raster("processed/boston/bos.water_only.tif")
-# plot(bos.for, main="forest")
-# plot(bos.hd.res, main="HDres")
-# plot(bos.med.res, main="MDres")
-# plot(bos.low.res, main="LDRes")
-# plot(bos.lowveg, main="LowVeg")
-# plot(bos.other, main="other")
-# plot(bos.water, main="water")
+bos.forest <- raster("processed/boston/bos.forest.tif")
+bos.dev <- raster("processed/boston/bos.dev.tif")
+bos.hd.res <- raster("processed/boston/bos.hd.res.tif")
+bos.med.res <- raster("processed/boston/bos.med.res.tif")
+bos.low.res <- raster("processed/boston/bos.low.res.tif")
+bos.lowveg <- raster("processed/boston/bos.lowveg.tif")
+bos.other <- raster("processed/boston/bos.other.tif")
+bos.water <- raster("processed/boston/bos.water.tif")
+plot(bos.forest, main="forest")
+plot(bos.hd.res, main="HDres")
+plot(bos.med.res, main="MDres")
+plot(bos.low.res, main="LDRes")
+plot(bos.lowveg, main="LowVeg")
+plot(bos.other, main="other")
+plot(bos.water, main="water")
 
-### run python script to get mean 0/1 value in 30 m cell in each cover category
+### prep all individual raster layers (0/1) for aggregation all at once in arc
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+bos.stack <- stack("processed/boston/bos.stack.1m.tif")
+names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
 
+ndvi.only <- bos.stack[["ndvi"]]
+can.only <- bos.stack[["can"]]
+isa.only <- bos.stack[["isa"]]
+# grass.only <- raster("processed/boston/bos.grass.tif")
+# grass.only <- crop(grass.only, bos.aoi)
+# grass.only <- mask(grass.only, bos.aoi, filename="processed/boston/bos.grass.tif", format="GTiff", overwrite=T)
+grass.only <- raster("processed/boston/bos.grass.tif")
+# barr.only <- raster("processed/boston/bos.barr.tif")
+# barr.only <- crop(barr.only, bos.aoi)
+# barr.only <- mask(barr.only, bos.aoi, filename="processed/boston/bos.barr.tif", format="GTiff", overwrite=T)
+barr.only <- raster("processed/boston/bos.barr.tif")
+# nonimp.only <- raster("processed/boston/bos.nonimp.tif")
+# nonimp.only <- crop(nonimp.only, bos.aoi)
+# nonimp.only <- mask(nonimp.only, bos.aoi, filename="processed/boston/bos.nonimp_only.tif", format="GTiff", overwrite=T)
+# nonimpbarr.only <- raster("processed/boston/bos.nonimpbarr.tif")
+# nonimpbarr.only <- crop(nonimpbarr.only, bos.aoi)
+# nonimpbarr.only <- mask(nonimpbarr.only, bos.aoi, filename="processed/boston/bos.nonimpbarr.tif", format="GTiff", overwrite=T)
+nonimpbarr.only <- raster("processed/boston/bos.nonimpbarr.tif")
+# vegisa.only <- raster("processed/boston/bos.vegisa.tif")
+# vegisa.only <- crop(vegisa.only, bos.aoi)
+# vegisa.only <- mask(vegisa.only, bos.aoi, filename="processed/boston/bos.vegisa.tif", format="GTiff", overwrite=T)
+vegisa.only <- raster("processed/boston/bos.vegisa.tif")
+ed10.only <- bos.stack[["ed10"]]
+ed20.only <- bos.stack[["ed20"]]
+ed30.only <- bos.stack[["ed30"]]
+buffs.only <- stack("processed/boston/bos.buffs.tif")
+names(buffs.only) <- c("buff.20only","buff.30only", "buff.Intonly")
+buff.20only <- buffs.only[["buff.20only"]]
+buff.30only <- buffs.only[["buff.30only"]]
+buff.Intonly <- buffs.only[["buff.Intonly"]]
 
-isa.only <- raster("processed/boston/bos.isa_only.tif")
-grass.only <- raster("processed/boston/bos.grass_only.tif")
-barr.only <- raster("processed/boston/bos.barr_only.tif")
-nonimp.only <- raster("processed/boston/bos.nonimp_only.tif")
-buffs.only <- stack("processed/boston/bos.buffs_only.tif")
-bos.aoi <- raster("processed/boston/bos.aoi_only.tif")
+## package up the boston areamarks stack for safekeeping, then split up for aggregation
+### order for area marking: 
+# ndvi, can, grass, barren, isa, nonimpbarr, vegisa, (1-7)
+# ed10, ed20, ed30, buff.20only, buff.30only, buff.Intonly, (8-13)
+# for, dev, hd.res, med.res, low.res, lowveg, other, water (9-16)
+bos.stack <- stack(ndvi.only, can.only, grass.only, barr.only, isa.only, nonimpbarr.only, vegisa.only,
+                   ed10.only, ed20.only, ed30.only, buff.20only, buff.30only, buff.Intonly,
+                   bos.forest, bos.dev, bos.hd.res, bos.med.res, bos.low.res, bos.lowveg, bos.other, bos.water)
+names(bos.stack) <- c("ndvi", "can", "grass", "barr", "isa", "nonimpbarr", "vegisa", 
+                      "ed10", "ed20", "ed30", "buff.20only", "buff.30only", "buff.Intonly", 
+                      "forest", "dev", "hd.res", "med.res", "low.res", "lowveg", "other", "water")
 
-bos.stack <- stack(bos.stack, grass.only, barr.only, nonimp.only)
-bos.stack <- crop(bos.stack, bos.aoi)
-buffs.only <- crop(buffs.only, bos.aoi)
-bos.stack <- stack(bos.stack, buffs.only, bos.aoi)
-bos.stack <- mask(bos.stack, bos.aoi)
-names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30", "grass", "barr", "nonimp", "ed20only", "ed30only", "Intonly", "aoi")
-### 24 Feb: This is fine except the non-imp is flawed, and also need to incorporate LULC at 1m to filter water
-writeRaster(bos.stack, filename="processed/bos.stack.1m.areamarks.tif", overwrite=T, format="GTiff")
-
-### final 1m stack for fractional cover (0/1 classified) 
-## get fractional area of each cover class per 30m aggregate cell
-bos.stack <- stack("processed/bos.stack.1m.areamarks.tif")
-names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30", "grass", "barr", "nonimp", "ed20only", "ed30only", "Intonly", "aoi")
-## export everything as single raster files
+## make sure everything has been exported as single raster files
 for(l in 1:nlayers(bos.stack)){
-  writeRaster(bos.stack[[l]], 
-              filename=paste("processed/boston/bos.", names(bos.stack)[l], "_only.tif", sep=""),
-              format="GTiff", overwrite=T)
+  if(!file.exists(paste("processed/boston/bos.", names(bos.stack)[l], ".tif", sep=""))){
+    print(paste("writing ", "processed/boston/bos.", names(bos.stack)[l], ".tif", sep=""))
+    writeRaster(bos.stack[[l]], 
+                filename=paste("processed/boston/bos.", names(bos.stack)[l], ".tif", sep=""),
+                format="GTiff", overwrite=T)
+  }
 }
 
-# ### aggregate 1m data and snap to 30m EVI grid
-# pyth.path = './Rscripts/bos_agg.py'
+writeRaster(bos.stack, filename="processed/bos.stack.1m.areamarks.tif", format="GTiff", overwrite=T)
+
+
+## get fractional area of each cover class per 30m aggregate cell
+# pyth.path = './Rscripts/bos1m_agg.py'
 # output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
 
 ### should be doing this in arcpy to aggregate while snapping to EVI grid
