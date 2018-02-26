@@ -325,13 +325,13 @@ barr.only <- raster("processed/boston/bos.barr.tif")
 # nonimp.only <- raster("processed/boston/bos.nonimp.tif")
 # nonimp.only <- crop(nonimp.only, bos.aoi)
 # nonimp.only <- mask(nonimp.only, bos.aoi, filename="processed/boston/bos.nonimp_only.tif", format="GTiff", overwrite=T)
-# nonimpbarr.only <- raster("processed/boston/bos.nonimpbarr.tif")
-# nonimpbarr.only <- crop(nonimpbarr.only, bos.aoi)
-# nonimpbarr.only <- mask(nonimpbarr.only, bos.aoi, filename="processed/boston/bos.nonimpbarr.tif", format="GTiff", overwrite=T)
 nonimpbarr.only <- raster("processed/boston/bos.nonimpbarr.tif")
-# vegisa.only <- raster("processed/boston/bos.vegisa.tif")
-# vegisa.only <- crop(vegisa.only, bos.aoi)
-# vegisa.only <- mask(vegisa.only, bos.aoi, filename="processed/boston/bos.vegisa.tif", format="GTiff", overwrite=T)
+nonimpbarr.only <- crop(nonimpbarr.only, bos.aoi)
+nonimpbarr.only <- mask(nonimpbarr.only, bos.aoi, filename="processed/boston/bos.nonimpbarr.tif", format="GTiff", overwrite=T)
+nonimpbarr.only <- raster("processed/boston/bos.nonimpbarr.tif")
+vegisa.only <- raster("processed/boston/bos.vegisa.tif")
+vegisa.only <- crop(vegisa.only, bos.aoi)
+vegisa.only <- mask(vegisa.only, bos.aoi, filename="processed/boston/bos.vegisa.tif", format="GTiff", overwrite=T)
 vegisa.only <- raster("processed/boston/bos.vegisa.tif")
 ed10.only <- bos.stack[["ed10"]]
 ed20.only <- bos.stack[["ed20"]]
@@ -368,39 +368,35 @@ writeRaster(bos.stack, filename="processed/bos.stack.1m.areamarks.tif", format="
 
 
 ## get fractional area of each cover class per 30m aggregate cell
-# pyth.path = './Rscripts/bos1m_agg.py'
-# output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
+pyth.path = './Rscripts/bos1m_agg.py'
+output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
 
-### should be doing this in arcpy to aggregate while snapping to EVI grid
-bos.AOI.sizes <- aggregate(bos.stack[["aoi"]], fact=30, fun=sum, na.rm=T) ## gives the size of each cell within the boston AOI
-bos.stack.30m <- aggregate(bos.stack, fact=30, fun=mean, na.rm=T) ## gives the mean (ndvi) or or total area (can/isa/edge/cover) per cell within the boundaries
+### shovel out individual files and compile as data frame
+bos.sizes <- raster("processed/boston/bos.aoi30m.tif")
+bos.30m <- list.files("processed/boston/")
+bos.30m <- bos.30m[grepl(pattern = "30m", x=bos.30m)]
+bos.30m <- bos.30m[!grepl(pattern=".xml", x=bos.30m)]
+bos.30m <- bos.30m[!grepl(pattern=".tfw", x=bos.30m)]
 
-stack.frac <- function(x, y, filename) { # x is 1m boston input, y is cell area
-  out <- raster(x)
-  bs <- blockSize(out)
-  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
-  for (i in 1:bs$n) {
-    r <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## input class area
-    a <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## total inside-AOI area
-    frac <- r/a
-    out <- writeValues(out, frac, bs$row[i])
-    print(paste("finished block", i, "of", bs$n))
-  }
-  out <- writeStop(out)
-  return(out)
+tmp <- stack()
+
+for(f in 1:length(bos.30m)){
+  tmp <- stack(tmp, raster(paste("processed/boston/", bos.30m[f], sep="")))
+  print(f)
 }
 
-can.frac <- stack.frac(bos.stack[["can"]]) # fraction canopy
-isa.frac <- stack.frac(bos.stack[["isa"]]) # fraction impervious
-ed10.frac <- stack.frac(bos.stack[["ed10"]]) # fraction <10m edge
-ed20.frac <- stack.frac(bos.stack[["ed20"]]) # fraction <20m edge
-ed30.frac <- stack.frac(bos.stack[["ed30"]]) # fraction < 30m edge
-grass.frac <- stack.frac(bos.stack[["grass"]]) # fraction grass
-barr.frac <- stack.frac(bos.stack[["barr"]]) # fraction barren (impervious + nonimpervious) 
-nonimp.frac <- stack.frac(bos.stack[["nonimp"]]) # fraction nonimpervious barren
-ed20only.frac <- stack.frac(bos.stack[["ed20only"]]) # fraction 10-20m edge dist
-ed30only.frac <- stack.frac(bos.stack[["ed30only"]]) # fraction 20-30m edge dist
-Intonly.frac <- stack.frac(bos.stack[["Intonly"]]) # fraction >30m edge
+fields <- sub("bos. *(.*?) *30m.tif.*", "\\1", bos.30m)
+bos.dat <- as.data.table(as.data.frame(tmp))
+names(bos.dat) <- fields
+
+## combine with 30m EVI data
+evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif")
+evi.r <- crop(evi.r, bos.sizes)
+evi.r <- mask(evi.r, bos.sizes)
+bos.dat[,evi:=as.vector(evi.r)]
+
+
+
 
 
 
