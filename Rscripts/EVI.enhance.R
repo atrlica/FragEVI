@@ -88,6 +88,9 @@ keep <- vfracs.t[order(Tfrac, decreasing = T),]
 keep <- keep[Tfrac>=0.01,]
 sum(keep$Tfrac)
 
+
+
+################
 ### analysis of 1m data with edge classes, select zones of Boston city limits
 bos.stack <- stack("processed/bos.stack.1m.tif")
 names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
@@ -184,4 +187,11 @@ p <- ggplot(aes(x=zone, y=ndvi, fill=cov.ed), data=y)+
   scale_x_discrete(name="Test Zone", labels=tests)
 p
 
+
+
+
+
+#########
+#### Analysis of 30m Boston data with 1m cover fractions
+dat.r <- stack("processed/boston/")
 
