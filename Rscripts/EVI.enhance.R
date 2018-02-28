@@ -10,44 +10,43 @@ library(knitr)
 dat.r <- stack("processed/EVI30m.stack.tif")
 names(dat.r) <-  c("evi", "isa", "lulc", "AOI")
 dat <- as.data.table(as.data.frame(dat.r))
+dat <- dat[AOI==1,]
+dat <- dat[is.finite(lulc),] ## 734k pixels with valid EVI/ISA/LULC
 
 ### Zhao framework to find Vzi
 
-### this approach controls for which pixels to include as end-members, but not sure that makes sense and creates discontinuities at the ends of the Vzi curve vs. the binned averages
-# veg <- dat[isa<0.01 & lulc%in%c(3,37), mean(evi, na.rm=T)]
-# veg.err <- dat[isa<0.01 & lulc%in%c(3,37), sd(evi, na.rm=T)/sqrt(length(evi))]
-# veg.n <- dat[isa<0.01 & lulc%in%c(3,37), length(evi)]
-# noveg <- dat[isa>=0.99 & lulc!=20, mean(evi, na.rm=T)]
-# noveg.err <- dat[isa>=0.99 & lulc!=20, sd(evi, na.rm=T)/sqrt(length(evi))]
-# noveg.n <- dat[isa>=0.99 & lulc!=20, length(evi)]
-
 ## alternate approach: just chuck the water values which will fuck everything up (v. low evi, v. low isa)
-veg <- dat[isa<0.01 & AOI==1 & lulc!=20, median(evi, na.rm=T)]
-veg.err <- dat[isa<0.01  & lulc!=20 & AOI==1, sd(evi, na.rm=T)/sqrt(length(evi))]
-veg.n <- dat[isa<0.01  & lulc!=20 & AOI==1, length(evi)]
-noveg <- dat[isa>=0.99 & lulc!=20 & AOI==1, median(evi, na.rm=T)]
-noveg.err <- dat[isa>=0.99 & lulc!=20 & AOI==1, sd(evi, na.rm=T)/sqrt(length(evi))]
-noveg.n <- dat[isa>=0.99 & lulc!=20 & AOI==1, length(evi)]
+veg <- dat[isa<0.01  & lulc!=20, median(evi, na.rm=T)]
+veg.err <- dat[isa<0.01  & lulc!=20, sd(evi, na.rm=T)/sqrt(length(evi))]
+veg.n <- dat[isa<0.01  & lulc!=20, length(evi)]
+noveg <- dat[isa>=0.99 & lulc!=20, median(evi, na.rm=T)]
+noveg.err <- dat[isa>=0.99 & lulc!=20, sd(evi, na.rm=T)/sqrt(length(evi))]
+noveg.n <- dat[isa>=0.99 & lulc!=20, length(evi)]
 
 ### get range of intensity values and figure a linear Vzi curve
 beta.range <- seq(from=0, to=1, by=0.01) 
 Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
-dat[AOI==1 & lulc!=20, bin:=findInterval(isa, beta.range, all.inside=T)]
-chunk <- dat[lulc!=20 & AOI==1, list(.N, m=mean(evi, na.rm=T), med=median(evi, na.rm=T), i.bin=median(isa, na.rm=T)), by=bin]
+dat[lulc!=20, bin:=findInterval(isa, beta.range, all.inside=T)]
+evi.bin <- dat[lulc!=20, .(m.isa=median(isa, na.rm=T), m.evi=median(evi, na.rm=T)), by=bin]
+evi.bin <- evi.bin[order(m.isa),]
 
 ### binned EVI vs. ISA, all LULC
-par(mar=c(4,4,2,1), mgp=c(2,1,0))
+par(mar=c(4,4,2,1), mgp=c(2,1,0), mfrow=c(1,2))
 pdf(file = "images/EVI_ISA_binned30m.pdf", width = 6, height = 6)
-plot(chunk[,i.bin], chunk[,med], 
-     ylim=c(noveg-0.05, veg+0.05),
-     main="EVI vs. %ISA (binned)", 
-     xlab="Urbanization intensity", ylab="EVI",
+plot(evi.bin[,m.isa]*100, evi.bin[,m.evi],
+     main="EVI vs. %ISA, all LULC",
+     xlab="%ISA", ylab="EVI",
      pch=15, col="forestgreen")
-lines(beta.range, Vzi, col="red", lwd=2, lty=2)
+lines(beta.range*100, Vzi, col="red", lwd=2, lty=2)
+plot(evi.bin[,m.isa]*100, evi.bin[,m.evi]-Vzi,
+     main="EVI enhancement, all LULC",
+     xlab="%ISA", ylab="EVI enhancement",
+     pch=16, col="royalblue")
+abline(h=0, lty=1, lwd=1.6)
 dev.off()
 
 #### look at EVI vs. ISA plot by subtype
-beta.range <- seq(from=0, to=1, by=0.01) 
+dat[,lulc:=(as.factor(lulc))]
 vtypes <- dat[,unique(lulc)]
 vtypes <- vtypes[!is.na(vtypes)]
 vtypes <- vtypes[!vtypes==20]
@@ -60,28 +59,24 @@ vnames <- c("Crop", "Pasture", "Forest", "NFwet", "Mining", "Open", "PartRec",
 vlook <- data.frame(cbind(vnum, vnames))
 pal <- rainbow(length(vtypes))
 for(v in 1:length(vtypes)){
-  veg <- dat[isa<0.01 & AOI==1 & lulc!=20 & lulc==vtypes[v], median(evi, na.rm=T)]
-  veg.err <- dat[isa<0.01  & lulc!=20 & AOI==1 & lulc==vtypes[v], sd(evi, na.rm=T)/sqrt(length(evi))]
-  veg.n <- dat[isa<0.01  & lulc!=20 & AOI==1 & lulc==vtypes[v], length(evi)]
-  noveg <- dat[isa>=0.99 & lulc!=20 & AOI==1 & lulc==vtypes[v], median(evi, na.rm=T)]
-  noveg.err <- dat[isa>=0.99 & lulc!=20 & AOI==1 & lulc==vtypes[v], sd(evi, na.rm=T)/sqrt(length(evi))]
-  noveg.n <- dat[isa>=0.99 & lulc!=20 & AOI==1 & lulc==vtypes[v], length(evi)]
+  veg <- dat[isa<0.01 & lulc==vtypes[v], median(evi, na.rm=T)]
+  noveg <- dat[isa>=0.99 & lulc==vtypes[v], median(evi, na.rm=T)]
+  if(is.na(noveg)){noveg <- dat[isa>=0.90 & lulc==vtypes[v], median(evi, na.rm=T)]} ## relax assumptions for lulc that doesn't cover the whole range
+  if(is.na(veg)){veg <- dat[isa<=0.10 & lulc==vtypes[v], median(evi, na.rm=T)]}
   Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
-  dat[AOI==1 & lulc!=20  & lulc==vtypes[v], bin:=findInterval(isa, beta.range, all.inside=T)]
-  chunk <- dat[lulc!=20 & AOI==1 & lulc==vtypes[v], list(.N, m=mean(evi, na.rm=T), med=median(evi, na.rm=T), i.bin=median(isa, na.rm=T)), by=bin]
-  par(mar=c(4,4,2,1), mgp=c(2,1,0))
-  if(is.na(noveg)){noveg <- 0}
-  if(is.na(veg)){veg <- 0.6}
-  plot(chunk[,i.bin], chunk[,med], 
-       ylim=c(noveg-0.05, veg+0.05),
-       main=paste("EVI vs. ISA", vlook[vnum==vtypes[v], "vnames"]), 
-       xlab="", ylab="",
-       pch=15, col=pal[v])
-  lines(beta.range, Vzi, col="red", lwd=2, lty=2)
+  evi.tmp <- dat[lulc==vtypes[v],]
+  evi.tmp[, bin:=findInterval(isa, beta.range, all.inside=T)]
+  plotme <- evi.tmp[, .(m.isa=median(isa, na.rm=T), m.evi=median(evi, na.rm=T)), by=bin]
+  plot(plotme[,m.isa]*100, plotme[,m.evi],
+       main=paste("EVI vs. ISA,", vlook[vnum==vtypes[v], "vnames"]),
+       xlab="%ISA", ylab="EVI",
+       pch=15, col=pal[v],
+       ylim=c(0, 0.65), xlim=c(0,100))
+  lines(beta.range*100, Vzi, col="red", lwd=2, lty=2)
 }
 
 ### fractional cover by LULC
-vfracs <- dat[!is.na(AOI),length(evi), by=lulc]
+vfracs <- dat[,length(evi), by=lulc]
 vfracs.t <- vfracs
 vfracs.t$lulc.name <- NA
 for(h in 1:dim(vfracs.t)[1]){
@@ -89,8 +84,9 @@ for(h in 1:dim(vfracs.t)[1]){
   vfracs.t$lulc.name[h] <- as.character(vlook$vnames[vlook$vnum==hunt])
 }
 vfracs.t$Tfrac <- round(vfracs$V1/dat[!is.na(AOI),length(evi)], digits=3)
-vfracs.t[order(Tfrac, decreasing = T),]
-
+keep <- vfracs.t[order(Tfrac, decreasing = T),]
+keep <- keep[Tfrac>=0.01,]
+sum(keep$Tfrac)
 
 ### analysis of 1m data with edge classes, select zones of Boston city limits
 bos.stack <- stack("processed/bos.stack.1m.tif")

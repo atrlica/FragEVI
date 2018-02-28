@@ -1,0 +1,190 @@
+---
+title: "Assessing EVI enhancement in 30 m data, Boston AOI"
+author: "Drew Trlica"
+date: "`r Sys.Date()`"
+---
+```{r setup, include=F}
+library(rmarkdown)
+library(knitr)
+library(data.table)
+library(ggplot2)
+library(kableExtra)
+library(raster)
+opts_knit$set(root.dir = "E:/FragEVI/")
+```
+Landsat 7 imagery from the Analaysis Ready Data collection was combined for all July acquisitions 2010-2012 to produce a summer EVI map for the area of interest (AOI), roughly the area between Interstate 495 and downtown Boston, Massachusetts. This data was combined with aggregated high-resolution data on impervious surface area (ISA) fraction and land-use/land-cover (LULC) classification provided by MassGIS.
+
+Following the method of Zhao et al. (2016), we determined end-member EVI values for fully vegetated and fully impervious pixels, then calculated a linear "zero-effect" model for EVI as a function of impervious fraction. This zero-effect model was compared to the binned average EVI vs impervious fraction to determine observed deviance from the linear model. This approach follows the analysis of Zhao et al. (2016) in evaluating the relative loss of EVI as a function of increasing "urbanization intensity". Pixels were masked to the AOI and filtered to remove water pixels.
+
+####Figure 1: EVI enhancement binned by ISA
+```{r fig1, echo=F}
+### Stack 30m layers and crop to AOI
+dat.r <- stack("processed/EVI30m.stack.tif")
+names(dat.r) <-  c("evi", "isa", "lulc", "AOI")
+dat <- as.data.table(as.data.frame(dat.r))
+dat <- dat[AOI==1,]
+dat <- dat[is.finite(lulc),] ## 734k pixels with valid EVI/ISA/LULC
+
+### Zhao framework to find Vzi
+
+## alternate approach: just chuck the water values which will fuck everything up (v. low evi, v. low isa)
+veg <- dat[isa<0.01  & lulc!=20, median(evi, na.rm=T)]
+veg.err <- dat[isa<0.01  & lulc!=20, sd(evi, na.rm=T)/sqrt(length(evi))]
+veg.n <- dat[isa<0.01  & lulc!=20, length(evi)]
+noveg <- dat[isa>=0.99 & lulc!=20, median(evi, na.rm=T)]
+noveg.err <- dat[isa>=0.99 & lulc!=20, sd(evi, na.rm=T)/sqrt(length(evi))]
+noveg.n <- dat[isa>=0.99 & lulc!=20, length(evi)]
+
+### get range of intensity values and figure a linear Vzi curve
+beta.range <- seq(from=0, to=1, by=0.01) 
+Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
+dat[lulc!=20, bin:=findInterval(isa, beta.range, all.inside=T)]
+evi.bin <- dat[lulc!=20, .(m.isa=median(isa, na.rm=T), m.evi=median(evi, na.rm=T)), by=bin]
+evi.bin <- evi.bin[order(m.isa),]
+
+### binned EVI vs. ISA, all LULC
+par(mar=c(4,4,2,1), mgp=c(2,1,0), mfrow=c(1,2))
+plot(evi.bin[,m.isa]*100, evi.bin[,m.evi],
+     main="EVI vs. %ISA, all LULC",
+     xlab="%ISA", ylab="EVI",
+     pch=15, col="forestgreen")
+lines(beta.range*100, Vzi, col="red", lwd=2, lty=2)
+plot(evi.bin[,m.isa]*100, evi.bin[,m.evi]-Vzi,
+     main="EVI enhancement, all LULC",
+     xlab="%ISA", ylab="EVI enhancement",
+     pch=16, col="royalblue")
+abline(h=0, lty=1, lwd=1.6)
+```
+
+Figure 1 shows that median EVI is reduced with increasing sub-pixel ISA fraction across the range of ISA. Below 20-30% ISA, EVI is reduced more for each unit increment of impervious area than predicted by the linear zero-effect model. Above 20-30% ISA, EVI diminishes more slowly than predicted for each unit increase in ISA (i.e. an area loss of vegetation to ISA does not result in a corresponding decrease in whole-pixel EVI). This "enhancement effect" increases up to ISA of about 50%, and from 50-90% ISA EVI stably remains about 0.04 units higher than predicted by the zero-effect model.
+
+When disaggregated to pixel populations of the same LULC class, this phenomenon of differential effect on EVI changes according to LULC.  The difference in EVI effect may relate to vegetation stature.
+
+####Figure 2: EVI vs. ISA for selected LULC-classed pixels, classes >= 1% AOI (>86k pixels), 95% cumulative area of AOI.
+
+#####Figure 2a: Forest-type classes
+```{r fig2a, echo=F}
+library(RColorBrewer)
+dat[,lulc:=(as.factor(lulc))]
+vtypes <- dat[,unique(lulc)]
+vtypes <- vtypes[!is.na(vtypes)]
+vtypes <- vtypes[!vtypes==20]
+vnum <- c(1:20, 23:26, 29, 31, 34:40)
+vnames <- c("Crop", "Pasture", "Forest", "NFwet", "Mining", "Open", "PartRec", 
+            "SpectRec", "WBRec", "MFResid", "HDResid", "MDResid", "LDResid", "SWwet",
+            "Comm", "Ind", "Tran", "Transp", "Waste", "Water", "CBog", "Util", 
+            "SWBeach", "Golf", "Marina", "PubInst", "Cem", "Orch", "Nurs", "FWet", "VLDResid", 
+            "Junk", "Brush")
+vlook <- data.frame(cbind(vnum, vnames))
+vtypes <- c(3,37) ### set static 
+pal <- c("forestgreen", "green") ### set static 
+par(mar=c(4,4,2,1), mgp=c(2,1,0), mfrow=c(1,2))
+for(v in 1:length(vtypes)){
+  veg <- dat[isa<0.01 & lulc==vtypes[v], median(evi, na.rm=T)]
+  noveg <- dat[isa>=0.99 & lulc==vtypes[v], median(evi, na.rm=T)]
+  Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
+  evi.tmp <- dat[lulc==vtypes[v],]
+  evi.tmp[, bin:=findInterval(isa, beta.range, all.inside=T)]
+  plotme <- evi.tmp[, .(m.isa=median(isa, na.rm=T), m.evi=median(evi, na.rm=T)), by=bin]
+  if(is.na(noveg)){noveg <- 0}
+  if(is.na(veg)){veg <- 0.6}
+  plot(plotme[,m.isa]*100, plotme[,m.evi],
+       main=paste(vlook[vnum==vtypes[v], "vnames"]),
+       xlab="%ISA", ylab="EVI",
+       pch=15, col=pal[v],
+       ylim=c(0, 0.65))
+  lines(beta.range*100, Vzi, col="red", lwd=2, lty=2)
+}
+
+
+```
+
+#####Figure 2b: Low-stature vegetation classes
+```{r fig2b, echo=FALSE}
+# Lowveg types
+vtypes <- c(23, 26, 6, 2, 4, 14, 1) ### set static 
+pal <- brewer.pal(length(vtypes), "Pastel2")
+par(mar=c(4,4,2,1), mgp=c(2,1,0), mfrow=c(2,4))
+for(v in 1:length(vtypes)){
+  veg <- dat[isa<0.01 & lulc==vtypes[v], median(evi, na.rm=T)]
+  noveg <- dat[isa>=0.99 & lulc==vtypes[v], median(evi, na.rm=T)]
+  if(is.na(noveg)){noveg <- dat[isa>=0.90 & lulc==vtypes[v], median(evi, na.rm=T)]} ## relax assumptions for lulc that doesn't cover the whole range
+  if(is.na(veg)){veg <- dat[isa<=0.10 & lulc==vtypes[v], median(evi, na.rm=T)]}
+  Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
+  evi.tmp <- dat[lulc==vtypes[v],]
+  evi.tmp[, bin:=findInterval(isa, beta.range, all.inside=T)]
+  plotme <- evi.tmp[, .(m.isa=median(isa, na.rm=T), m.evi=median(evi, na.rm=T)), by=bin]
+  plot(plotme[,m.isa]*100, plotme[,m.evi],
+       main=paste(vlook[vnum==vtypes[v], "vnames"]),
+       xlab="%ISA", ylab="EVI",
+       pch=15, col=pal[v],
+       ylim=c(0, 0.65), xlim=c(0,100))
+  lines(beta.range*100, Vzi, col="red", lwd=2, lty=2)
+}
+
+```
+
+In these more "naturalistic" LULC classes, tree-dominated classes show EVI enhancement in pixels at the high end of the ISA scale, while classes presumably dominated by low-stature vegetation show an decline in EVI close to the predicted zero-effect line or somewhat below it (i.e. loss of vegetation area results in greater than predicted decline in EVI).
+
+Contrast to LULC classes presumably under stronger human influence:
+
+#####Figure 2c: Residential classes by density
+```{r fig2c, echo=FALSE}
+# Lowveg types
+vtypes <- c(38, 13, 12, 11, 10) ### set static 
+pal <- brewer.pal(length(vtypes), "Set2")
+par(mar=c(4,4,2,1), mgp=c(2,1,0), mfrow=c(2,3))
+for(v in 1:length(vtypes)){
+  veg <- dat[isa<0.01 & lulc==vtypes[v], median(evi, na.rm=T)]
+  noveg <- dat[isa>=0.99 & lulc==vtypes[v], median(evi, na.rm=T)]
+  if(is.na(noveg)){noveg <- dat[isa>=0.90 & lulc==vtypes[v], median(evi, na.rm=T)]} ## relax assumptions for lulc that doesn't cover the whole range
+  if(is.na(veg)){veg <- dat[isa<=0.10 & lulc==vtypes[v], median(evi, na.rm=T)]}
+  Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
+  evi.tmp <- dat[lulc==vtypes[v],]
+  evi.tmp[, bin:=findInterval(isa, beta.range, all.inside=T)]
+  plotme <- evi.tmp[, .(m.isa=median(isa, na.rm=T), m.evi=median(evi, na.rm=T)), by=bin]
+  plot(plotme[,m.isa]*100, plotme[,m.evi],
+       main=paste(vlook[vnum==vtypes[v], "vnames"]),
+       xlab="%ISA", ylab="EVI",
+       pch=15, col=pal[v],
+       ylim=c(0, 0.65), xlim=c(0,100))
+  lines(beta.range*100, Vzi, col="red", lwd=2, lty=2)
+}
+
+```
+
+In residential classes pixels, overall EVI decline across the ISA range is greater with increasing density, near to the whole-area range in the highest densities. Lower-density (VLD, LD, MD) residential classes show an EVI deficit in the lower ISA ranges with a slight increase near the upper end of the range, while HD and MF residential classes show a reversal to EVI enhancement at very high ISA. These results imply that while lower-density residential pixels show comparatively high reduction of EVI per increment ISA, in the higher end of ISA in the most dense residential categories EVI is reduced less per increment ISA.
+
+Other developed classes show comparable patterns in EVI vs. ISA:
+
+##### Figure 2d: Other developed LULC classes
+
+```{r fig2d, echo=FALSE}
+# Lowveg types
+vtypes <- c(34, 31, 15, 18, 7, 16) ### set static 
+pal <- brewer.pal(length(vtypes), "Set3")
+par(mar=c(4,4,2,1), mgp=c(2,1,0), mfrow=c(2,3))
+for(v in 1:length(vtypes)){
+  veg <- dat[isa<0.01 & lulc==vtypes[v], median(evi, na.rm=T)]
+  noveg <- dat[isa>=0.99 & lulc==vtypes[v], median(evi, na.rm=T)]
+  if(is.na(noveg)){noveg <- dat[isa>=0.90 & lulc==vtypes[v], median(evi, na.rm=T)]} ## relax assumptions for lulc that doesn't cover the whole range
+  if(is.na(veg)){veg <- dat[isa<=0.10 & lulc==vtypes[v], median(evi, na.rm=T)]}
+  Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
+  evi.tmp <- dat[lulc==vtypes[v],]
+  evi.tmp[, bin:=findInterval(isa, beta.range, all.inside=T)]
+  plotme <- evi.tmp[, .(m.isa=median(isa, na.rm=T), m.evi=median(evi, na.rm=T)), by=bin]
+  plot(plotme[,m.isa]*100, plotme[,m.evi],
+       main=paste(vlook[vnum==vtypes[v], "vnames"]),
+       xlab="%ISA", ylab="EVI",
+       pch=15, col=pal[v],
+       ylim=c(0, 0.65), xlim=c(0,100))
+  lines(beta.range*100, Vzi, col="red", lwd=2, lty=2)
+}
+
+```
+
+These developed classes show less severe EVI reduction per unit increase in ISA (EVI "enhancement") per area increment of impervious cover.
+
+The total EVI vs. ISA curve for the study area is a composite of all LULC classes, of which the previous graphs cover 96% of the study are (39% of which is "Forest"). A potential explanation for the behavior of this relationship may be that many of the classically "urban" LULC classes tend to be dominated by larger stature vegetation (trees). In these classes, as in forest/forested wetland, increase in ISA from 0 causes a steady or even somewhat heightened decline in EVI (possibly a result of land clearance and loss of canopy near structures or pavement). As development intensity reaches the higher range of ISA increasing impervious fraction has a diminishing effect on reducing EVI, potentially because ISA increasingly appears *beneath* the canopy (i.e. nearly completely "developed" pixels can still show a reasonably large vegetated surface). A similar explanation could be proffered for the higher density residential LULC classes. In contrast, LULC classes dominated by low-stature vegetation (e.g. Cranberry bogs, pastures, golf courses) show a linear or greater decline in EVI with increasing ISA, as each area increment of impervious cover results in at least the same loss in satellite-visible vegetation cover, or possibly greater loss due to clearance of surrounding vegetation. This model may apply to the lower-density residential classes (development and clearance of low-stature vegetation), or these classes may represent a comparatively large loss of tree-stature vegetation with increasing density of structure and pavement (i.e. land clearance) up to the highest ISA classes in which impervious cover appears increasingly beneath the remaining vegetation canopy. 
+
+These results highlight an important empirical fact: Simple surface metrics like fractional impervious cover (or even fractional "developed" cover, as in Zhao et al. [2016]) may not provide a straightforward metric of the expected radiative properties of highly developed or impacted landscapes.

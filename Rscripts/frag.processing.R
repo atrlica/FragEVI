@@ -394,7 +394,7 @@ evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif")
 evi.r <- crop(evi.r, bos.sizes)
 evi.r <- mask(evi.r, bos.sizes)
 bos.dat[,evi:=as.vector(evi.r)]
-
+write.csv(bos.dat, "processed/boston.30m.agg.csv")
 
 
 
@@ -403,20 +403,20 @@ bos.dat[,evi:=as.vector(evi.r)]
 ######
 ####
 ### AOI aggregate to 30 m Landsat grid -- only have ISA AOI LULC and EVI as of Feb 22 2018
-# ### read in AOI for crs description
+### read in AOI for crs description
 # AOI <- readOGR(dsn="/projectnb/buultra/atrlica/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/", layer="AOI_simple_NAD83UTM19N")
 # master.crs <- crs(AOI)
 
-### load EVI composite for grid and process for ISA grid
+## load EVI composite for grid and process for ISA grid
 # evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI.tif") ## this is the July 2010-2012 AOI EVI composite
 # evi.r <- projectRaster(from=evi.r, crs=master.crs, res = 30, method = "ngb")
 # writeRaster(evi.r, filename="processed/EVI/030005-6_2010-2012_EVI_NAD83.tif", format="GTiff", overwrite=T)
 # evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif")
 
-# ### aggregate raw 1m ISA to 30m
-# ### don't fart around with the ISA grid until it's stacked with a 30 m EVI and cropped -- too hard to monkey with, leave in its native state until the end
-# ### raster-native approach required, file too large for data.table -- takes a long time
-# ### correct the 16 values to NA to get a proper aggregated mean value per cell (0 = not impervious, 1 = impervious)
+### aggregate raw 1m ISA to 30m
+### don't fart around with the ISA grid until it's stacked with a 30 m EVI and cropped -- too hard to monkey with, leave in its native state until the end
+### raster-native approach required, file too large for data.table -- takes a long time
+### correct the 16 values to NA to get a proper aggregated mean value per cell (0 = not impervious, 1 = impervious)
 # isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
 # fun <- function(x){
 #   x[x==16] <- NA
