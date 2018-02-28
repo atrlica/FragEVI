@@ -325,9 +325,9 @@ barr.only <- raster("processed/boston/bos.barr.tif")
 # nonimp.only <- raster("processed/boston/bos.nonimp.tif")
 # nonimp.only <- crop(nonimp.only, bos.aoi)
 # nonimp.only <- mask(nonimp.only, bos.aoi, filename="processed/boston/bos.nonimp_only.tif", format="GTiff", overwrite=T)
-nonimpbarr.only <- raster("processed/boston/bos.nonimpbarr.tif")
-nonimpbarr.only <- crop(nonimpbarr.only, bos.aoi)
-nonimpbarr.only <- mask(nonimpbarr.only, bos.aoi, filename="processed/boston/bos.nonimpbarr.tif", format="GTiff", overwrite=T)
+# nonimpbarr.only <- raster("processed/boston/bos.nonimpbarr.tif")
+# nonimpbarr.only <- crop(nonimpbarr.only, bos.aoi)
+# nonimpbarr.only <- mask(nonimpbarr.only, bos.aoi, filename="processed/boston/bos.nonimpbarr.tif", format="GTiff", overwrite=T)
 nonimpbarr.only <- raster("processed/boston/bos.nonimpbarr.tif")
 vegisa.only <- raster("processed/boston/bos.vegisa.tif")
 vegisa.only <- crop(vegisa.only, bos.aoi)
@@ -364,6 +364,14 @@ for(l in 1:nlayers(bos.stack)){
   }
 }
 
+### make up the final raster stack and export
+bos.names <- c("ndvi", "can", "grass", "barr", "isa", "nonimpbarr", "vegisa", 
+  "ed10", "ed20", "ed30", "buff.20only", "buff.30only", "buff.Intonly", 
+  "forest", "dev", "hd.res", "med.res", "low.res", "lowveg", "other", "water")
+bos.stack.30m <- raster("processed/boston/bos.ndvi.tif")
+for(n in 2:length(bos.names)){
+  bos.stack.30m <- stack(bos.stack.30m, raster(paste("processed/boston/bos", bos.names[n], "tif", sep=".")))
+}
 writeRaster(bos.stack, filename="processed/bos.stack.1m.areamarks.tif", format="GTiff", overwrite=T)
 
 
