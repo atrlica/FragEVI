@@ -303,13 +303,47 @@ bin.range <- seq(from=dat[,min(barr, na.rm=T)], to=dat[,max(barr, na.rm=T)], len
 a <- dat
 a[,bin:=findInterval(barr, bin.range, all.inside=T)]
 a[,count:=.N, by=bin]
+a[, ed10.frac:=NA]
+a[, vegisa.frac:=NA]
+a[can>0,ed10.frac:=ed10/can]
+a[can>0,vegisa.frac:=vegisa/can]
 dog <- a[,.(m.evi=mean(evi, na.rm=T), 
             m.ndvi=mean(ndvi, na.rm=T),
             m.barr=mean(barr, na.rm=T),
+            m.can=mean(can, na.rm=T),
+            m.isa=mean(isa, na.rm=T),
+            m.grass=mean(grass, na.rm=T),
+            m.vegisa=mean(vegisa, na.rm=T),
+            m.nonimpbarr=mean(nonimpbarr, na.rm=T),
+            m.ed10=mean(ed10, na.rm=T),
+            m.ed10frac=mean(ed10.frac, na.rm=T),
+            m.vegisafrac=mean(vegisa.frac, na.rm=T),
             count=.N), by=bin]
 dog[,count.frac:=count/sum(count)]
 ggplot(dog, aes(x=m.barr, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="Barren")
 # fully barren is 0.1EVI, fully not is EVI 0.6, steady curve in between -- looks a lot like ISA vs. EVI curve, discontinuities at either end (must be very different members in those groups, lots more pixels)
+ggplot(dog, aes(x=m.barr, y=m.can))+geom_point(aes(size=count.frac))+labs(title="Canopy")
+# nearly linear decline, maxes out at 0.65, very biomodal -- a lot of vegetated (12%), a lot of barren (16%), little in between
+summary(lm(dog$m.can~dog$m.barr)) ### slope -0.73 -- a unit increase in barrenness gives a 0.73 decrease in canopy
+ggplot(dog, aes(x=m.barr, y=m.grass))+geom_point(aes(size=count.frac))+labs(title="Grass")
+# sloppier, sigmoidal, maxes out at 0.35
+ggplot(dog, aes(x=m.barr, y=m.ed10frac))+geom_point(aes(size=count.frac))+labs(title="fraction canopy <10m edge, Barren")
+## basically by barren 0.5 all canopy is within 10m of edge
+ggplot(dog, aes(x=m.can, y=m.ed10frac))+geom_point(aes(size=count.frac))+labs(title="fraction canopy <10m edge, Canopy")
+### same idea: only when canopy cover is >0.4 do you get interior canopies
+### is there an EVI change with this?
+ggplot(dog, aes(x=m.ed10, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="area canopy <10m edge")
+ggplot(dog, aes(x=m.ed10frac, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="fraction edge canopy vs EVI")
+ggplot(dog, aes(x=m.can, y=m.evi, colour=m.ed10frac))+
+  geom_point(aes(size=count.frac))+
+  labs(title="Canopy vs EVI")+
+  scale_color_continuous(low="darkgreen", high="salmon", limits=c(0.5, 1))
+ggplot(dog, aes(x=m.barr, y=m.evi, colour=m.ed10frac))+
+  geom_point(aes(size=count.frac))+
+  labs(title="Barren vs EVI")+
+  scale_color_continuous(low="darkgreen", high="salmon", limits=c(0.5, 1))
+
+
 
 
 ## ed10
@@ -446,17 +480,116 @@ ggplot(dog, aes(x=m.dev, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="
 # bimodal: 47% no dev, EVI 0.38; 100% dev 0.18, slight downward trend
 
 
+#######
 ### pure pixels analysis
+#### Analysis of 30m Boston data with 1m cover fractions
+dat <- read.csv("processed/boston.30m.agg.csv")
+dat <- as.data.table(dat)
+dat <- dat[!is.na(aoi) & water<=0.01,] # 137 k pixels inside AOI and nearly water free
+dat <- dat[aoi>675,] # only take pixels that have >75% sub-pixel data == 134k pixels
+bin.range <- seq(from=dat[,min(isa, na.rm=T)], to=dat[,max(isa, na.rm=T)], length.out = 100)
+dat[, isa.bin:=findInterval(isa, bin.range, all.inside=T)] ## set up markers for isa bin ranges
+bin.range <- seq(from=dat[,min(barr, na.rm=T)], to=dat[,max(barr, na.rm=T)], length.out = 100)
+dat[, isa.bin:=findInterval(barr, bin.range, all.inside=T)] ## set up markers for isa bin ranges
+
+
+### set up median tables for the different LULC classes and combine for plotting
 forest.p <- dat[forest>0.95, ]
+forest.p[,visafrac:=0]
+forest.p[can>0,visafrac:=vegisa/can] ## fraction of canopy area that is over isa
+forest.p[visafrac<=1,] ### there are weird and not that rare artifacts where e.g. very high grass pixels show higher VISA than canopy -- wtf? No visual anomaly on the rasters -- complate description of cover with ISA/NIB/CAN/VISA/GRASS
+forest.m <- forest.p[,.(m.evi=mean(evi, na.rm=T), 
+                        m.ndvi=mean(ndvi, na.rm=T),
+                        m.isa=mean(isa, na.rm=T),
+                        m.barr=mean(barr, na.rm=T),
+                        m.grass=mean(grass, na.rm=T),
+                        count=.N,
+                        m.visa=mean(vegisa, na.rm=T),
+                        m.can=mean(can, na.rm=T),
+                        m.visafrac=mean(visafrac, na.rm=T),
+                        m.ed10=mean(ed10, na.rm=T),
+                        m.ed20=mean(ed20, na.rm=T),
+                        m.ed30=mean(ed30, na.rm=T),
+                        m.buff.Intonly=mean(buff.Intonly, na.rm=T)), by=barr.bin]
+forest.m[,count.frac:=count/dim(forest.p)[1]]
+forest.m[,pure.class:="forest"]
+# plot(forest.m$m.isa, forest.m$m.barr)
+# plot(forest.m$isa, forest.m$m.evi)
+# plot(forest.m$m.barr, forest.m$m.evi)
+
 dev.p <- dat[dev>0.95, ]
+dev.p[,visafrac:=0]
+dev.p[can>0,visafrac:=vegisa/can] ## fraction of canopy area that is over isa
+dev.p[visafrac<=1,] ### there are weird and not that rare artifacts where e.g. very high grass pixels show higher VISA than canopy -- wtf? No visual anomaly on the rasters -- complate description of cover with ISA/NIB/CAN/VISA/GRASS
+dev.m <- dev.p[,.(m.evi=mean(evi, na.rm=T), 
+                        m.ndvi=mean(ndvi, na.rm=T),
+                        m.isa=mean(isa, na.rm=T),
+                        m.barr=mean(barr, na.rm=T),
+                        m.grass=mean(grass, na.rm=T),
+                        count=.N,
+                        m.visa=mean(vegisa, na.rm=T),
+                        m.can=mean(can, na.rm=T),
+                        m.visafrac=mean(visafrac, na.rm=T),
+                        m.ed10=mean(ed10, na.rm=T),
+                        m.ed20=mean(ed20, na.rm=T),
+                        m.ed30=mean(ed30, na.rm=T),
+                        m.buff.Intonly=mean(buff.Intonly, na.rm=T)), by=barr.bin]
+dev.m[,count.frac:=count/dim(dev.p)[1]]
+dev.m[,pure.class:="dev"]
+plot(dev.m$m.isa, dev.m$m.evi)
+plot(dev.m$m.isa, dev.m$m.barr)
+plot(dev.m$m.barr, dev.m$m.evi)
+
 hdres.p <- dat[hd.res>0.95, ]
+hdres.p[,visafrac:=0]
+hdres.p[can>0,visafrac:=vegisa/can] ## fraction of canopy area that is over isa
+hdres.p[visafrac<=1,] ### there are weird and not that rare artifacts where e.g. very high grass pixels show higher VISA than canopy -- wtf? No visual anomaly on the rasters -- complate description of cover with ISA/NIB/CAN/VISA/GRASS
+hdres.m <- hdres.p[,.(m.evi=mean(evi, na.rm=T), 
+                  m.ndvi=mean(ndvi, na.rm=T),
+                  m.isa=mean(isa, na.rm=T),
+                  m.barr=mean(barr, na.rm=T),
+                  m.grass=mean(grass, na.rm=T),
+                  count=.N,
+                  m.visa=mean(vegisa, na.rm=T),
+                  m.can=mean(can, na.rm=T),
+                  m.visafrac=mean(visafrac, na.rm=T),
+                  m.ed10=mean(ed10, na.rm=T),
+                  m.ed20=mean(ed20, na.rm=T),
+                  m.ed30=mean(ed30, na.rm=T),
+                  m.buff.Intonly=mean(buff.Intonly, na.rm=T)), by=barr.bin]
+hdres.m[,count.frac:=count/dim(hdres.p)[1]]
+hdres.m[,pure.class:="hdres"]
+plot(hdres.m$m.isa, hdres.m$m.evi)
+plot(hdres.m$m.isa, hdres.m$m.barr)
+plot(hdres.m$m.barr, hdres.m$m.evi)
+
 lowveg.p <- dat[lowveg>0.95, ]
+lowveg.p[,visafrac:=0]
+lowveg.p[can>0,visafrac:=vegisa/can] ## fraction of canopy area that is over isa
+lowveg.p[visafrac<=1,] ### there are weird and not that rare artifacts where e.g. very high grass pixels show higher VISA than canopy -- wtf? No visual anomaly on the rasters -- complate description of cover with ISA/NIB/CAN/VISA/GRASS
+lowveg.m <- lowveg.p[,.(m.evi=mean(evi, na.rm=T), 
+                      m.ndvi=mean(ndvi, na.rm=T),
+                      m.isa=mean(isa, na.rm=T),
+                      m.barr=mean(barr, na.rm=T),
+                      m.grass=mean(grass, na.rm=T),
+                      count=.N,
+                      m.visa=mean(vegisa, na.rm=T),
+                      m.can=mean(can, na.rm=T),
+                      m.visafrac=mean(visafrac, na.rm=T),
+                      m.ed10=mean(ed10, na.rm=T),
+                      m.ed20=mean(ed20, na.rm=T),
+                      m.ed30=mean(ed30, na.rm=T),
+                      m.buff.Intonly=mean(buff.Intonly, na.rm=T)), by=barr.bin]
+lowveg.m[,count.frac:=count/dim(lowveg.p)[1]]
+lowveg.m[,pure.class:="lowveg"]
+plot(lowveg.m$m.isa, lowveg.m$m.evi)
+plot(lowveg.m$m.isa, lowveg.m$m.barr)
+plot(lowveg.m$m.barr, lowveg.m$m.evi)
 
 forest.p[,median(evi, na.rm=T)]#0.64
 dev.p[,median(evi, na.rm=T)]#0.13     
 hdres.p[,median(evi, na.rm=T)]#0.31
 lowveg.p[,median(evi, na.rm=T)]#0.48
-
 ## these pure classes account for 75% of Boston (about 25% is mixed pixels)
 (forest.p[,length(evi)]+lowveg.p[,length(evi)]+hdres.p[,length(evi)]+dev.p[,length(evi)])/dim(dat)[1] 
 (forest.p[,length(evi)])/dim(dat)[1] # pure forest is 5.4%
@@ -464,8 +597,44 @@ lowveg.p[,median(evi, na.rm=T)]#0.48
 (hdres.p[,length(evi)])/dim(dat)[1] # pure hd.res is 30.8%
 (dev.p[,length(evi)])/dim(dat)[1] # pure dev is 34.0%
 
-### what is relationship with isa etc. inside pure pixel classes?
+### combine into common data frame
+puro <- rbind(forest.m, dev.m, hdres.m, lowveg.m)
+puro[,pure.class:=(as.factor(pure.class))]
+puro[m.visafrac>1, m.visafrac:=NA]
 
+plot(puro[pure.class=="forest", m.isa], puro[pure.class=="forest", count.frac]) ### dominated by 0% ISA
+plot(puro[pure.class=="lowveg", m.isa], puro[pure.class=="lowveg", count.frac]) ## dominated by 0% ISA
+plot(puro[pure.class=="dev", m.isa], puro[pure.class=="dev", count.frac]) ### dominated by 100% ISA
+plot(puro[pure.class=="hdres", m.isa], puro[pure.class=="hdres", count.frac]) ## some range of ISA, but still overrepresented in 100% ISA
+
+### combined plots with all four pure-pixel classes
+ggplot(puro, aes(x=m.barr, y=m.evi, color=pure.class, size=count.frac))+
+  geom_point()+labs(title="EVI vs. Barren", colour="LULC class", size="Relative %", x="Barren", y="EVI")+
+  # scale_size("% of LULC", range=c(0,8))+
+  scale_size(range=c(1,10),breaks=c(0, 0.01, 0.02, 0.05, 0.10, 0.40),labels=c(">=0",">=1%",">=2%",">=5%",">=10%",">=40%"),guide="legend")## fine but point sizes are shitballs
+ggplot(puro, aes(x=m.barr, y=m.can, color=pure.class, size=count.frac))+
+  geom_point()+labs(title="%Canopy vs. Barrn", colour="LULC class", size="Relative %", x="Barren", y="Canopy")+
+  # scale_size("% of LULC", range=c(0,8))+
+  scale_size(range=c(1,10),breaks=c(0, 0.01, 0.02, 0.05, 0.10, 0.40),labels=c(">=0",">=1%",">=2%",">=5%",">=10%",">=40%"),guide="legend")## fine but point sizes are shitballs
+
+#### I don't trust the veg-over-isa category, think the processing must be screwed up somehow.
+ggplot(puro, aes(x=m.barr, y=m.visa, color=pure.class, size=count.frac))+
+  geom_point()+labs(title="Canopy over ISA vs. ISA", colour="LULC class", size="Relative %", x="ISA", y="Vegetation over ISA")+
+  # scale_size("% of LULC", range=c(0,8))+
+  scale_size(range=c(1,10),breaks=c(0, 0.01, 0.02, 0.05, 0.10, 0.40),labels=c(">=0",">=1%",">=2%",">=5%",">=10%",">=40%"),guide="legend")## fine but point sizes are shitballs
+ggplot(puro, aes(x=m.barr, y=m.visafrac, color=pure.class, size=count.frac))+
+  geom_point()+labs(title="%Canopy over ISA vs. ISA", colour="LULC class", size="Relative %", x="ISA", y="Fraction of Vegetation over ISA")+
+  # scale_size("% of LULC", range=c(0,8))+
+  scale_size(range=c(1,10),breaks=c(0, 0.01, 0.02, 0.05, 0.10, 0.40),labels=c(">=0",">=1%",">=2%",">=5%",">=10%",">=40%"),guide="legend")## fine but point sizes are shitballs
+
+
+### same analysis viz. barren fraction
+
+
+
+
+
+### invividual pure-pixels plots
 ### pure forest 7k
 bin.range <- seq(from=forest.p[,min(isa, na.rm=T)], to=dat[,max(isa, na.rm=T)], length.out = 100)
 a <- forest.p
@@ -492,6 +661,10 @@ ggplot(dog, aes(x=m.isa, y=m.visafrac))+geom_point(aes(size=count.frac))+labs(ti
 ### nearly linear 1:1 (slope slightly <1) -- for every increment of ISA you make the remaining forest canopy more dominated by VISA
 ggplot(dog, aes(x=m.can, y=m.evi))+geom_point(aes(size=count.frac, color=m.isa))+labs(title="EVI vs. canopy, FOREST")
 ### basically forest is all 100% unpaved, paving it at all causes instant decline in EVI
+#### multiple plots
+library(reshape2)
+df <- data.frame(a = rnorm(10), c = rnorm(10), g = rnorm(10), class = sample(letters[20:23], 10, TRUE))
+df.m <- melt(df)
 
 
 ## pure dev, 45k
