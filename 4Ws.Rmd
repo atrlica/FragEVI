@@ -1,0 +1,112 @@
+---
+title: "Radiometric properties of urban vegetation"
+author: "Drew Trlica"
+date: Sys.Date()
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(rmarkdown)
+library(knitr)
+library(data.table)
+library(ggplot2)
+library(kableExtra)
+library(raster)
+opts_knit$set(root.dir = "E:/FragEVI/")
+```
+
+### 1) The Problem
+We need a more accurate picture of urban biogenic C exchange, both in terms of greater spatial resolution and in light of our growing body of evidence that growing conditions and plant productivity can be quite different in urban environments. In particular, canopy fragmentation in northern temperate forests appears to encourage greater productivity, an effect also seen in urban-grown trees. We are going to use satellite radiometric measures (vegetation indices) to ultimately estimate productivity on the scale of the urban landscape, but we don't know if that signal will adequately predict the altered growth rates we see at the tree and canopy level we have measured locally.
+
+#### EVI enhancement in cities
+Zhao et al. (2016) showed a slower than expected decline in EVI in Chinese cities using coarse (1km) data with increasing sub-pixel fraction of urban (non-vegetated) area which they attributed to better urban growth conditions. It is not known whether or not the EVI enhancement found by Zhao et al. is related to canopy fragmentation or any other urban surface features.
+
+### 2) What we did
+We assembled 30m Landsat median summertime (July 2010-2012) EVI data for the Boston metropolitan region between I-495 and downtown Boston. This data was paired with 30m aggregated data on Land-Use/Land-cover classification and impervious surface fraction provided by MassGIS. This data was analyzed to assess the EVI-to-non-vegetated relationship and examine for any EVI-enhancement effect in the broader metropolitan area. Data was processed to remove pixels with significant water exposure prior to analysis.
+
+We also assembled 1m data on NDVI and canopy cover derived from leaf-on lidar and summertime Quickbird multi-spectral imagery covering the municipal boundaries of the city of Boston (Raciti et al., 2014). This data was processed to show canopy edge distance class (0-10m, 10-20m, 20-30m, >30m), cover vegetation status (tree/grass/barren), impervious surfaces and LULC classification, and to identify tree canopy positioned over impervious surfaces. Data was also processed to remove water-classed pixels prior to analysis. This data was analyzed to examine the radiometric signature of vegetation in different landscape positions in the urban environment. Specifically, NDVI was examined according to vegetation status and canopy edge distance.
+
+Finally, the 1m data at the Boston city level was aggregated to the 30m landsat EVI grid to examine the effect of sub-pixel fractional cover on overall EVI signal.
+
+### 3) What we found
+
+#### EVI in the metropolitan area does decline more slowly than expected, but the effect differs with LULC class
+```{r point1, include=T, echo=F}
+dat.r <- stack("processed/EVI30m.stack.tif")
+names(dat.r) <-  c("evi", "isa", "lulc", "AOI")
+dat <- as.data.table(as.data.frame(dat.r))
+dat <- dat[AOI==1,]
+dat <- dat[is.finite(lulc),] ## 734k pixels with valid EVI/ISA/LULC
+
+### Zhao framework to find Vzi
+
+## alternate approach: just chuck the water values which will fuck everything up (v. low evi, v. low isa)
+veg <- dat[isa<0.01  & lulc!=20, median(evi, na.rm=T)]
+veg.err <- dat[isa<0.01  & lulc!=20, sd(evi, na.rm=T)/sqrt(length(evi))]
+veg.n <- dat[isa<0.01  & lulc!=20, length(evi)]
+noveg <- dat[isa>=0.99 & lulc!=20, median(evi, na.rm=T)]
+noveg.err <- dat[isa>=0.99 & lulc!=20, sd(evi, na.rm=T)/sqrt(length(evi))]
+noveg.n <- dat[isa>=0.99 & lulc!=20, length(evi)]
+
+### get range of intensity values and figure a linear Vzi curve
+beta.range <- seq(from=0, to=1, by=0.01) 
+Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
+dat[lulc!=20, bin:=findInterval(isa, beta.range, all.inside=T)]
+evi.bin <- dat[lulc!=20, .(m.isa=median(isa, na.rm=T), m.evi=median(evi, na.rm=T)), by=bin]
+evi.bin <- evi.bin[order(m.isa),]
+
+### binned EVI vs. ISA, all LULC
+par(mar=c(4,4,2,1), mgp=c(2,1,0), mfrow=c(1,2))
+plot(evi.bin[,m.isa]*100, evi.bin[,m.evi],
+     main="EVI vs. %ISA, all LULC",
+     xlab="%ISA", ylab="EVI",
+     pch=15, col="forestgreen")
+lines(beta.range*100, Vzi, col="red", lwd=2, lty=2)
+plot(evi.bin[,m.isa]*100, evi.bin[,m.evi]-Vzi,
+     main="EVI enhancement, all LULC",
+     xlab="%ISA", ylab="EVI enhancement",
+     pch=16, col="royalblue")
+abline(h=0, lty=1, lwd=1.6)
+```
+
+Using the analytic approach of Zhao et al, EVI declines quickly with low levels of development (<20% ISA), but in more highly developed pixels EVI is enhanced over the expected compared to vegetation loss. This enhancement is comparatively small, and above about 40% ISA is stable at 0.03-0.04 enhancement.
+
+The relationship of EVI to ISA (% developed) is variable with LULC, possibly related to the stature of dominant vegetation type.
+
+```{r point1a, echo=F, include=T}
+library(RColorBrewer)
+dat[,lulc:=(as.factor(lulc))]
+vtypes <- dat[,unique(lulc)]
+vtypes <- vtypes[!is.na(vtypes)]
+vtypes <- vtypes[!vtypes==20]
+vnum <- c(1:20, 23:26, 29, 31, 34:40)
+vnames <- c("Crop", "Pasture", "Forest", "NFwet", "Mining", "Open", "PartRec", 
+            "SpectRec", "WBRec", "MFResid", "HDResid", "MDResid", "LDResid", "SWwet",
+            "Comm", "Ind", "Tran", "Transp", "Waste", "Water", "CBog", "Util", 
+            "SWBeach", "Golf", "Marina", "PubInst", "Cem", "Orch", "Nurs", "FWet", "VLDResid", 
+            "Junk", "Brush")
+vlook <- data.frame(cbind(vnum, vnames))
+vtypes <- c(3, 2, 26) ### set static # forest pasture golf
+pal <- c("forestgreen", "orange", "salmon") ### set static 
+par(mar=c(4,4,2,1), mgp=c(2,1,0), mfrow=c(1,3))
+for(v in 1:length(vtypes)){
+  veg <- dat[isa<0.01 & lulc==vtypes[v], median(evi, na.rm=T)]
+  noveg <- dat[isa>=0.99 & lulc==vtypes[v], median(evi, na.rm=T)]
+  Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
+  evi.tmp <- dat[lulc==vtypes[v],]
+  evi.tmp[, bin:=findInterval(isa, beta.range, all.inside=T)]
+  plotme <- evi.tmp[, .(m.isa=median(isa, na.rm=T), m.evi=median(evi, na.rm=T)), by=bin]
+  if(is.na(noveg)){noveg <- 0}
+  if(is.na(veg)){veg <- 0.6}
+  plot(plotme[,m.isa]*100, plotme[,m.evi],
+       main=paste(vlook[vnum==vtypes[v], "vnames"]),
+       xlab="%ISA", ylab="EVI",
+       pch=15, col=pal[v],
+       ylim=c(0, 0.65))
+  lines(beta.range*100, Vzi, col="red", lwd=2, lty=2)
+}
+```
+
+Forested pixels showed a slower than expected decline, while pixels dominated by low vegetation showed a decline near to linear (i.e. a loss of any sub-pixel area to impervious cover resulted in a proportionate decrease in EVI).
+
+

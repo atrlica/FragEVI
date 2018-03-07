@@ -51,7 +51,7 @@ library(data.table)
 # bos.cov <- cover.bl(bos.can, bos.ndvi, filename="processed/bos.cov.tif")
 
 # ### Processing 1m canopy map for edge class
-# ### call python script for identifying canopy edge distance (desktop only)
+# ### call python scripbt for identifying canopy edge distance (desktop only)
 # pyth.path = './Rscripts/canopy_process.py'
 # output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
 # print(output)
@@ -196,7 +196,7 @@ nonimp.find <- function(x, filename.nonimpbarr, filename.vegisa) { # x is first-
   return(out1)
   return(out2)
 }
-nonimp.find(nonimp.only, filename.nonimp="processed/boston/bos.nonimpbarr.tif", filename.vegisa = "processed/boston/bos.vegisa.tif")
+nonimp.find(nonimp.only, filename.nonimpbarr="processed/boston/bos.nonimpbarr.tif", filename.vegisa = "processed/boston/bos.vegisa.tif")
 nonimpbarr.only <- raster("processed/boston/bos.nonimpbarr.tif")
 vegisa.only <- raster("processed/boston/bos.vegisa.tif")
 
@@ -470,7 +470,7 @@ writeRaster(evi.stack, filename="processed/EVI30m.stack.tif", format="GTiff", ov
 
 ### Test Code: Process NAIP 1m CIR data to NDVI
 ### NOTE SO MUCH: BAND ORDER IN NAIP CIR DATA IS RED GREEN BLUE NIR (1,2,3,4)
-naip.test <- stack("Z:/Ultra2/Users/atrlica/FragEVI/NAIP/EssexCIR/m_4207009_ne_19_h_20160706/m_4207009_ne_19_h_20160706.tif")
+naip.test <- stack("Z:/Ultra2/Users/atrlica/FragEVI/NAIP/EssexCIR/m_4207123_ne_19_h_20160706/m_4207123_ne_19_h_20160706.tif")
 naip.dat <- as.data.table(as.data.frame(naip.test))
 names(naip.dat) <- c("band1", "band2", "band3", "band4")
 naip.dat[, ndvi:=((band4-band1)/(band4+band1))]
@@ -479,14 +479,28 @@ ndvi.r <- setValues(x = ndvi.r, values=naip.dat[,ndvi])
 writeRaster(ndvi.r, filename="processed/NAIP.ndvi.test.tif", format="GTiff", overwrite=T)
 
 
-#### Test Code: Retrieve EVI from 4-band Quickbird imagery
+#### Produce several VI's from the Quickbird 4 band imagery
 #### the below raw pan-sharpened data is 60cm, but is reported XXXXX integer -- assume this is corrected/orthorectified reflectance in integer form?
 qb <- stack("Z:/Ultra1/Data/Remote_Sensing/Quickbird/Mosaic_pansharp/Boston_pan.tif")
 names(qb) <- c("blue", "green", "red", "nir")
-qb.evi <- function(x,y,z,filename){ ### enter as red blue nir
-  out <- raster(x)
-  bs <- blockSize(out)
-  out <- writeStart(out, filename, overwrite=T, format="GTiff")
+### on closer inspection, this is likely to be the DN's stored as 16 bit integer value (range 0-65535)
+### NIR tops out the sensor reading but other bands do not
+
+## out of curiosity pull a raw file from the DVD and see what the number ranges are
+raw <- raster("Z:/Ultra1/Data/Remote_Sensing/Quickbird/DVD/DVD1/052187149010_01_P001_MUL/07AUG03160142-M2AS_R1C2-052187149010_01_P001.TIF")
+## yes, same 16 bit integer
+
+qb.vi <- function(x, y, z, fn.evi, fn.evi2, fn.ndvi, fn.nirv){ ### enter as red blue nir, filename evi, filename evi2, filename ndvi, filename nirv
+  out.evi <- raster(x)
+  out.evi2 <- raster(x)
+  out.ndvi <- raster(x)
+  out.nirv <- raster(x)
+  bs <- blockSize(out.evi)
+  out.evi <- writeStart(out.evi, fn.evi, overwrite=T, format="GTiff")
+  out.evi2 <- writeStart(out.evi2, fn.evi2, overwrite=T, format="GTiff")
+  out.ndvi <- writeStart(out.ndvi, fn.ndvi, overwrite=T, format="GTiff")
+  out.nirv <- writeStart(out.nirv, fn.nirv, overwrite=T, format="GTiff")
+  
   for(i in 1:bs$n){
     red <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## red band
     red <- red/100000
@@ -501,17 +515,43 @@ qb.evi <- function(x,y,z,filename){ ### enter as red blue nir
     blue.na[red==0 & blue==0 & nir==0] <- NA
     nir.na <- nir
     nir.na[red==0 & blue==0 & nir==0] <- NA
-    evi.calc <- 2.5*((nir.na-red.na)/(nir.na+6*red.na-7.5*blue.na+1))
-    out <- writeValues(out, evi.calc, bs$row[i])
+    ## run VI calculations
+    evi.calc <- 2.5*((nir.na-red.na)/(1+nir.na+(6*red.na-7.5*blue.na)))
+    evi.calc[evi.calc>2.5 | evi.calc<(-2.5)] <- NA
+    evi2.calc <- 2.5*((nir.na-red.na)/(1+nir.na+(2.4*red.na)))
+    evi2.calc[evi2.calc<(-2.5) | evi2.calc>2.5] <- NA
+    ndvi.calc <- (nir.na-red.na)/(nir.na+red.na)
+    ndvi.calc[ndvi.calc>1 | ndvi.calc<(-1)] <- NA
+    nirv.calc <- ndvi.calc*nir.na
+    out.evi <- writeValues(out.evi, evi.calc, bs$row[i])
+    out.evi2 <- writeValues(out.evi2, evi2.calc, bs$row[i])
+    out.ndvi <- writeValues(out.ndvi, ndvi.calc, bs$row[i])
+    out.nirv <- writeValues(out.nirv, nirv.calc, bs$row[i])
     print(paste("finished block", i, "of", bs$n))
   }
-  out <- writeStop(out)
-  return(out)
+  out.evi <- writeStop(out.evi)
+  out.evi2 <- writeStop(out.evi2)
+  out.ndvi <- writeStop(out.ndvi)
+  out.nirv <- writeStop(out.nirv)
+  return(out.evi)
+  return(out.evi2)
+  return(out.ndvi)
+  return(out.nirv)
 }
-s <- qb.evi(qb[["red"]], qb[["blue"]], qb[["nir"]], filename="processed/bos.evi.1m.tif")
+s <- qb.vi(qb[["red"]], qb[["blue"]], qb[["nir"]], 
+            fn.evi="processed/boston/bos.evi.1m.tif", 
+            fn.evi2="processed/boston/bos.evi2.1m.tif",
+            fn.ndvi="processed/boston/bos.ndvi.1m.tif",
+            fn.nirv="processed/boston/bos.nirv.1m.tif")
 
 ## this seems to give reasonable EVI values but seem pretty low even in dense canopy (~0.25 where NDVI values show 0.6)
 ## also there is a difference in registration (several meters) between this file and the other 1m boston rasters.
-evi.bos <- raster("processed/bos.evi.1m.tif")
+evi.bos <- raster("processed/boston/bos.evi.1m.tif")
+evi2.bos <- raster("processed/boston/bos.evi2.1m.tif")
+ndvi.bos <- raster("processed/boston/bos.ndvi.1m.tif")
+nirv.bos <- raster("processed/boston/bos.nirv.1m.tif")
 
-bos.stack <- stack("processed/bos.stack.1m.tif")
+
+
+### attempt a 2-band EVI
+

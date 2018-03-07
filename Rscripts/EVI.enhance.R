@@ -298,13 +298,22 @@ dog[,count.frac:=count/sum(count)]
 ggplot(dog, aes(x=m.grass, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="Grass")
 # grass <10% can be EVI 0.3-0.2, somewhat noisy, tops out at grass>0.8 but EVI<0.5 (ok so even very grassy pixels don't get as high as canopy)
 
-## barren
+
+###########
+## barren -- this is basically what Zhao was using to get urban area for his analysis
+
+### get fresh data set
+dat <- read.csv("processed/boston.30m.agg.csv")
+dat <- as.data.table(dat)
+dat <- dat[!is.na(aoi) & water<=0.01,] # 137 k pixels inside AOI and nearly water free
+dat <- dat[aoi>675,] # only take pixels that have >75% sub-pixel data == 134k pixels
+
 bin.range <- seq(from=dat[,min(barr, na.rm=T)], to=dat[,max(barr, na.rm=T)], length.out = 100)
 a <- dat
 a[,bin:=findInterval(barr, bin.range, all.inside=T)]
 a[,count:=.N, by=bin]
-a[, ed10.frac:=NA]
-a[, vegisa.frac:=NA]
+a[, ed10.frac:=0]
+a[, vegisa.frac:=0]
 a[can>0,ed10.frac:=ed10/can]
 a[can>0,vegisa.frac:=vegisa/can]
 dog <- a[,.(m.evi=mean(evi, na.rm=T), 
@@ -320,30 +329,53 @@ dog <- a[,.(m.evi=mean(evi, na.rm=T),
             m.vegisafrac=mean(vegisa.frac, na.rm=T),
             count=.N), by=bin]
 dog[,count.frac:=count/sum(count)]
-ggplot(dog, aes(x=m.barr, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="Barren")
+
+### estimate Vzi
+veg <- dog[bin==1, m.evi]
+noveg <- dog[bin==99, m.evi]
+beta.range <- seq(from=dog[,min(m.barr)], to=dog[,max(m.barr)], length.out = dog[,length(unique(bin))])
+Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
+dog <- dog[order(bin),]
+dog[,Vzi:=Vzi]
+
+par(mfrow=c(1,2))
+ggplot(dog, aes(x=m.barr, y=m.evi))+
+  geom_point(aes(size=count.frac))+
+  labs(title="Barren")+
+  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
+ggplot(dog, aes(x=m.barr, y=m.evi-Vzi))+
+  geom_point(aes(size=count.frac, colour="blue"))+
+  labs(title="EVI enhancement")+
+  geom_hline(yintercept=0, linetype="solid", color="black", size=0.7)
 # fully barren is 0.1EVI, fully not is EVI 0.6, steady curve in between -- looks a lot like ISA vs. EVI curve, discontinuities at either end (must be very different members in those groups, lots more pixels)
+
 ggplot(dog, aes(x=m.barr, y=m.can))+geom_point(aes(size=count.frac))+labs(title="Canopy")
-# nearly linear decline, maxes out at 0.65, very biomodal -- a lot of vegetated (12%), a lot of barren (16%), little in between
+# nearly linear decline, maxes out at 0.65, very biomodal -- a lot of vegetated (12%), a lot of barren (16%), little in between.
+# Basically every gain in barrenness is at a loss of canopy, especially above 0.25 barren -- so there really is a trade between canopy area and barrenness that does NOT drag EVI down in linear fashion
 summary(lm(dog$m.can~dog$m.barr)) ### slope -0.73 -- a unit increase in barrenness gives a 0.73 decrease in canopy
+
 ggplot(dog, aes(x=m.barr, y=m.grass))+geom_point(aes(size=count.frac))+labs(title="Grass")
 # sloppier, sigmoidal, maxes out at 0.35
+
 ggplot(dog, aes(x=m.barr, y=m.ed10frac))+geom_point(aes(size=count.frac))+labs(title="fraction canopy <10m edge, Barren")
 ## basically by barren 0.5 all canopy is within 10m of edge
+
 ggplot(dog, aes(x=m.can, y=m.ed10frac))+geom_point(aes(size=count.frac))+labs(title="fraction canopy <10m edge, Canopy")
 ### same idea: only when canopy cover is >0.4 do you get interior canopies
 ### is there an EVI change with this?
+
 ggplot(dog, aes(x=m.ed10, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="area canopy <10m edge")
 ggplot(dog, aes(x=m.ed10frac, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="fraction edge canopy vs EVI")
 ggplot(dog, aes(x=m.can, y=m.evi, colour=m.ed10frac))+
   geom_point(aes(size=count.frac))+
   labs(title="Canopy vs EVI")+
-  scale_color_continuous(low="darkgreen", high="salmon", limits=c(0.5, 1))
+  scale_color_continuous(low="darkgreen", high="salmon", limits=c(0.45, 1))
 ggplot(dog, aes(x=m.barr, y=m.evi, colour=m.ed10frac))+
   geom_point(aes(size=count.frac))+
   labs(title="Barren vs EVI")+
-  scale_color_continuous(low="darkgreen", high="salmon", limits=c(0.5, 1))
+  scale_color_continuous(low="darkgreen", high="salmon", limits=c(0.45, 1))
 
-
+plot(dog$m.evi, dog$m.ndvi)
 
 
 ## ed10
