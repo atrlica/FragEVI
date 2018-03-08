@@ -6,44 +6,57 @@ library(sp)
 library(ggplot2)
 library(knitr)
 
+#### 30m EVI enhancement assessment
 ### Stack 30m layers and crop to AOI
 dat.r <- stack("processed/EVI30m.stack.tif")
 names(dat.r) <-  c("evi", "isa", "lulc", "AOI")
 dat <- as.data.table(as.data.frame(dat.r))
 dat <- dat[AOI==1,]
-dat <- dat[is.finite(lulc),] ## 734k pixels with valid EVI/ISA/LULC
+dat <- dat[is.finite(lulc),] ## 7.3M pixels with valid EVI/ISA/LULC
 
-### Zhao framework to find Vzi
-
-## alternate approach: just chuck the water values which will fuck everything up (v. low evi, v. low isa)
+## get values for vegetation and non-veg endmembers
 veg <- dat[isa<0.01  & lulc!=20, median(evi, na.rm=T)]
 veg.err <- dat[isa<0.01  & lulc!=20, sd(evi, na.rm=T)/sqrt(length(evi))]
 veg.n <- dat[isa<0.01  & lulc!=20, length(evi)]
 noveg <- dat[isa>=0.99 & lulc!=20, median(evi, na.rm=T)]
 noveg.err <- dat[isa>=0.99 & lulc!=20, sd(evi, na.rm=T)/sqrt(length(evi))]
 noveg.n <- dat[isa>=0.99 & lulc!=20, length(evi)]
-
-### get range of intensity values and figure a linear Vzi curve
 beta.range <- seq(from=0, to=1, by=0.01) 
 Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
+
+## bin the values by isa fraction
 dat[lulc!=20, bin:=findInterval(isa, beta.range, all.inside=T)]
-evi.bin <- dat[lulc!=20, .(m.isa=median(isa, na.rm=T), m.evi=median(evi, na.rm=T)), by=bin]
+evi.bin <- dat[lulc!=20, .(m.isa=median(isa, na.rm=T), 
+                           m.evi=median(evi, na.rm=T),
+                           bin.count=.N), by=bin]
 evi.bin <- evi.bin[order(m.isa),]
+tot <- evi.bin[,sum(bin.count)]
+evi.bin[,bin.frac:=bin.count/tot, by=bin]
+evi.bin <- evi.bin[!is.na(m.isa),]
 
 ### binned EVI vs. ISA, all LULC
-par(mar=c(4,4,2,1), mgp=c(2,1,0), mfrow=c(1,2))
-pdf(file = "images/EVI_ISA_binned30m.pdf", width = 6, height = 6)
-plot(evi.bin[,m.isa]*100, evi.bin[,m.evi],
-     main="EVI vs. %ISA, all LULC",
-     xlab="%ISA", ylab="EVI",
-     pch=15, col="forestgreen")
-lines(beta.range*100, Vzi, col="red", lwd=2, lty=2)
-plot(evi.bin[,m.isa]*100, evi.bin[,m.evi]-Vzi,
-     main="EVI enhancement, all LULC",
-     xlab="%ISA", ylab="EVI enhancement",
-     pch=16, col="royalblue")
-abline(h=0, lty=1, lwd=1.6)
-dev.off()
+# pdf(file = "images/EVI_ISA_binned30m.pdf", width = 6, height = 6)
+# plot(evi.bin[,m.isa]*100, evi.bin[,m.evi],
+#      main="EVI vs. %ISA, all LULC",
+#      xlab="%ISA", ylab="EVI",
+#      pch=15, col="forestgreen")
+# lines(beta.range*100, Vzi, col="red", lwd=2, lty=2)
+# plot(evi.bin[,m.isa]*100, evi.bin[,m.evi]-Vzi,
+#      main="EVI enhancement, all LULC",
+#      xlab="%ISA", ylab="EVI enhancement",
+#      pch=16, col="royalblue")
+# abline(h=0, lty=1, lwd=1.6)
+# dev.off()
+
+ggplot(aes(x=m.isa, y=m.evi), data=evi.bin)+
+  geom_point(aes(size=bin.frac), colour="forestgreen")+
+  labs(title="EVI vs. ISA by bin", x="Frac. ISA", y="Median EVI")+
+  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
+ggplot(aes(x=m.isa, y=m.evi-Vzi[1:100]), data=evi.bin)+
+  geom_point(aes(size=bin.frac), colour="blue")+
+  labs(title="EVI enhancement", x="Frac. ISA", y="EVI enhancement")+
+  geom_hline(yintercept=0, linetype="solid", color="black", size=0.7)
+## huge concentration of data in 0% ISA category (~44%)
 
 #### look at EVI vs. ISA plot by subtype
 dat[,lulc:=(as.factor(lulc))]
@@ -88,6 +101,78 @@ keep <- vfracs.t[order(Tfrac, decreasing = T),]
 keep <- keep[Tfrac>=0.01,]
 sum(keep$Tfrac)
 
+## do EVI vs ISA coloring the points according to majority area
+lulc.look <- data.frame(class=c(1,2,3,4,5,6,7,0))
+lulc.look$name <- c("low.res",
+                    "med.res",
+                    "hi.res",
+                    "dev",
+                    "forest",
+                    "lowveg",
+                    "other",
+                    "none")
+lulc.look$col <- c("yellow", "orange", "salmon", "grey45", "forestgreen", "lightgreen", "red", "black")
+lu.lowres <- c(13, 38) #LDResid., VLDResid.
+lu.medres <- c(12) # MDResid.
+lu.hdres <- c(11,10) # HDResid., MFResid.,
+lu.dev <- c(15,16,7,8,18,39,24,31,19,9,29) # Comm, Ind, PartRec, SpectRec, Transp., Junk, Util, PubInst, Waste, WBRec, Marina
+lu.forest <- c(3,37) # Forest, FWet
+lu.lowveg <- c(4,1,2,6,5,26,14,25,34,23) # NFwet, PubInst, Crop, Past, Open, Mining, Golf, SWwet, SWBeach, Cem, CBog
+lu.other <- c(17,35,40,36) #Tran, Orch, Brush, Nurs
+
+dat[lulc%in%lu.lowres, lulc.class:=1]
+dat[lulc%in%lu.medres, lulc.class:=2]
+dat[lulc%in%lu.hdres, lulc.class:=3]
+dat[lulc%in%lu.dev, lulc.class:=4]
+dat[lulc%in%lu.forest, lulc.class:=5]
+dat[lulc%in%lu.lowveg, lulc.class:=6]
+dat[lulc%in%lu.other, lulc.class:=7]
+
+for(m in 1:100){
+  tot.m <- dat[bin==m, .N]
+  uu <- dat[bin==m, .N/tot.m, by=lulc.class]
+  hit <- uu[V1==max(V1), lulc.class] ## most common pixel class, not necessarily majority
+  # if(uu[lulc.class==hit,V1]<0.5){hit <- 0} ## mixed pixels,  no class >0.5
+  evi.bin[bin==m, lulc.maj:=hit]
+}
+evi.bin <- merge(evi.bin, lulc.look, by.x="lulc.maj", by.y="class") ## add lulc.class names and colors
+evi.bin <- evi.bin[order(bin),]
+evi.bin$lulc.maj <- as.factor(evi.bin$lulc.maj)
+
+## get values for vegetation and non-veg endmembers
+veg <- dat[isa<0.01  & lulc!=20, median(evi, na.rm=T)]
+veg.err <- dat[isa<0.01  & lulc!=20, sd(evi, na.rm=T)/sqrt(length(evi))]
+veg.n <- dat[isa<0.01  & lulc!=20, length(evi)]
+noveg <- dat[isa>=0.99 & lulc!=20, median(evi, na.rm=T)]
+noveg.err <- dat[isa>=0.99 & lulc!=20, sd(evi, na.rm=T)/sqrt(length(evi))]
+noveg.n <- dat[isa>=0.99 & lulc!=20, length(evi)]
+beta.range <- seq(from=0, to=1, by=0.01) 
+Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
+
+#EVI vs. ISA plot, color by majority area fraction
+ggplot(aes(x=m.isa, y=m.evi, color=lulc.maj), data=evi.bin)+
+  geom_point(aes(size=bin.frac))+
+  scale_color_manual(breaks=c("1", "2", "3", "4", "5"),
+                     values=c("yellow", "orange", "salmon", "grey45", "forestgreen"),
+                     guide=guide_legend(title="largest LULC"),
+                     labels=c("VL+L Resid", "M Resid", "H+MF Resid", "Dev", "For"))+
+  labs(title="EVI vs. binned ISA, 30m AOI", x="Frac. ISA", y="Median EVI")+
+  scale_size(range=c(0.7,10),breaks=c(0.01, 0.02, 0.40),
+             labels=c(">1%","1-2%", ">40%"),
+             guide=guide_legend(title="Bin size"))+
+  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
+ggplot(aes(x=m.isa, y=m.evi-Vzi[1:100], color=lulc.maj), data=evi.bin)+
+  geom_point(aes(size=bin.frac))+
+  scale_color_manual(breaks=c("1", "2", "3", "4", "5"),
+                     values=c("yellow", "orange", "salmon", "grey45", "forestgreen"),
+                     guide=guide_legend(title="largest LULC"),
+                     labels=c("VL+L Resid", "M Resid", "H+MF Resid", "Dev", "For"))+
+  labs(title="EVI enhancement, 30m AOI", x="Frac. ISA", y="EVI enhancement")+
+  scale_size(range=c(0.7,10),
+             breaks=c(0.01, 0.02, 0.40),
+             labels=c(">1%","1-2%", ">40%"),
+             guide=guide_legend(title="Bin size"))+
+  geom_hline(yintercept=0, linetype="solid", color="black", size=0.7)
 
 
 ################
@@ -199,32 +284,32 @@ dat <- dat[!is.na(aoi) & water<=0.01,] # 137 k pixels inside AOI and nearly wate
 dat <- dat[aoi>675,] # only take pixels that have >75% sub-pixel data == 134k pixels
 # hist(dat[,evi])
 # hist(dat[,ndvi])
-
-### look at values binned by evi range
-bin.range <- seq(from=dat[,min(evi, na.rm=T)], to=dat[,max(evi, na.rm=T)], length.out = 100)
-dat[,evi.bin:=findInterval(evi, bin.range, all.inside=T)]
-evi.b <- dat[,.(m.barr=mean(barr),
-                m.grass=mean(grass),
-                m.can=mean(can),
-                m.isa=mean(isa),
-                m.nonimpbarr=mean(nonimpbarr),
-                m.vegisa=mean(vegisa),
-                m.ed10=mean(ed10),
-                m.ed20=mean(ed20),
-                m.ed30=mean(ed30),
-                m.buff.20only=mean(buff.20only),
-                m.buff.30only=mean(buff.30only),
-                m.buff.Intonly=mean(buff.Intonly),
-                m.forest=mean(forest),
-                m.lowveg=mean(lowveg),
-                m.low.res=mean(low.res),
-                m.med.res=mean(med.res),
-                m.hd.res=mean(hd.res),
-                m.dev=mean(dev),
-                m.other=mean(other),
-                m.ndvi=mean(ndvi), 
-                m.evi=mean(evi, na.rm=T),
-                n.evi=length(evi, na.rm=T)), by=evi.bin] 
+# 
+# ### look at values binned by evi range
+# bin.range <- seq(from=dat[,min(evi, na.rm=T)], to=dat[,max(evi, na.rm=T)], length.out = 100)
+# dat[,evi.bin:=findInterval(evi, bin.range, all.inside=T)]
+# evi.b <- dat[,.(m.barr=mean(barr),
+#                 m.grass=mean(grass),
+#                 m.can=mean(can),
+#                 m.isa=mean(isa),
+#                 m.nonimpbarr=mean(nonimpbarr),
+#                 m.vegisa=mean(vegisa),
+#                 m.ed10=mean(ed10),
+#                 m.ed20=mean(ed20),
+#                 m.ed30=mean(ed30),
+#                 m.buff.20only=mean(buff.20only),
+#                 m.buff.30only=mean(buff.30only),
+#                 m.buff.Intonly=mean(buff.Intonly),
+#                 m.forest=mean(forest),
+#                 m.lowveg=mean(lowveg),
+#                 m.low.res=mean(low.res),
+#                 m.med.res=mean(med.res),
+#                 m.hd.res=mean(hd.res),
+#                 m.dev=mean(dev),
+#                 m.other=mean(other),
+#                 m.ndvi=mean(ndvi), 
+#                 m.evi=mean(evi, na.rm=T),
+#                 n.evi=length(evi, na.rm=T)), by=evi.bin] 
 ### basic plots -- might be good to display bin size 
 ### should look at evi binned according to each sub-pixel area factor (rather than binned to evi)
 plot(evi.b$m.evi, evi.b$m.ndvi) ### ndvi looks non-informative below 0 EVI and above 0.7 EVI
@@ -250,10 +335,6 @@ plot(evi.b$m.evi, evi.b$m.other) ## chaos, too little coverage
 
 plot(evi.b$m.grass, evi.b$m.can)
 
-diag <- evi.b[m.evi>0.6, ]
-diag <- diag[order(m.evi),]
-View(diag)
-
 d <- lm(m.evi~m.grass*m.can, data=evi.b); summary(d) ## R2 0.96, no interaction effect
 
 ### evi as response in intervals binned by the cover area
@@ -270,20 +351,11 @@ dog <- a[,.(m.evi=mean(evi, na.rm=T),
             count=.N), by=bin]
 dog[,count.frac:=count/sum(count)]
 ggplot(dog, aes(x=m.can, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="Canopy")
-# uncomplicated except tails -- can>80% shows steeper curve up to 0.6EVI, and can<0.03 EVI range 0.1-0.2
-
-## isa
-bin.range <- seq(from=dat[,min(isa, na.rm=T)], to=dat[,max(isa, na.rm=T)], length.out = 100)
-a <- dat
-a[,bin:=findInterval(isa, bin.range, all.inside=T)]
-dog <- a[,.(m.evi=mean(evi, na.rm=T), 
-            m.ndvi=mean(ndvi, na.rm=T),
-            m.isa=mean(isa, na.rm=T),
-            count=.N), by=bin]
-dog[,count.frac:=count/sum(count)]
-ggplot(dog, aes(x=m.isa, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="Canopy")
-# classic decline, falls steeply above first step at 0, bellies out at higher ISA, crashes again at end (looks like full AOI)
-
+## part of the "EVI enhancement" is that the line (Vzi) is determined by 0 and 100% canopy
+## 100% canopy is VERY green; 0% is VERY not-green
+## EVI responds less to increasing/decreasing canopy at low range, and takes off above ~90%
+## below 25% canopy, loss of canopy is associated with greater EVI decline than between 25-75%
+### this curve looks a lot like an inverted ISA/EVI curve
 
 ## grass
 bin.range <- seq(from=dat[,min(grass, na.rm=T)], to=dat[,max(grass, na.rm=T)], length.out = 100)
@@ -296,18 +368,14 @@ dog <- a[,.(m.evi=mean(evi, na.rm=T),
             count=.N), by=bin]
 dog[,count.frac:=count/sum(count)]
 ggplot(dog, aes(x=m.grass, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="Grass")
-# grass <10% can be EVI 0.3-0.2, somewhat noisy, tops out at grass>0.8 but EVI<0.5 (ok so even very grassy pixels don't get as high as canopy)
+# grass does the same thing as canopy down low, but never gets to the hyper-green effect at the end of curve
+## i.e. a 100% grass pixel tops out lower than a 100% canopy pixel
+## and upeer reaches of curve are less constrained -- grass fraction doesn't exert the same control on EVI as canopy
+## and the bulk of boston pixels are below 25% grass
 
 
-###########
 ## barren -- this is basically what Zhao was using to get urban area for his analysis
-
-### get fresh data set
-dat <- read.csv("processed/boston.30m.agg.csv")
-dat <- as.data.table(dat)
-dat <- dat[!is.na(aoi) & water<=0.01,] # 137 k pixels inside AOI and nearly water free
-dat <- dat[aoi>675,] # only take pixels that have >75% sub-pixel data == 134k pixels
-
+## barren is the residual of grass+canopy
 bin.range <- seq(from=dat[,min(barr, na.rm=T)], to=dat[,max(barr, na.rm=T)], length.out = 100)
 a <- dat
 a[,bin:=findInterval(barr, bin.range, all.inside=T)]
@@ -316,6 +384,9 @@ a[, ed10.frac:=0]
 a[, vegisa.frac:=0]
 a[can>0,ed10.frac:=ed10/can]
 a[can>0,vegisa.frac:=vegisa/can]
+a[can==0, ed10.frac:=NA]
+a[ed10.frac>1, ed10.frac:=NA]
+a[can==0, vegisa.frac:=NA]
 dog <- a[,.(m.evi=mean(evi, na.rm=T), 
             m.ndvi=mean(ndvi, na.rm=T),
             m.barr=mean(barr, na.rm=T),
@@ -338,31 +409,47 @@ Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
 dog <- dog[order(bin),]
 dog[,Vzi:=Vzi]
 
-par(mfrow=c(1,2))
+## plots
 ggplot(dog, aes(x=m.barr, y=m.evi))+
   geom_point(aes(size=count.frac))+
   labs(title="Barren")+
   geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
 ggplot(dog, aes(x=m.barr, y=m.evi-Vzi))+
-  geom_point(aes(size=count.frac, colour="blue"))+
+  geom_point(aes(size=count.frac))+
   labs(title="EVI enhancement")+
   geom_hline(yintercept=0, linetype="solid", color="black", size=0.7)
-# fully barren is 0.1EVI, fully not is EVI 0.6, steady curve in between -- looks a lot like ISA vs. EVI curve, discontinuities at either end (must be very different members in those groups, lots more pixels)
+## basically dominated by the two end members -- lots of pixels are either 100% barren or 100% vegetated
+## fast decrease in EVI up to ~12%, then linear up to about 75%, then fast loss again above ~75%
+## looks like the inverse of canopy, but the breaks are sharper on either end and the distribution isn't as lopsided in canopy
 
-ggplot(dog, aes(x=m.barr, y=m.can))+geom_point(aes(size=count.frac))+labs(title="Canopy")
-# nearly linear decline, maxes out at 0.65, very biomodal -- a lot of vegetated (12%), a lot of barren (16%), little in between.
+### barrenness predicted quite well by canopy cover
+ggplot(dog, aes(x=m.barr, y=m.can))+
+  geom_point(aes(size=count.frac))+
+  labs(title="Canopy")
+## 0% barren are ~70% canopy, then nearly linear decline to 100% barren -- i.e. canopy loss is mainly a 1:1 trade with barrenness
 # Basically every gain in barrenness is at a loss of canopy, especially above 0.25 barren -- so there really is a trade between canopy area and barrenness that does NOT drag EVI down in linear fashion
 summary(lm(dog$m.can~dog$m.barr)) ### slope -0.73 -- a unit increase in barrenness gives a 0.73 decrease in canopy
 
 ggplot(dog, aes(x=m.barr, y=m.grass))+geom_point(aes(size=count.frac))+labs(title="Grass")
 # sloppier, sigmoidal, maxes out at 0.35
+## grass makes up a component of non-barren that is always less than 30%, also lost fairly regularly with greater increase in barrenness
+
+## grass is mostly below 25%
+dat[grass<0.25, length(evi)]/dim(dat)[1] ## 84% of pixels below 25% grass
+dat[grass>0.75, length(evi)]/dim(dat)[1] ## 3% of pixels above 75% grass
+dat[can<0.25, length(evi)]/dim(dat)[1] ## 51% of pixels below 25% canopy
+dat[can>0.75, length(evi)]/dim(dat)[1] ## 14%% of pixels avove 75% canopy
 
 ggplot(dog, aes(x=m.barr, y=m.ed10frac))+geom_point(aes(size=count.frac))+labs(title="fraction canopy <10m edge, Barren")
-## basically by barren 0.5 all canopy is within 10m of edge
+### below 25% barren, canopy is above 50% and you start to see some >10m edge classes
+# 25-75% barren is linear canopy decline, everything is within 10m
+## basically by 25% barren all canopy is within 10m of edge
+### not sure I trust this still -- why have low fraction at high range of barren?
 
+### fraction of canopy that is within 10m of edge is very high
 ggplot(dog, aes(x=m.can, y=m.ed10frac))+geom_point(aes(size=count.frac))+labs(title="fraction canopy <10m edge, Canopy")
 ### same idea: only when canopy cover is >0.4 do you get interior canopies
-### is there an EVI change with this?
+### another thing: Even 100% canopy is still 50% edge (???)
 
 ggplot(dog, aes(x=m.ed10, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="area canopy <10m edge")
 ggplot(dog, aes(x=m.ed10frac, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="fraction edge canopy vs EVI")
@@ -376,6 +463,25 @@ ggplot(dog, aes(x=m.barr, y=m.evi, colour=m.ed10frac))+
   scale_color_continuous(low="darkgreen", high="salmon", limits=c(0.45, 1))
 
 plot(dog$m.evi, dog$m.ndvi)
+
+
+
+
+
+## isa
+bin.range <- seq(from=dat[,min(isa, na.rm=T)], to=dat[,max(isa, na.rm=T)], length.out = 100)
+a <- dat
+a[,bin:=findInterval(isa, bin.range, all.inside=T)]
+dog <- a[,.(m.evi=mean(evi, na.rm=T), 
+            m.ndvi=mean(ndvi, na.rm=T),
+            m.isa=mean(isa, na.rm=T),
+            count=.N), by=bin]
+dog[,count.frac:=count/sum(count)]
+ggplot(dog, aes(x=m.isa, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="Canopy")
+# classic decline, falls steeply above first step at 0, bellies out at higher ISA, crashes again at end (looks like full AOI)
+
+
+
 
 
 ## ed10
