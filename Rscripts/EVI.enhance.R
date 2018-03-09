@@ -284,6 +284,30 @@ dat <- dat[!is.na(aoi) & water<=0.01,] # 137 k pixels inside AOI and nearly wate
 dat <- dat[aoi>675,] # only take pixels that have >75% sub-pixel data == 134k pixels
 # hist(dat[,evi])
 # hist(dat[,ndvi])
+
+### some data hygiene processes
+par(mfrow=c(1,1))
+
+## do all canopy edge fractions match to total canopy fraction?
+frog <- dat[,(ed10+buff.20only+buff.30only+buff.Intonly)-can] 
+hist(frog); range(frog, na.rm=T)
+frog.n <- rep(0, length(frog))
+frog.n[frog>0.005] <- 1
+sum(frog.n) #only 73 pixels differ on the %cover canopy vs. canopy edge classes
+
+
+## do we get sensible figures for vegisa?
+dat[can>0, range(vegisa)] # 0 to entirely vegisa (this is not likely)
+hist(dat[can>0, vegisa]) # a long tail of >0.6 vegisa wtf
+duck <- dat[vegisa>can,]
+View(duck) ## there 24k of these
+hist(duck[,can-vegisa])
+dat[,vegisa.fucked:=0]
+dat[vegisa>can, vegisa.fucked:=1]
+r.duck <- raster("processed/boston/bos.aoi30m.tif")
+r.duck <- setValues(r.duck, values = dat[,vegisa.fucked])
+r.duck <- writeRaster(r.duck, "processed/boston/vegisa.fucked.tif", format="GTiff", overwrite=T)
+
 # 
 # ### look at values binned by evi range
 # bin.range <- seq(from=dat[,min(evi, na.rm=T)], to=dat[,max(evi, na.rm=T)], length.out = 100)

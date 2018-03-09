@@ -198,6 +198,30 @@ library(data.table)
 # nonimpbarr.only <- raster("processed/boston/bos.nonimpbarr.tif")
 # vegisa.only <- raster("processed/boston/bos.vegisa.tif")
 
+### new approach to finding veg-over-isa and nonimpervious barren
+bos.can <- raster("processed/boston/bos.can.tif")
+bos.isa <- raster("processed/boston/bos.isa.tif")
+bos.barr <- raster("processed/boston/bos.barr.tif")
+vegisa.get <- function(x, y, filename.vegisa) { # x can, y is isa, z is barren
+  out1 <- raster(x)
+  bs <- blockSize(out1)
+  out1 <- writeStart(out1, filename.vegisa, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    c <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## canopy
+    i <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## isa
+    vi <- rep(0, length(c))
+    vi[c==1 & i==1] <- 1 ### wherever there is canopy and isa, vegisa is 1
+    out1 <- writeValues(out1, vi, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out1 <- writeStop(out1)
+  return(out1)
+}
+s <- vegisa.get(bos.can, bos.isa, filename.vegisa="processed/boston/bos.vegisa.tif")
+
+
+
+
 
 # ### make map of individual buffer rings
 # bos.stack <- stack("processed/boston/bos.stack.1m.tif")
