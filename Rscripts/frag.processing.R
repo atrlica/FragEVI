@@ -105,15 +105,15 @@ library(data.table)
 # writeRaster(bos.isa, filename="processed/bos_isa_1m.tif", format="GTiff", overwrite=T)
 # # python.load("Rscripts/bosISA_resamp.py") ### test this
 # bos.isa <- raster("processed/isa_cangrid.tif")
-# bos.isa <- crop(bos.isa, bos.can)
+
 # 
 # bos.stack <- stack(bos.can, bos.ndvi, bos.cov, bos.isa, ed10, ed20, ed30)
 # writeRaster(bos.stack, "processed/boston/bos.stack.1m.tif", format="GTiff", overwrite=T)
 
 
 ##### work to get 1m boston data aggregated to 30m EVI grid
-# bos.stack <- stack("processed/boston/bos.stack.1m.tif")
-# names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
+bos.stack <- stack("processed/boston/bos.stack.1m.tif")
+names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
 
 ### get Boston limits, raterize to EVI 30m grid
 # towns <- readOGR(dsn = "F:/BosAlbedo/data/towns/town_AOI.shp", layer = "town_AOI" )
@@ -141,16 +141,22 @@ library(data.table)
 # bos.AOI.1mf <- mask(bos.AOI.1mf, bos.AOI.1m)
 # writeRaster(bos.AOI.1mf, filename="processed/boston/bos.aoi.tif", format="GTiff", overwrite=T)
 
-# ### get separate layers for each with cover=0/1 (vs. cover=0,1,2)
-# bos.stack <- stack("processed/boston/bos.stack.1m.tif")
-# names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
-# 
-# grass.find <- function(x){
-#   x[x!=1] <- 0
-#   return(x)
-# }
-# grass.only <- calc(bos.stack[["cov"]], fun=grass.find, filename="processed/boston/bos.grass.tif", format="GTiff", overwrite=T)
-# 
+### isa reprocess
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+bos.isa <- crop(bos.stack[["isa"]], bos.aoi)
+bos.isa <- mask(bos.isa, bos.aoi)
+writeRaster(bos.isa, filename="processed/boston/bos.isa.tif", format="GTiff", overwrite=T)
+
+### get separate layers for each with cover=0/1 (vs. cover=0,1,2)
+bos.stack <- stack("processed/boston/bos.stack.1m.tif")
+names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
+
+grass.find <- function(x){
+  x[x!=1] <- 0
+  return(x)
+}
+grass.only <- calc(bos.stack[["cov"]], fun=grass.find, filename="processed/boston/bos.grass.tif", format="GTiff", overwrite=T)
+
 # barr.find <- function(x){
 #   x[x==0] <- 10
 #   x[x!=10] <- 0
@@ -170,6 +176,19 @@ library(data.table)
 # can.test <- overlay(bos.stack[["can"]], can.only, fun=function(x,y){return(x-y)})
 # plot(can.test) # yes they are identical
 
+### grass needs correction due to artifacts
+### lower res on NDVI data means that some spillover is happening into probable ISA next to canopy edges
+### i.e. grass is showing up in v. small isolated patches also classed as ISA
+### reclass grass==1 & isa==1 as grass==0
+bos.grass <- raster("processed/boston/bos.grass.tif")
+bos.isa <- raster("processed/boston/bos.isa.tif")
+c <- brick(bos.grass, bos.isa)
+grass.fix <- function(x,y){
+  x[y==1] <- 0
+  return(x)
+}
+grass.test <- overlay(c, fun=grass.fix, filename="processed/boston/bos.grass.tif", format="GTiff", overwrite=T)
+### this raster looks better, but misalignment in some neighborhoods between the cov and isa layers means a fair amount of back yards are getting cut
 ## identify non-impervious fraction of barren ## Feb 24 this is not quite working right
 # nonimp.only <- overlay(barr.only, bos.stack[["isa"]], fun=function(x,y){return(x-y)}, filename="processed/boston/bos.nonimp_only.tif", overwrite=T, format="GTiff")
 # nonimp.only <- raster("processed/boston/bos.nonimp.tif")
@@ -202,26 +221,25 @@ library(data.table)
 bos.can <- raster("processed/boston/bos.can.tif")
 bos.isa <- raster("processed/boston/bos.isa.tif")
 bos.barr <- raster("processed/boston/bos.barr.tif")
-vegisa.get <- function(x, y, filename.vegisa) { # x can, y is isa, z is barren
-  out1 <- raster(x)
-  bs <- blockSize(out1)
-  out1 <- writeStart(out1, filename.vegisa, overwrite=TRUE, format="GTiff")
-  for (i in 1:bs$n) {
-    c <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## canopy
-    i <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## isa
-    vi <- rep(0, length(c))
-    vi[c==1 & i==1] <- 1 ### wherever there is canopy and isa, vegisa is 1
-    out1 <- writeValues(out1, vi, bs$row[i])
-    print(paste("finished block", i, "of", bs$n))
-  }
-  out1 <- writeStop(out1)
-  return(out1)
+
+a <- brick(bos.can, bos.isa)
+vegisa.calc <- function(x, y){
+  x[x==1 & y==1] <- 2 ## mark where there is isa & canopy
+  x[y==0 & x==1] <- 0 ## erase where there is canopy but no isa
+  x[x==2] <- 1 ## give vegisa marker value of 1
+  return(x)
 }
-s <- vegisa.get(bos.can, bos.isa, filename.vegisa="processed/boston/bos.vegisa.tif")
+vegisa <- overlay(a, fun=vegisa.calc, filename="processed/boston/bos.vegisa.tif", format="GTiff", overwrite=T)
 
-
-
-
+b <- brick(bos.isa, bos.barr)
+nib.calc <- function(x,y){
+  y[x==0 & y==1] <- 2 ## mark where it's barren but not paved
+  y[x==1] <- 0 ## erase any paved area
+  y[y==2] <- 1 ## give nonimpbarr marker value of 1
+  return(y)
+}
+nonimpbarr <- overlay(b, fun=nib.calc, filename="processed/boston/bos.nonimpbarr.tif", format="GTiff", overwrite=T)
+### both of these, like grass, vulnerable to getting screwed up by misregistration between ISA and barren layers
 
 # ### make map of individual buffer rings
 # bos.stack <- stack("processed/boston/bos.stack.1m.tif")
