@@ -557,9 +557,8 @@ fun <- function(x){
 isa.na <- calc(isa, fun)
 isa.na.agg <- aggregate(isa.na, fact=250, fun=mean, na.rm=T) # get mean ISA per 30 m footprint
 writeRaster(isa.na.agg, filename="processed/isa.250m.tif", format="GTiff", overwrite=T)
-isa.na.agg <- raster("processed/isa.30m.tif")
-plot(isa.na.agg)
 
+r <- raster("processed/isa.250m.tif")
 # ### align isa and evi grids, crop by AOI
 # ### call python script for resampling 30m ISA to EVI grid
 # pyth.path = './Rscripts/AOIISA_resamp.py'
