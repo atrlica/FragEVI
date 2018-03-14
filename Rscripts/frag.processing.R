@@ -146,7 +146,7 @@ names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
 pyth.path = './Rscripts/bosISA_resamp2.py'
 output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
 print(output)
-### this is not working for reasons that are inexplicable
+### this is not working for reasons that are inexplicable March 10-2018
 ## fuk it work with the fucked up isa
 # bos.stack <- stack("processed/boston/bos.stack.1m.tif")
 # names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
@@ -475,7 +475,6 @@ plot(towns[towns@data$TOWN=="PETERSHAM",])
 
 
 
-######
 ####
 ### whole-AOI data aggregated to 30 m Landsat grid -- only have ISA AOI LULC and EVI as of Feb 22 2018
 ### read in AOI for crs description
@@ -509,7 +508,7 @@ plot(towns[towns@data$TOWN=="PETERSHAM",])
 # output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
 
 isa.r <- raster("processed/isa30m_evigrd.tif")
-evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif") ## this is the July 2010-2012 AOI EVI composite
+# evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif") ## this is the July 2010-2012 AOI EVI composite
 # AOI <- readOGR(dsn="E:/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/AOI_simple_NAD83UTM19N.shp", layer="AOI_simple_NAD83UTM19N")
 # plot(isa.na.agg); plot(AOI, add=T)
 # plot(evi.r); plot(AOI, add=T)
@@ -517,9 +516,9 @@ evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif") ## this is the
 # writeRaster(AOI.r, filename="processed/AOI.r.tif", format="GTiff", overwrite=T)
 AOI.r <- raster("processed/AOI.r.tif")
 
-# ### prep LULC --> EVI grid
-# pyth.path = './Rscripts/LULC_EVIgrid.py'
-# output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
+### prep LULC --> EVI grid
+pyth.path = './Rscripts/LULC_EVIgrid.py'
+output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
 LULC.r <- raster("processed/LULC30m.tif")
 
 LULC.r <- extend(LULC.r, isa.r)
@@ -532,64 +531,149 @@ writeRaster(evi.stack, filename="processed/EVI30m.stack.tif", format="GTiff", ov
 
 
 
+
+
 ### aggregate AOI-wide data to 250m MODIS grid
-### similar process as for aggregating to Landsat 30m 
+### similar process as for aggregating to Landsat 30m, only more differenter too.
 
 ## read in AOI for crs description
-AOI <- readOGR(dsn="data/AOI/AOI_simple_NAD83UTM19N/", layer="AOI_simple_NAD83UTM19N")
+AOI <- readOGR(dsn="data/AOI/AOI_simple_NAD83UTM19N", layer="AOI_simple_NAD83UTM19N")
 master.crs <- crs(AOI)
 
-## load EVI composite for grid and process for ISA grid
-evi.r <- raster("processed/EVI/MOD_2010-2012_EVI.tif") ## this is the July 2010-2012 MODIS composite for the general AOI tile
-evi.r <- projectRaster(evi.r, crs=master.crs, res=250, method="bilinear")
-writeRaster(evi.r, filename="processed/EVI/MOD_2010-2012_EVI_NAD83.tif", format="GTiff", overwrite=T)
-evi.r <- raster("processed/EVI/MOD_2010-2012_EVI_NAD83.tif")
+## load EVI composite for grid and process to produce master grid
+# evi.r <- raster("processed/EVI/MOD_2010-2012_EVI.tif") ## this is the July 2010-2012 MODIS composite for the general AOI tile
+# evi.r <- projectRaster(evi.r, crs=master.crs, res=250, method="bilinear")
+# writeRaster(evi.r, filename="processed/EVI/MOD_2010-2012_EVI_NAD83.tif", format="GTiff", overwrite=T)
+evi.r <- raster("processed/EVI/MOD_2010-2012_EVI_NAD83.tif") # note is not cropped
+# AOI.r <- rasterize(AOI, evi.r)
+# AOI.r <- crop(AOI.r, AOI, filename="processed/AOI.r.250m.tif", format="GTiff", overwrite=T) ## EVI 250m grid is master grid now
+AOI.r <- raster("processed/AOI.r.250m.tif")
 
-### aggregate raw 1m ISA to 250m
-### don't fart around with the ISA grid until it's stacked with a 30 m EVI and cropped -- too hard to monkey with, leave in its native state until the end
-### raster-native approach required, file too large for data.table -- takes a long time
-### correct the 16 values to NA to get a proper aggregated mean value per cell (0 = not impervious, 1 = impervious)
+### aggregate raw 1m ISA to 250m (NOT to EVI grid yet!)
+### raster-native approach required, file too large for data.table -- takes a long time, better to run on cluster to avoid moving the 1m file around
+### 1) correct the 16 values to NA to get a proper aggregated mean value per cell (0 = not impervious, 1 = impervious)
 # isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
 # fun <- function(x){
 #   x[x==16] <- NA
 #   return(x)
 # }
 # isa.na <- calc(isa, fun)
-# isa.na.agg <- aggregate(isa.na, fact=250, fun=mean, na.rm=T) # get mean ISA per 30 m footprint
+# isa.na.agg <- aggregate(isa.na, fact=250, fun=mean, na.rm=T) # get mean ISA per 250 m footprint
 # writeRaster(isa.na.agg, filename="processed/isa.250m.tif", format="GTiff", overwrite=T)
+# isa.250m <- raster("processed/isa.250m.tif")
+# isa.250m <- projectRaster(from=isa.250m, to=evi.r, filename="processed/isa.250m.tif", format="GTiff", overwrite=T)
+isa.250m <- raster("processed/isa.250m.tif")
 
 
-### FOr this part, resample botht he LULC30m and ISA 250m to the 250m evi grid. 
-### can use the LULC 30m like Zhao did to describe fractional cover per cell.
-# ### call python script for resampling 30m ISA to EVI grid
-# pyth.path = './Rscripts/AOIISA_resamp.py'
+### prep LULC data into collpased categories and get fractional area for each 250m gridcell sim. to 1m-->30m
+lu.classnames <- c("forest", "dev", "hd.res", "med.res", "low.res", "lowveg", "other", "water")
+lu.forest <- c(3,37) # Forest, FWet
+lu.dev <- c(15,16,7,8,18,39,24,31,19,9,29) # Comm, Ind, PartRec, SpectRec, Transp., Junk, Util, PubInst, Waste, WBRec, Marina
+lu.hdres <- c(11,10) # HDResid., MFResid.,
+lu.medres <- c(12) # MDResid.
+lu.lowres <- c(13, 38) #LDResid., VLDResid.
+lu.lowveg <- c(4,1,2,6,5,26,14,25,34,23) # NFwet, PubInst, Crop, Past, Open, Mining, Golf, SWwet, SWBeach, Cem, CBog
+lu.other <- c(17,35,40,36) #Tran, Orch, Brush, Nurs
+lu.water <- c(20)
+lulc.tot <- list(lu.forest, lu.dev, lu.hdres, lu.medres, lu.lowres, lu.lowveg, lu.other, lu.water)
+
+## flexible blockwise function for flagging different class groups of LULC
+lulc.flag <- function(x, lu.spot, filename) { # x is 30m lulc, lu.spot is list of LULC targeted
+  out <- raster(x)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## edge class
+    o <- rep(0, length(v))
+    o[v%in%lu.spot] <- 1
+    out <- writeValues(out, o, bs$row[i])
+    print(paste("finished block", i, "of", bs$n, "in", lu.classnames[l]))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+
+### loop through LULC class groups and create separately flagged 30m LULC rasters
+aoi <- raster("processed/AOI.r.tif")
+aoi <- crop(aoi, AOI, filename="processed/AOI.r.30m.tif", format="GTiff", overwrite=T)
+LULC.30m <- raster("processed/LULC30m.tif")
+for(l in 1:length(lulc.tot)){
+  tmp <- do.call(lulc.flag,
+          args = list(LULC.30m,
+                      lulc.tot[[l]],
+                      paste("processed/LULC.30m.", lu.classnames[l], "_only.tif", sep="")))
+}
+
+test <- raster("processed/LULC.30m.forest_only.tif")
+plot(test); plot(AOI, add=T)
+
+### can use the LULC 30m like Zhao did to describe fractional cover per MODIS cell.
+### because 30m can't be easily aggregated to 250m, first aggregate here to 240m (x8), then resample/snap to EVI grid in Arc
+aoi.30m <- raster("processed/AOI.r.30m.tif")
+aoi.250m <- raster("processed/AOI.r.250m.tif")
+evi.r <- raster("processed/EVI/MOD_2010-2012_EVI_NAD83.tif")
+gimme <- list.files("processed/")
+gimme <- gimme[grep(gimme, pattern="LULC.30m.")]
+gimme <- gimme[!grepl(gimme, pattern=".ovr")]
+gimme <- gimme[!grepl(gimme, pattern=".aux")]
+fields <- sub("LULC.30m. *(.*?) *_only.tif.*", "\\1", gimme)
+for(g in 1:length(gimme)){
+  tmp <- raster(paste("processed/", gimme[g], sep=""))
+  tmp <- extend(tmp, aoi.30m)
+  tmp <- mask(tmp, aoi.30m)
+  tmp <- crop(tmp, aoi.30m)
+  tmp <- aggregate(tmp, fact=8, fun=mean, expand=T) ## aggregate to roughly the MODIS grid size by fraction of each LULC class
+  resample(tmp, evi.r, method="bilinear",   ### get the mean fractional area resampled to the slightly bigger grid
+                filename=paste("processed/LULC.250m.", fields[g], ".frac.tif", sep=""),
+                format="GTiff",
+                overwrite=T)
+  print(paste("finished aggregating", fields[g]))
+}
+# test <- raster("processed/LULC.250m.dev.frac.tif")
+# crs(test)
+# plot(test)
+
+## this python script doesn't try to resample the LULC 240m post-aggregate stuff to the MODIS grid because of ongoing errors in Arc, no idea how to fix
+## resampling to MODIS grid is done above using resample(). Don't know why I didn't do this before.
+### reproject/resample the 250m ISA to the MODIS EVI grid
+# pyth.path = './Rscripts/AOI250m_resamp.py'
 # output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
 
-
-
-isa.r <- raster("processed/isa250m_evigrd.tif")
+isa.r <- raster("processed/isa.250m.res.tif")
 evi.r <- raster("processed/EVI/MOD_2010-2012_EVI_NAD83.tif") ## this is the July 2010-2012 AOI EVI composite
-AOI.r <- rasterize(AOI, evi.r)
-writeRaster(AOI.r, filename="processed/AOI.r.250m.tif", format="GTiff", overwrite=T)
 AOI.r <- raster("processed/AOI.r.250m.tif")
+LULC.l <- list()
+## load up the LULC fractions
+for(f in 1:length(fields)){
+  r <- raster(paste("processed/LULC.250m.", fields[f], ".frac.tif", sep=""))
+  LULC.l[[f]] <- r
+}
+LULC.r <- stack(LULC.l)
+LULC.r <- crop(LULC.r, AOI.r)
+isa.r <- crop(isa.r, AOI.r)
+isa.r <- mask(isa.r, AOI.r)
+evi.r <- crop(evi.r, AOI.r)
+evi.r <- mask(evi.r, AOI.r)
+AOI.250m.stack <- stack(evi.r, isa.r, LULC.r, AOI.r)
+names(AOI.250m.stack) <- c("EVI.250m", "ISA.250m", "dev.frac.250m", "forest.frac.250m", 
+                          "hdres.frac.250m", "lowres.frac.250m", "lowveg.frac.250m", "medres.frac.250m",
+                          "other.frac.250m", "water.frac.250m", "aoi.250m")
+writeRaster(AOI.250m.stack, filename="processed/AOI.250m.stack.tif", format="GTiff", overwrite=T)
+AOI.250m.dat <- as.data.table(as.data.frame(AOI.250m.stack))
+write.csv(AOI.250m.dat, "processed/AOI.250m.dat.csv")
 
-# ### prep LULC --> EVI grid
-# pyth.path = './Rscripts/LULC_EVIgrid.py'
-# output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
-LULC.r <- raster("processed/LULC30m.tif")
-
-LULC.r <- extend(LULC.r, isa.r)
-evi.r <- crop(evi.r, isa.r)
-AOI.r <- crop(AOI.r, isa.r)
-evi.r <- mask(evi.r, mask = AOI.r)
-
-evi.stack <- stack(evi.r, isa.r, LULC.r, AOI.r)
-writeRaster(evi.stack, filename="processed/EVI30m.stack.tif", format="GTiff", overwrite=T)
-
-
-
-
-
+AOI.1km.stack <- aggregate(AOI.250m.stack, fact=4, fun=mean, na.rm=T, exapnd=T, filename="processed/AOI.1km.stack.tif")
+AOI.1km.stack <- stack("processed/AOI.1km.stack.tif")
+AOI.r <- rasterize(AOI, AOI.1km.stack[[1]])
+# writeRaster(AOI.r, filename="processed/AOI.1km.r.tif", format="GTiff", overwrite=T)
+AOI.r <- raster("processed/AOI.1km.r.tif")
+AOI.1km.stack[[11]] <- AOI.r
+AOI.1km.dat <- as.data.frame(AOI.1km.stack)
+write.csv(AOI.1km.dat, "processed/AOI.1km.dat.csv")
+AOI.1km.stack <- stack("processed/AOI.1km.stack.tif")
+names(AOI.1km.dat)<- c("EVI.1km", "ISA.1km", "dev.frac.1km", "forest.frac.1km", 
+                       "hdres.frac.1km", "lowres.frac.1km", "lowveg.frac.1km", "medres.frac.1km",
+                       "other.frac.1km", "water.frac.1km", "aoi.1km")
 
 # ### Test Code: Process NAIP 1m CIR data to NDVI
 # ### NOTE SO MUCH: BAND ORDER IN NAIP CIR DATA IS RED GREEN BLUE NIR (1,2,3,4)
