@@ -473,6 +473,8 @@ towns <- spTransform(towns, crs(evi.r))
 plot(towns[towns@data$TOWN=="PETERSHAM",])
 
 
+
+
 ######
 ####
 ### whole-AOI data aggregated to 30 m Landsat grid -- only have ISA AOI LULC and EVI as of Feb 22 2018
@@ -480,7 +482,7 @@ plot(towns[towns@data$TOWN=="PETERSHAM",])
 # AOI <- readOGR(dsn="/projectnb/buultra/atrlica/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/", layer="AOI_simple_NAD83UTM19N")
 # master.crs <- crs(AOI)
 
-## load EVI composite for grid and process for ISA grid
+# load EVI composite for grid and process for ISA grid
 # evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI.tif") ## this is the July 2010-2012 AOI EVI composite
 # evi.r <- projectRaster(from=evi.r, crs=master.crs, res = 30, method = "ngb")
 # writeRaster(evi.r, filename="processed/EVI/030005-6_2010-2012_EVI_NAD83.tif", format="GTiff", overwrite=T)
@@ -514,6 +516,63 @@ evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif") ## this is the
 # AOI.r <- rasterize(AOI, evi.r)
 # writeRaster(AOI.r, filename="processed/AOI.r.tif", format="GTiff", overwrite=T)
 AOI.r <- raster("processed/AOI.r.tif")
+
+# ### prep LULC --> EVI grid
+# pyth.path = './Rscripts/LULC_EVIgrid.py'
+# output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
+LULC.r <- raster("processed/LULC30m.tif")
+
+LULC.r <- extend(LULC.r, isa.r)
+evi.r <- crop(evi.r, isa.r)
+AOI.r <- crop(AOI.r, isa.r)
+evi.r <- mask(evi.r, mask = AOI.r)
+
+evi.stack <- stack(evi.r, isa.r, LULC.r, AOI.r)
+writeRaster(evi.stack, filename="processed/EVI30m.stack.tif", format="GTiff", overwrite=T)
+
+
+
+### aggregate AOI-wide data to 250m MODIS grid
+### similar process as for aggregating to Landsat 30m 
+
+## read in AOI for crs description
+AOI <- readOGR(dsn="data/AOI/AOI_simple_NAD83UTM19N/", layer="AOI_simple_NAD83UTM19N")
+master.crs <- crs(AOI)
+
+## load EVI composite for grid and process for ISA grid
+evi.r <- raster("processed/EVI/MOD_2010-2012_EVI.tif") ## this is the July 2010-2012 MODIS composite for the general AOI tile
+evi.r <- projectRaster(evi.r, crs=master.crs, res=250, method="bilinea")
+writeRaster(evi.r, filename="processed/EVI/MOD_2010-2012_EVI_NAD83.tif", format="GTiff", overwrite=T)
+evi.r <- raster("processed/EVI/MOD_2010-2012_EVI_NAD83.tif")
+
+### aggregate raw 1m ISA to 30m
+### don't fart around with the ISA grid until it's stacked with a 30 m EVI and cropped -- too hard to monkey with, leave in its native state until the end
+### raster-native approach required, file too large for data.table -- takes a long time
+### correct the 16 values to NA to get a proper aggregated mean value per cell (0 = not impervious, 1 = impervious)
+isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
+fun <- function(x){
+  x[x==16] <- NA
+  return(x)
+}
+isa.na <- calc(isa, fun)
+isa.na.agg <- aggregate(isa.na, fact=250, fun=mean, na.rm=T) # get mean ISA per 30 m footprint
+writeRaster(isa.na.agg, filename="processed/isa.250m.tif", format="GTiff", overwrite=T)
+isa.na.agg <- raster("processed/isa.30m.tif")
+plot(isa.na.agg)
+
+# ### align isa and evi grids, crop by AOI
+# ### call python script for resampling 30m ISA to EVI grid
+# pyth.path = './Rscripts/AOIISA_resamp.py'
+# output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
+
+isa.r <- raster("processed/isa30m_evigrd.tif")
+evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif") ## this is the July 2010-2012 AOI EVI composite
+# AOI <- readOGR(dsn="E:/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/AOI_simple_NAD83UTM19N.shp", layer="AOI_simple_NAD83UTM19N")
+# plot(isa.na.agg); plot(AOI, add=T)
+# plot(evi.r); plot(AOI, add=T)
+AOI.r <- rasterize(AOI, evi.r)
+writeRaster(AOI.r, filename="processed/AOI.r.250m.tif", format="GTiff", overwrite=T)
+AOI.r <- raster("processed/AOI.r.250.tif")
 
 # ### prep LULC --> EVI grid
 # pyth.path = './Rscripts/LULC_EVIgrid.py'
