@@ -541,11 +541,11 @@ master.crs <- crs(AOI)
 
 ## load EVI composite for grid and process for ISA grid
 evi.r <- raster("processed/EVI/MOD_2010-2012_EVI.tif") ## this is the July 2010-2012 MODIS composite for the general AOI tile
-evi.r <- projectRaster(evi.r, crs=master.crs, res=250, method="bilinea")
+evi.r <- projectRaster(evi.r, crs=master.crs, res=250, method="bilinear")
 writeRaster(evi.r, filename="processed/EVI/MOD_2010-2012_EVI_NAD83.tif", format="GTiff", overwrite=T)
 evi.r <- raster("processed/EVI/MOD_2010-2012_EVI_NAD83.tif")
 
-### aggregate raw 1m ISA to 30m
+### aggregate raw 1m ISA to 250m
 ### don't fart around with the ISA grid until it's stacked with a 30 m EVI and cropped -- too hard to monkey with, leave in its native state until the end
 ### raster-native approach required, file too large for data.table -- takes a long time
 ### correct the 16 values to NA to get a proper aggregated mean value per cell (0 = not impervious, 1 = impervious)
@@ -565,14 +565,11 @@ plot(isa.na.agg)
 # pyth.path = './Rscripts/AOIISA_resamp.py'
 # output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
 
-isa.r <- raster("processed/isa30m_evigrd.tif")
-evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif") ## this is the July 2010-2012 AOI EVI composite
-# AOI <- readOGR(dsn="E:/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/AOI_simple_NAD83UTM19N.shp", layer="AOI_simple_NAD83UTM19N")
-# plot(isa.na.agg); plot(AOI, add=T)
-# plot(evi.r); plot(AOI, add=T)
+isa.r <- raster("processed/isa250m_evigrd.tif")
+evi.r <- raster("processed/EVI/MOD_2010-2012_EVI_NAD83.tif") ## this is the July 2010-2012 AOI EVI composite
 AOI.r <- rasterize(AOI, evi.r)
 writeRaster(AOI.r, filename="processed/AOI.r.250m.tif", format="GTiff", overwrite=T)
-AOI.r <- raster("processed/AOI.r.250.tif")
+AOI.r <- raster("processed/AOI.r.250m.tif")
 
 # ### prep LULC --> EVI grid
 # pyth.path = './Rscripts/LULC_EVIgrid.py'
