@@ -549,20 +549,23 @@ evi.r <- raster("processed/EVI/MOD_2010-2012_EVI_NAD83.tif")
 ### don't fart around with the ISA grid until it's stacked with a 30 m EVI and cropped -- too hard to monkey with, leave in its native state until the end
 ### raster-native approach required, file too large for data.table -- takes a long time
 ### correct the 16 values to NA to get a proper aggregated mean value per cell (0 = not impervious, 1 = impervious)
-isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
-fun <- function(x){
-  x[x==16] <- NA
-  return(x)
-}
-isa.na <- calc(isa, fun)
-isa.na.agg <- aggregate(isa.na, fact=250, fun=mean, na.rm=T) # get mean ISA per 30 m footprint
-writeRaster(isa.na.agg, filename="processed/isa.250m.tif", format="GTiff", overwrite=T)
+# isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
+# fun <- function(x){
+#   x[x==16] <- NA
+#   return(x)
+# }
+# isa.na <- calc(isa, fun)
+# isa.na.agg <- aggregate(isa.na, fact=250, fun=mean, na.rm=T) # get mean ISA per 30 m footprint
+# writeRaster(isa.na.agg, filename="processed/isa.250m.tif", format="GTiff", overwrite=T)
 
-r <- raster("processed/isa.250m.tif")
-# ### align isa and evi grids, crop by AOI
+
+### FOr this part, resample botht he LULC30m and ISA 250m to the 250m evi grid. 
+### can use the LULC 30m like Zhao did to describe fractional cover per cell.
 # ### call python script for resampling 30m ISA to EVI grid
 # pyth.path = './Rscripts/AOIISA_resamp.py'
 # output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
+
+
 
 isa.r <- raster("processed/isa250m_evigrd.tif")
 evi.r <- raster("processed/EVI/MOD_2010-2012_EVI_NAD83.tif") ## this is the July 2010-2012 AOI EVI composite
