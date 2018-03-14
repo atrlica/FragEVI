@@ -669,12 +669,12 @@ AOI.r <- rasterize(AOI, AOI.1km.stack[[1]])
 AOI.r <- raster("processed/AOI.1km.r.tif")
 AOI.1km.stack[[11]] <- AOI.r
 AOI.1km.dat <- as.data.frame(AOI.1km.stack)
+names(AOI.1km.dat)<- c("EVI.1km", "ISA.1km", "dev.frac.1km", "forest.frac.1km", 
+                         "hdres.frac.1km", "lowres.frac.1km", "lowveg.frac.1km", "medres.frac.1km",
+                         "other.frac.1km", "water.frac.1km", "aoi.1km")
 write.csv(AOI.1km.dat, "processed/AOI.1km.dat.csv")
 AOI.1km.stack <- stack("processed/AOI.1km.stack.tif")
-names(AOI.1km.dat)<- c("EVI.1km", "ISA.1km", "dev.frac.1km", "forest.frac.1km", 
-                       "hdres.frac.1km", "lowres.frac.1km", "lowveg.frac.1km", "medres.frac.1km",
-                       "other.frac.1km", "water.frac.1km", "aoi.1km")
-
+plot(AOI.1km.stack)
 # ### Test Code: Process NAIP 1m CIR data to NDVI
 # ### NOTE SO MUCH: BAND ORDER IN NAIP CIR DATA IS RED GREEN BLUE NIR (1,2,3,4)
 # naip.test <- stack("Z:/Ultra2/Users/atrlica/FragEVI/NAIP/EssexCIR/m_4207123_ne_19_h_20160706/m_4207123_ne_19_h_20160706.tif")
