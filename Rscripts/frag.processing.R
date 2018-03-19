@@ -88,13 +88,17 @@ library(data.table)
 # u <- edges.bl(ed3, bos.cov, filename="processed/edge30m.tif")
 
 ### package up all the 1m data for Boston and write to disk
-# ed10 <- raster("processed/edge10m.tif")
-# ed20 <- raster("processed/edge20m.tif")
-# ed30 <- raster("processed/edge30m.tif")
-# bos.cov <- raster("processed/bos.cov.tif")
-# bos.can <- raster("data/dataverse_files/bostoncanopy_1m.tif")
-# bos.ndvi <- raster("data/NDVI/NDVI_1m_res_cangrid.tif")
-# bos.ndvi <- crop(bos.ndvi, bos.can)
+ed10 <- raster("processed/boston/bos.ed10.tif")
+ed20 <- raster("processed/boston/bos.ed20.tif")
+ed30 <- raster("processed/boston/bos.ed30.tif")
+bos.cov <- raster("processed/boston/bos.cov.tif")
+bos.can <- raster("data/dataverse_files/bostoncanopy_1m.tif")
+bos.ndvi <- raster("data/NDVI/NDVI_1m_res_cangrid.tif")
+bos.ndvi <- crop(bos.ndvi, bos.can)
+
+ed10 <- extend(ed10, bos.cov)
+ed20 <- extend(ed20, bos.cov)
+ed30 <- extend(ed30, bos.cov)
 
 # ### add in 1m ISA (go get it, crop it, then reproject)
 # isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
@@ -106,9 +110,15 @@ library(data.table)
 # # python.load("Rscripts/bosISA_resamp.py") ### test this
 # bos.isa <- raster("processed/isa_cangrid.tif")
 
-# 
-# bos.stack <- stack(bos.can, bos.ndvi, bos.cov, bos.isa, ed10, ed20, ed30)
-# writeRaster(bos.stack, "processed/boston/bos.stack.1m.tif", format="GTiff", overwrite=T)
+### 1m ISA was manually reregistered to the cov==barren layer because of poor feature overlap esp. in Allston.
+### some improvement was made in reregistration, but not perfect in W part of Boston
+### this layer lives as processed/boston/bos.isa.rereg.tif
+### this layer was manually resampled to 30m landsat EVI grid as bos.isa.rereg30m.tif
+bos.isa <- raster("processed/boston/bos.isa.rereg.tif")
+bos.isa <- extend(bos.isa, bos.cov)
+bos.isa <- setExtent(bos.isa, extent(bos.cov), keepres=T)
+bos.stack <- stack(bos.can, bos.ndvi, bos.cov, bos.isa, ed10, ed20, ed30)
+writeRaster(bos.stack, "processed/boston/bos.stack.1m.tif", format="GTiff", overwrite=T)
 
 
 ##### work to get 1m boston data aggregated to 30m EVI grid
@@ -141,22 +151,6 @@ names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
 # bos.AOI.1mf <- mask(bos.AOI.1mf, bos.AOI.1m)
 # writeRaster(bos.AOI.1mf, filename="processed/boston/bos.aoi.tif", format="GTiff", overwrite=T)
 
-### isa reprocess -- use reregistered version that fits the barren layer better
-## first get the ISA back onto the cover grid
-pyth.path = './Rscripts/bosISA_resamp2.py'
-output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
-print(output)
-### this is not working for reasons that are inexplicable March 10-2018
-## fuk it work with the fucked up isa
-# bos.stack <- stack("processed/boston/bos.stack.1m.tif")
-# names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
-# 
-# bos.aoi <- raster("processed/boston/bos.aoi.tif")
-# bos.isa <- bos.stack[["isa"]]
-# bos.isa <- crop(bos.stack, bos.aoi)
-# bos.isa <- mask(bos.isa, bos.aoi)
-# writeRaster(bos.isa, filename="processed/boston/bos.isa.tif")
-bos.isa <- raster("processed/boston/bos.isa.tif")
 
 ### get separate layers for each with cover=0/1 (vs. cover=0,1,2)
 bos.stack <- stack("processed/boston/bos.stack.1m.tif")
@@ -168,12 +162,12 @@ grass.find <- function(x){
 }
 grass.only <- calc(bos.stack[["cov"]], fun=grass.find, filename="processed/boston/bos.grass.tif", format="GTiff", overwrite=T)
 
-# barr.find <- function(x){
-#   x[x==0] <- 10
-#   x[x!=10] <- 0
-#   x[] <- x[]/10
-# }
-# barr.only <- calc(bos.stack[["cov"]], barr.find, filename="processed/boston/bos.barr.tif", format="GTiff", overwrite=T)
+barr.find <- function(x){
+  x[x==0] <- 10
+  x[x!=10] <- 0
+  x[] <- x[]/10
+}
+barr.only <- calc(bos.stack[["cov"]], barr.find, filename="processed/boston/bos.barr.tif", format="GTiff", overwrite=T)
 
 # can.find <- function(x){
 #   x[x==2] <- 10
@@ -187,21 +181,22 @@ grass.only <- calc(bos.stack[["cov"]], fun=grass.find, filename="processed/bosto
 # can.test <- overlay(bos.stack[["can"]], can.only, fun=function(x,y){return(x-y)})
 # plot(can.test) # yes they are identical
 
-### grass needs correction due to artifacts
+### The cover class layer needs some correction for artifacts
 ### lower res on NDVI data means that some spillover is happening into probable ISA next to canopy edges
 ### i.e. grass is showing up in v. small isolated patches also classed as ISA
+### also ISA and cover are not perfectly aligned, even in the reregistered data -- so need to work that out somehow
 ### reclass grass==1 & isa==1 as grass==0
 bos.grass <- raster("processed/boston/bos.grass.tif")
-bos.isa <- raster("processed/boston/bos.isa.tif")
+bos.isa <- bos.stack[["isa"]]
 c <- brick(bos.grass, bos.isa)
 grass.fix <- function(x,y){
   x[y==1] <- 0
   return(x)
 }
 bos.grass <- overlay(c, fun=grass.fix, filename="processed/boston/bos.grass.tif", format="GTiff", overwrite=T)
-### this raster looks better, but misalignment in some neighborhoods between the cov and isa layers means a fair amount of back yards are getting cut
 
-## identify non-impervious fraction of barren ## Feb 24 this is not quite working right
+
+## identify non-impervious fraction of barren 
 # nonimp.only <- overlay(barr.only, bos.stack[["isa"]], fun=function(x,y){return(x-y)}, filename="processed/boston/bos.nonimp_only.tif", overwrite=T, format="GTiff")
 # nonimp.only <- raster("processed/boston/bos.nonimp.tif")
 # nonimp.find <- function(x, filename.nonimpbarr, filename.vegisa) { # x is first-pass nonimp
@@ -230,8 +225,10 @@ bos.grass <- overlay(c, fun=grass.fix, filename="processed/boston/bos.grass.tif"
 # vegisa.only <- raster("processed/boston/bos.vegisa.tif")
 
 ### new approach to finding veg-over-isa and nonimpervious barren
-bos.can <- raster("processed/boston/bos.can.tif")
-bos.isa <- raster("processed/boston/bos.isa.tif")
+bos.stack <- stack("processed/boston/bos.stack.1m.tif")
+names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
+bos.can <- bos.stack[["can"]]
+bos.isa <- bos.stack[["isa"]] ## manually reregistered
 bos.barr <- raster("processed/boston/bos.barr.tif")
 
 a <- brick(bos.can, bos.isa)
@@ -252,6 +249,8 @@ nib.calc <- function(x,y){
 }
 nonimpbarr <- overlay(b, fun=nib.calc, filename="processed/boston/bos.nonimpbarr.tif", format="GTiff", overwrite=T)
 ### both of these, like grass, vulnerable to getting screwed up by misregistration between ISA and barren layers
+### March 17 used the manually reregistered 1m isa to recalculate, hopefully reduce some of these artifacts
+
 
 # ### make map of individual buffer rings
 # bos.stack <- stack("processed/boston/bos.stack.1m.tif")
@@ -366,7 +365,9 @@ names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
 
 ndvi.only <- bos.stack[["ndvi"]]
 can.only <- bos.stack[["can"]]
-isa.only <- raster("processed/boston/bos.isa.tif")
+isa.only <- raster("processed/boston/bos.isa.rereg.tif")
+isa.only <- crop(isa.only, bos.aoi)
+isa.only <- mask(isa.only, bos.aoi)
 # grass.only <- raster("processed/boston/bos.grass.tif")
 # grass.only <- crop(grass.only, bos.aoi)
 # grass.only <- mask(grass.only, bos.aoi, filename="processed/boston/bos.grass.tif", format="GTiff", overwrite=T)
@@ -622,7 +623,7 @@ for(g in 1:length(gimme)){
   tmp <- extend(tmp, aoi.30m)
   tmp <- mask(tmp, aoi.30m)
   tmp <- crop(tmp, aoi.30m)
-  tmp <- aggregate(tmp, fact=8, fun=mean, expand=T) ## aggregate to roughly the MODIS grid size by fraction of each LULC class
+  tmp <- aggregate(tmp, fact=8, fun=mean, expand=T, filename="processed/LULC.240m.test.tif", format="GTiff") ## aggregate to roughly the MODIS grid size by fraction of each LULC class
   resample(tmp, evi.r, method="bilinear",   ### get the mean fractional area resampled to the slightly bigger grid
                 filename=paste("processed/LULC.250m.", fields[g], ".frac.tif", sep=""),
                 format="GTiff",
@@ -675,6 +676,8 @@ names(AOI.1km.dat)<- c("EVI.1km", "ISA.1km", "dev.frac.1km", "forest.frac.1km",
 write.csv(AOI.1km.dat, "processed/AOI.1km.dat.csv")
 AOI.1km.stack <- stack("processed/AOI.1km.stack.tif")
 plot(AOI.1km.stack)
+
+
 # ### Test Code: Process NAIP 1m CIR data to NDVI
 # ### NOTE SO MUCH: BAND ORDER IN NAIP CIR DATA IS RED GREEN BLUE NIR (1,2,3,4)
 # naip.test <- stack("Z:/Ultra2/Users/atrlica/FragEVI/NAIP/EssexCIR/m_4207123_ne_19_h_20160706/m_4207123_ne_19_h_20160706.tif")
