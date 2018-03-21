@@ -1,4 +1,4 @@
-Sector <- rep(c("S01","S02","S03","S04","S05","S06","S07"),times=7)
+clasSector <- rep(c("S01","S02","S03","S04","S05","S06","S07"),times=7)
 Year <- rep(c("1950","1960","1970","1980","1990","2000","2010"),each=7)
 Value <- runif(49, 10, 100)
 df <- data.frame(Sector,Year,Value)
