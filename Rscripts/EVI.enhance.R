@@ -21,11 +21,11 @@ veg.n <- dat[isa<0.01  & lulc!=20, length(evi)]
 noveg <- dat[isa>=0.99 & lulc!=20, median(evi, na.rm=T)]
 noveg.err <- dat[isa>=0.99 & lulc!=20, sd(evi, na.rm=T)/sqrt(length(evi))]
 noveg.n <- dat[isa>=0.99 & lulc!=20, length(evi)]
-beta.range <- seq(from=0, to=1, by=0.01) 
+beta.range <- seq(from=0, to=.99, by=0.01) 
 Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
 
 ## bin the values by isa fraction
-dat[lulc!=20, bin:=findInterval(isa, beta.range, all.inside=T)]
+dat[lulc!=20, bin:=findInterval(isa, beta.range, all.inside=F)]
 evi.bin <- dat[lulc!=20, .(m.isa=median(isa, na.rm=T), 
                            m.evi=median(evi, na.rm=T),
                            bin.count=.N), by=bin]
@@ -51,7 +51,10 @@ evi.bin <- evi.bin[!is.na(m.isa),]
 ggplot(aes(x=m.isa, y=m.evi), data=evi.bin)+
   geom_point(aes(size=bin.frac), colour="forestgreen")+
   labs(title="EVI vs. ISA by bin", x="Frac. ISA", y="Median EVI")+
-  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
+  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)+
+  # scale_size(range=c(0.7,10),breaks=c(0.01, 0.02, 0.40),
+  #            labels=c(">1%","1-2%", ">40%"),
+  #            guide=guide_legend(title="Bin size"))+
 ggplot(aes(x=m.isa, y=m.evi-Vzi[1:100]), data=evi.bin)+
   geom_point(aes(size=bin.frac), colour="blue")+
   labs(title="EVI enhancement", x="Frac. ISA", y="EVI enhancement")+
@@ -922,7 +925,7 @@ ggplot(dog, aes(x=m.can, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="
 ######
 ###### MODIS 250m + 1 km analysis
 ### 250m analysis
-resolution <- 1000
+resolution <- 250
 if(resolution==250){dat <- read.csv("processed/AOI.250m.dat.csv")}
 if(resolution==1000){dat <- read.csv("processed/AOI.1km.dat.csv")}
 dat <- dat[,2:12]
@@ -930,7 +933,8 @@ names(dat) <-  c("evi", "isa", "dev", "forest", "hdres", "lowres", "lowveg", "me
 dat <- as.data.table(dat)
 dat <- dat[AOI==1,] 
 dim(dat)[1] ## number of pixels available (106k for 250m, 7k for 1 km)
-tot <- apply(dat[,3:10], 1, sum) ## most pixels are within +/- 5% of complete area with the LULC category fractions
+dat[,frac.tot:=apply(dat[,3:10], 1, sum)] ## most pixels are within +/- 5% of complete area with the LULC category fractions
+dat[frac.tot<0.95, length(frac.tot)] ## only 500 pixels are missing more than 5% area fraction
 
 ## get values for vegetation and non-veg endmembers
 crithi <- 0.99
@@ -950,6 +954,12 @@ Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
 dat[water<0.02, bin:=findInterval(isa, beta.range, all.inside=T)]
 evi.bin <- dat[water<0.02, .(m.isa=median(isa, na.rm=T), 
                            m.evi=median(evi, na.rm=T),
+                           m.forest=median(forest, na.rm=T),
+                           m.dev=median(dev, na.rm=T),
+                           m.hdres=median(hdres, na.rm=T),
+                           m.medres=median(medres, na.rm=T),
+                           m.lowres=median(lowres, na.rm=T),
+                           m.lowveg=median(lowveg, na.rm=T),
                            bin.count=.N), by=bin]
 evi.bin <- evi.bin[order(m.isa),]
 tot <- evi.bin[,sum(bin.count)]
@@ -980,6 +990,45 @@ ggplot(aes(x=m.isa, y=m.evi-Vzi[1:100]), data=evi.bin)+
   geom_hline(yintercept=0, linetype="solid", color="black", size=0.7)
 ## @250m 82k pixels below 50% ISA, 6k above 50%
 dim(dat[isa<0.25,])[1]/dim(dat)[1] ## at 250m, 94% <50% ISA, at 1km, 95% ie. 6.7k pixels are <50% ISA
+
+### plots of EVI vs. fractional LULC
+ggplot(aes(x=m.forest, y=m.evi), data=evi.bin)+
+  geom_point(aes(size=bin.frac), colour="forestgreen")+
+  labs(title=paste("EVI vs. forest,", resolution, "m, AOI", sep=""), x="Frac. forest", y="Median EVI")+
+  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
+## saturates EVI above 75% forest, 0 forest ranges from 0.1-0.3
+
+ggplot(aes(x=m.dev, y=m.evi), data=evi.bin)+
+  geom_point(aes(size=bin.frac), colour="gray45")+
+  labs(title=paste("EVI vs. forest,", resolution, "m, AOI", sep=""), x="Frac. Dev", y="Median EVI")+
+  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
+## sloppy, everything above 50% dev is <0.2
+
+ggplot(aes(x=m.hdres, y=m.evi), data=evi.bin)+
+  geom_point(aes(size=bin.frac), colour="salmon")+
+  labs(title=paste("EVI vs. forest,", resolution, "m, AOI", sep=""), x="Frac. HD Resid.", y="Median EVI")+
+  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
+## even at max HD resid (>60%) EVI is still ~0.3
+
+ggplot(aes(x=m.medres, y=m.evi), data=evi.bin)+
+  geom_point(aes(size=bin.frac), colour="orange")+
+  labs(title=paste("EVI vs. forest,", resolution, "m, AOI", sep=""), x="Frac. MD Resid.", y="Median EVI")+
+  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
+## medres never gets very common; the 0% includes very urban and very not urban at either end of scale, but only a slight decrease with increasing MDres
+
+ggplot(aes(x=m.lowres, y=m.evi), data=evi.bin)+
+  geom_point(aes(size=bin.frac), colour="goldenrod")+
+  labs(title=paste("EVI vs. forest,", resolution, "m, AOI", sep=""), x="Frac. LD Resid.", y="Median EVI")+
+  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
+## similar to MD resid -- even a bit rarer, but little effect on dragging down EVI
+
+ggplot(aes(x=m.lowveg, y=m.evi), data=evi.bin)+
+  geom_point(aes(size=bin.frac), colour="lightgreen")+
+  labs(title=paste("EVI vs. forest,", resolution, "m, AOI", sep=""), x="Frac. low veg", y="Median EVI")+
+  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
+## stays rare (<12%), but weakly positive effect
+
+
 
 ## do EVI vs ISA coloring the points according to majority area
 lulc.list <- c("dev", "forest", "hdres", "lowres", "medres", "other")
