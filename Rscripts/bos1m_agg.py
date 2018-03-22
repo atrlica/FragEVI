@@ -5,7 +5,7 @@ arcpy.CheckOutExtension("Spatial")
 from arcpy.sa import *
 
 # Set environment settings
-arcpy.env.workspace = "C:/Users/atrlica/Documents/ArcGIS/Default.gdb/"
+arcpy.env.workspace = "E:/FragEVI/FragEVIworking.gdb/"
 arcpy.env.overwriteOutput = True
 try:
     snapR = arcpy.Raster("E:/FragEVI/processed/EVI/030005-6_2010-2012_EVI_NAD83.tif")
@@ -24,8 +24,8 @@ arcpy.gp.Aggregate_sa("E:/FragEVI/processed/boston/bos.ndvi.tif", "E:/FragEVI/pr
 print("finished ndvi 30m")
 arcpy.gp.Aggregate_sa("E:/FragEVI/processed/boston/bos.can.tif", "E:/FragEVI/processed/boston/bos.can30m.tif", "30", "MEAN", "EXPAND", "DATA")
 print("finished can 30m")
-arcpy.gp.Aggregate_sa("E:/FragEVI/processed/boston/bos.grass.tif", "E:/FragEVI/processed/boston/bos.grass30m.tif", "30", "MEAN", "EXPAND", "DATA")
-print("finished grass 30m")
+##arcpy.gp.Aggregate_sa("E:/FragEVI/processed/boston/bos.grass.tif", "E:/FragEVI/processed/boston/bos.grass30m.tif", "30", "MEAN", "EXPAND", "DATA")
+##print("finished grass 30m")
 arcpy.gp.Aggregate_sa("E:/FragEVI/processed/boston/bos.barr.tif", "E:/FragEVI/processed/boston/bos.barr30m.tif", "30", "MEAN", "EXPAND", "DATA")
 print("finished barr 30m")
 arcpy.gp.Aggregate_sa("E:/FragEVI/processed/boston/bos.isa.tif", "E:/FragEVI/processed/boston/bos.isa30m.tif", "30", "MEAN", "EXPAND", "DATA")

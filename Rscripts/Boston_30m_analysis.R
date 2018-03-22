@@ -177,106 +177,6 @@ ggplot(aes(x=m.isa, y=m.evi-Vzi[1:100], color=lulc.maj), data=evi.bin)+
   geom_hline(yintercept=0, linetype="solid", color="black", size=0.7)
 
 
-################
-### analysis of 1m data with edge classes, select zones of Boston city limits
-bos.stack <- stack("processed/bos.stack.1m.tif")
-names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
-
-### load up test polygons for different areas of the city
-rox <- readOGR(dsn = "processed/zones/roxbury_test1.shp", layer="roxbury_test1")
-sb <- readOGR(dsn = "processed/zones/stonybrook_test1.shp", layer="stonybrook_test1")
-allan <- readOGR(dsn = "processed/zones/allandale_test1.shp", layer="allandale_test1")
-com <- readOGR(dsn = "processed/zones/commons_test1.shp", layer="commons_test1")
-matt <- readOGR(dsn = "processed/zones/mattapan_test1.shp", layer="mattapan_test1")
-golf <- readOGR(dsn = "processed/zones/gwrightgolf_test1.shp", layer="gwrightgolf_test1")
-ncc <- readOGR(dsn = "processed/zones/newcalvcem_test1.shp", layer="newcalvcem_test1")
-wrox <- readOGR(dsn = "processed/zones/wroxbury_test1.shp", layer="wroxbury_test1")
-dor <- readOGR(dsn = "processed/zones/dorchester_test1.shp", layer="dorchester_test1")
-beach <- readOGR(dsn = "processed/zones/beachmont_test1.shp", layer="beachmont_test1")
-send <- readOGR(dsn = "processed/zones/southend_test1.shp", layer="southend_test1")
-allst <- readOGR(dsn = "processed/zones/allston_test1.shp", layer="allston_test1")
-
-objs <- list(rox, sb, allan, com, matt, golf, ncc, wrox, dor, beach, send, allst)
-tests <- c("Roxbury", "Stonybrook", "Allandale", "Commons", "Mattapan", "GWGolf", "NewCalvCem", "WRoxbury", "Dorchester", "Beachmont", "Southend", "Allston")
-types <- c("residential", "forest", "forest", "park", "residential", "golf", "cemetery", "residential", "residential", "non-forest", "residential", "residential")
-areas <- numeric()
-g <- data.frame()
-y <- data.frame()
-print("starting loop through test zones")
-### loop the test polygons, extract and produce summary NDVI statistics
-for(m in 3:length(objs)){
-  dat <- extract(bos.stack, objs[[m]], df=T)
-  dat <- as.data.table(dat)
-  a <- round(dim(dat)[1]/10000, 1) ## area in ha
-  e10.sum <- round(dat[cov==2 & ed10==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(dat[cov==2])[1])], 4)
-  if(dim(e10.sum)[1]==0){e10.sum <- cbind(0, 0)}
-  e20.sum <- round(dat[cov==2 & is.na(ed10) & ed20==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(dat[cov==2])[1])],4)
-  if(dim(e20.sum)[1]==0){e20.sum <- cbind(0, 0)}
-  e30.sum <- round(dat[cov==2 & is.na(ed10) & is.na(ed20) & ed30==1, .(median(ndvi, na.rm=T), length(ndvi)/dim(dat[cov==2])[1])], 4)
-  if(dim(e30.sum)[1]==0){e30.sum <- cbind(0, 0)}
-  e40.sum <- round(dat[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), .(median(ndvi, na.rm=T), length(ndvi)/dim(dat[cov==2])[1])], 4)
-  if(dim(e40.sum)[1]==0){e40.sum <- cbind(0, 0)}
-  can.a <- round(dim(dat[cov==2,])[1]/dim(dat)[1], 2)
-  grass.sum <- round(dat[cov==1, .(median(ndvi, na.rm=T), dim(dat[cov==1,])[1]/dim(dat[,])[1])], 4)
-  if(dim(grass.sum)[1]==0){grass.sum <- cbind(0, 0)}
-  imp.sum <- round(dat[cov==0 & isa==1, .(median(ndvi), length(ndvi)/dim(dat[cov==0,])[1])], 4) ## ndvi of isa, relative fraction of barren
-  if(dim(imp.sum)[1]==0){imp.sum <- cbind(0, 0)}
-  barr.sum <- round(dat[cov==0 & isa==0, .(median(ndvi), length(ndvi)/dim(dat[cov==0,])[1])], 4) ## ndvi of non-impervious barren, relative fraction of barren
-  if(dim(barr.sum)[1]==0){barr.sum <- cbind(0, 0)}
-  isa.a <- round(dim(dat[cov==0,])[1]/dim(dat)[1],2)
-  
-  d <- unname(as.vector(c(cbind(a, e10.sum, e20.sum, e30.sum, e40.sum, can.a, grass.sum, imp.sum, barr.sum, isa.a))))
-  g <- rbind(g, d)
-  print(paste("finished summary of zone", m))
-  
-  dat$zone <- as.factor(m)
-  y <- rbind(y, dat)
-  print(paste("integrated data from zone ", m))
-}
-colnames(g) <- c("Area(ha)", "NDVI.10m", "10m.frac", "NDVI.20m", "20m.frac", "NDVI.30m", "30m.frac", "NDVI.Cint", "Cint.frac", "Can.Tfrac", "NDVI.grass", "grass.Tfrac", "NDVI.imp", "imp.frac", "NDVI.nonimp", "nonimp.frac", "barren.Tfrac")
-b <- cbind(tests, types, g)
-colnames(b)[1:2] <- c("Zone", "type")
-write.csv(b, "processed/bos.zones.summ.csv")
-
-####
-### clustered boxplots
-## make new class scheme including forest and barren positions
-### this combined data frame may be too large to work with (~1M pixels per test area)
-y <- as.data.table(y)
-y[,cov.ed:=0] ## barren, nonimpervious
-y[cov==1, cov.ed:=1] ## grass
-y[cov==2 & ed10==1, cov.ed:=2] ## 10m canopy
-y[cov==2 & is.na(ed10) & ed20==1, cov.ed:=3] ## 20m canopy
-y[cov==2 & is.na(ed10) & is.na(ed20) & ed30==1, cov.ed:=4] ## 30m canopy
-y[cov==2 & is.na(ed10) & is.na(ed20) & is.na(ed30), cov.ed:=5] ## >30m canopy
-y[cov==0 & isa==1, cov.ed:=6] ## barren, impervious
-fill.pal <- c("gray80", "lightgreen", "darksalmon", "orange", "yellow3", "darkgreen", "gray40")
-# y$cov.ed <- as.factor(y$cov.ed)
-# y[zone==1, zone.name:="Roxbury"]
-# y[zone==2, zone.name:="Stonybrook"]
-# y[zone==3, zone.name:="Allandale"]
-# y[zone==4, zone.name:="Commons"]
-# y[zone==5, zone.name:="Mattapan"]
-# y[zone==6, zone.name:="GWGolf"]
-# y[zone==7, zone.name:="NewCalvCem"]
-# y[zone==8, zone.name:="WRoxbury"]
-# y[zone==9, zone.name:="Dorchester"]
-# y[zone==10, zone.name:="Beachmont"]
-# y[zone==11, zone.name:="Southend"]
-# y[zone==12, zone.name:="Allston"]
-# y$zone.name <- as.factor(y$zone.name)
-# write.csv(y, "processed/Bos.tests.extract.data.csv")
-p <- ggplot(aes(x=zone, y=ndvi, fill=cov.ed), data=y)+
-  geom_boxplot(outlier.shape = NA, position = position_dodge(width=.8))+
-  scale_fill_manual(values=fill.pal, labels=c("barren", "grass", "10m", "20m", "30m", ">30m", "imperv."))+
-  labs(title="NDVI by edge+cover, 1m", y="NDVI 1m")+
-  theme(axis.text.x = element_text(angle=90, hjust=1))+
-  scale_x_discrete(name="Test Zone", labels=tests)
-p
-
-
-
-
 
 #########
 #### Analysis of 30m Boston data with 1m cover fractions
@@ -299,14 +199,12 @@ sum(frog.n) #only 73 pixels differ on the %cover canopy vs. canopy edge classes
 ## do we get sensible figures for vegisa?
 dat[can>0, range(vegisa)] # 0 to 98% vegisa (this is not likely)
 hist(dat[can>0, vegisa]) # a long tail of >0.6 vegisa wtf
-duck <- dat[vegisa>can,]
-View(duck) ## using 
-hist(duck[,can-vegisa])
-dat[,vegisa.fucked:=0]
-dat[vegisa>can, vegisa.fucked:=1]
-r.duck <- raster("processed/boston/bos.aoi30m.tif")
-r.duck <- setValues(r.duck, values = dat[,vegisa.fucked])
-r.duck <- writeRaster(r.duck, "processed/boston/vegisa.fucked.tif", format="GTiff", overwrite=T)
+duck <- dat[vegisa>can,] ## no instances of vegisa greater than can
+# dat[,vegisa.fucked:=0]
+# dat[vegisa>can, vegisa.fucked:=1]
+# r.duck <- raster("processed/boston/bos.aoi30m.tif")
+# r.duck <- setValues(r.duck, values = dat[,vegisa.fucked])
+# r.duck <- writeRaster(r.duck, "processed/boston/vegisa.fucked.tif", format="GTiff", overwrite=T)
 
 # 
 # ### look at values binned by evi range
@@ -397,7 +295,6 @@ ggplot(dog, aes(x=m.grass, y=m.evi))+geom_point(aes(size=count.frac))+labs(title
 ## and upeer reaches of curve are less constrained -- grass fraction doesn't exert the same control on EVI as canopy
 ## and the bulk of boston pixels are below 25% grass
 
-
 ## barren -- this is basically what Zhao was using to get urban area for his analysis
 ## barren is the residual of grass+canopy
 bin.range <- seq(from=dat[,min(barr, na.rm=T)], to=dat[,max(barr, na.rm=T)], length.out = 100)
@@ -475,16 +372,53 @@ ggplot(dog, aes(x=m.can, y=m.ed10frac))+geom_point(aes(size=count.frac))+labs(ti
 ### same idea: only when canopy cover is >0.4 do you get interior canopies
 ### another thing: Even 100% canopy is still 50% edge (???)
 
+
+
+
 ggplot(dog, aes(x=m.ed10, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="area canopy <10m edge")
 ggplot(dog, aes(x=m.ed10frac, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="fraction edge canopy vs EVI")
-ggplot(dog, aes(x=m.can, y=m.evi, colour=m.ed10frac))+
-  geom_point(aes(size=count.frac))+
-  labs(title="Canopy vs EVI")+
+
+### plot of EVI vs. Barren with Vzi Line and colored by edge canopy fraction
+dat <- read.csv("processed/boston.30m.agg.csv")
+dat <- as.data.table(dat)
+dat <- dat[!is.na(aoi) & water<=0.01,] # 137 k pixels inside AOI and nearly water free
+dat <- dat[aoi>675,] # only take pixels that have >75% sub-pixel data == 134k pixels
+
+## get values for vegetation and non-veg endmembers
+veg <- dat[barr<0.01  & water<0.02, median(evi, na.rm=T)]
+veg.err <- dat[barr<0.01  & water<0.02, sd(evi, na.rm=T)/sqrt(length(evi))]
+veg.n <- dat[barr<0.01 & water<0.02, length(evi)]
+noveg <- dat[barr>=0.99 & water<0.02, median(evi, na.rm=T)]
+noveg.err <- dat[barr>=0.99 & water<0.02, sd(evi, na.rm=T)/sqrt(length(evi))]
+noveg.n <- dat[barr>=0.99 & water<0.02, length(evi)]
+beta.range <- seq(from=0, to=1, by=0.01) 
+Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
+
+dat[,ed10.frac:=ed10/can]
+dat[ed10.frac>1, ed10.frac:=NA]
+dat[water<0.02, bin:=findInterval(barr, beta.range, all.inside=F)]
+evi.bin <- dat[water<0.02, .(m.barr=median(barr, na.rm=T), 
+                           m.evi=median(evi, na.rm=T),
+                           m.can=median(can, na.rm=T),
+                           m.ed10.frac=median(ed10.frac, na.rm=T),
+                           bin.count=.N), by=bin]
+evi.bin <- evi.bin[order(m.barr),]
+tot <- evi.bin[,sum(bin.count)]
+evi.bin[,bin.frac:=bin.count/tot, by=bin]
+evi.bin <- evi.bin[!is.na(m.barr),]
+
+
+ggplot(evi.bin, aes(x=m.can, y=m.evi, colour=m.ed10.frac))+
+  geom_point(aes(size=bin.frac))+
+  labs(title="Canopy vs EVI", x="Frac. Barren", y="Median Evi")+
   scale_color_continuous(low="darkgreen", high="salmon", limits=c(0.45, 1))
-ggplot(dog, aes(x=m.barr, y=m.evi, colour=m.ed10frac))+
-  geom_point(aes(size=count.frac))+
-  labs(title="Barren vs EVI")+
-  scale_color_continuous(low="darkgreen", high="salmon", limits=c(0.45, 1))
+ggplot(evi.bin, aes(x=m.barr, y=m.evi, colour=m.ed10.frac))+
+  geom_point(aes(size=bin.frac))+
+  labs(title="Barren vs EVI, 30m, Boston", x="Barren Frac.", y="Median EVI")+
+  scale_color_continuous(low="darkgreen", high="salmon", limits=c(0.45, 1), name="% <10m")+
+  scale_size_continuous(name="% total", breaks=c(0.01, 0.02, 0.10), range=c(2, 8))+
+  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
+
 
 plot(dog$m.evi, dog$m.ndvi)
 
@@ -918,358 +852,4 @@ ggplot(dog, aes(x=m.isa, y=m.visafrac))+geom_point(aes(size=count.frac))+labs(ti
 ggplot(dog, aes(x=m.can, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="EVI vs. canopy, lowveg")
 ## bulk of observations are can 0.15, .46 EVI -- other high EVI are in higher bins, disorganized
 
-
-######
-###### MODIS 250m + 1 km analysis
-### 250m analysis
-resolution <- 1000
-if(resolution==250){dat <- read.csv("processed/AOI.250m.dat.csv")}
-if(resolution==1000){dat <- read.csv("processed/AOI.1km.dat.csv")}
-dat <- dat[,2:12]
-names(dat) <-  c("evi", "isa", "dev", "forest", "hdres", "lowres", "lowveg", "medres", "other", "water", "AOI")
-dat <- as.data.table(dat)
-dat <- dat[AOI==1,] 
-dim(dat)[1] ## number of pixels available (106k for 250m, 7k for 1 km)
-dat[,frac.tot:=apply(dat[,3:10], 1, sum)] ## most pixels are within +/- 5% of complete area with the LULC category fractions
-dat[frac.tot<0.95, length(frac.tot)] ## only 500 pixels are missing more than 5% area fraction
-dat[,evi:=evi/10000]
-
-## get values for vegetation and non-veg endmembers
-crithi <- 0.99
-critlow <- 0.01
-if(resolution==1000){crithi <- 0.92} ## correct for 1km where no 100% ISA available
-veg <- dat[isa<critlow  & water<0.02, median(evi, na.rm=T)] ## 10k pixels are 0% ISA
-veg.err <- dat[isa<critlow  & water<0.02, sd(evi, na.rm=T)/sqrt(length(evi))]
-veg.n <- dat[isa<critlow  & water<0.02, length(evi)]
-noveg <- dat[isa>=crithi & water<0.02, median(evi, na.rm=T)]
-noveg <- dat[isa>=crithi & water<0.02, median(evi, na.rm=T)]
-noveg.err <- dat[isa>=crithi & water<0.02, sd(evi, na.rm=T)/sqrt(length(evi))]
-noveg.n <- dat[isa>=crithi & water<0.02, length(evi)] ### only 20 pixels are 100% ISA
-beta.range <- seq(from=0, to=1, by=0.01) 
-Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
-
-## bin the values by isa fraction
-dat[water<0.02, bin:=findInterval(isa, beta.range, all.inside=T)]
-evi.bin <- dat[water<0.02, .(m.isa=median(isa, na.rm=T), 
-                           m.evi=median(evi, na.rm=T),
-                           m.forest=median(forest, na.rm=T),
-                           m.dev=median(dev, na.rm=T),
-                           m.hdres=median(hdres, na.rm=T),
-                           m.medres=median(medres, na.rm=T),
-                           m.lowres=median(lowres, na.rm=T),
-                           m.lowveg=median(lowveg, na.rm=T),
-                           bin.count=.N), by=bin]
-evi.bin <- evi.bin[order(m.isa),]
-tot <- evi.bin[,sum(bin.count)]
-evi.bin[,bin.frac:=bin.count/tot, by=bin]
-evi.bin <- evi.bin[!is.na(m.isa),]
-
-### binned EVI vs. ISA, all LULC
-# pdf(file = "images/EVI_ISA_binned30m.pdf", width = 6, height = 6)
-# plot(evi.bin[,m.isa]*100, evi.bin[,m.evi],
-#      main="EVI vs. %ISA, all LULC",
-#      xlab="%ISA", ylab="EVI",
-#      pch=15, col="forestgreen")
-# lines(beta.range*100, Vzi, col="red", lwd=2, lty=2)
-# plot(evi.bin[,m.isa]*100, evi.bin[,m.evi]-Vzi,
-#      main="EVI enhancement, all LULC",
-#      xlab="%ISA", ylab="EVI enhancement",
-#      pch=16, col="royalblue")
-# abline(h=0, lty=1, lwd=1.6)
-# dev.off()
-
-ggplot(aes(x=m.isa, y=m.evi), data=evi.bin)+
-  geom_point(aes(size=bin.frac), colour="blue")+
-  scale_size_continuous(range=c(1, 6), breaks=c(0.001, 0.01, 0.02, 0.03, 0.04), name="% total")+
-  labs(title=paste("EVI vs. binned ISA, ", resolution, "m, AOI", sep=""), x="Frac. ISA", y="Median EVI")+
-  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
-ggplot(aes(x=m.isa, y=m.evi-Vzi[1:100]), data=evi.bin)+
-  geom_point(aes(size=bin.frac), colour="red")+
-  labs(title=paste("EVI vs. binned ISA, ", resolution, "m, AOI", sep=""), x="Frac. ISA", y="EVI enhancement")+
-  geom_hline(yintercept=0, linetype="solid", color="black", size=0.7)
-## @250m 82k pixels below 50% ISA, 6k above 50%
-dim(dat[isa<0.25,])[1]/dim(dat)[1] ## at 250m, 94% <50% ISA, at 1km, 95% ie. 6.7k pixels are <50% ISA
-
-### stack plot of fractional area by ISA bin
-dat[water<0.02, bin:=findInterval(isa, beta.range, all.inside=T)]
-evi.bin2 <- dat[water<0.02, .(m.isa=median(isa, na.rm=T), 
-                             m.evi=median(evi, na.rm=T),
-                             s.forest=sum(forest, na.rm=T),
-                             s.dev=sum(dev, na.rm=T),
-                             s.hdres=sum(hdres, na.rm=T),
-                             s.medres=sum(medres, na.rm=T),
-                             s.lowres=sum(lowres, na.rm=T),
-                             s.lowveg=sum(lowveg, na.rm=T),
-                             bin.count=.N), by=bin]
-evi.bin2 <- evi.bin2[order(m.isa),]
-tot <- evi.bin2[,sum(bin.count)]
-evi.bin2[,bin.frac:=bin.count/tot, by=bin]
-evi.bin2 <- evi.bin2[!is.na(m.isa),]
-
-### total area present across ISA range
-d <- reshape(evi.bin2, varying=c("s.forest", "s.lowveg", "s.lowres", "s.medres", "s.hdres", "s.dev"),
-             idvar="bin", direction="long")
-d$time <- as.factor(d$time)
-ggplot(d, aes(x=m.isa, y=s/16))+
-  geom_area(aes(fill=time))+
-  scale_fill_manual(values=c("gray45", "forestgreen", "salmon", "gold", "darkolivegreen3", "darkorange"),
-                    breaks=c("forest", "lowveg", "lowres", "medres", "hdres", "dev"), name="LULC",
-                    labels=c("Forest", "Low Veg.", "LD+VLD Resid.", "MD Resid.", "HD+MF Resid.", "Developed"))+
-  labs(x="Frac. Impervious", y="Total area (km2)", title=paste("LULC composition vs ISA, ", resolution, "m", sep=""))
-
-#### relative area present across ISA range
-evi.bin2[,tot.area:=.(s.forest+s.dev+s.hdres+s.medres+s.lowres+s.lowveg), by=bin]
-e <- reshape(evi.bin2, varying=c("s.forest", "s.lowveg", "s.lowres", "s.medres", "s.hdres", "s.dev"),
-             idvar="bin", direction="long")
-e$time <- as.factor(e$time)
-e[,rel.area:=s/tot.area]
-ggplot(e, aes(x=m.isa, y=rel.area))+
-  geom_area(aes(fill=time))+
-  scale_fill_manual(values=c("gray45", "forestgreen", "salmon", "gold", "darkolivegreen3", "darkorange"),
-                    breaks=c("forest", "lowveg", "lowres", "medres", "hdres", "dev"), name="LULC",
-                    labels=c("Forest", "Low Veg.", "LD+VLD Resid.", "MD Resid.", "HD+MF Resid.", "Developed"))+
-  labs(x="Frac. Impervious", y="Frac. of AOI", title=paste("LULC composition vs ISA, ", resolution, "m", sep=""))
-
-
-### plots of EVI vs. fractional LULC
-ggplot(aes(x=m.forest, y=m.evi), data=evi.bin)+
-  geom_point(aes(size=bin.frac), colour="forestgreen")+
-  labs(title=paste("EVI vs. forest,", resolution, "m, AOI", sep=""), x="Frac. forest", y="Median EVI")+
-  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
-## saturates EVI above 75% forest, 0 forest ranges from 0.1-0.3
-
-ggplot(aes(x=m.dev, y=m.evi), data=evi.bin)+
-  geom_point(aes(size=bin.frac), colour="gray45")+
-  labs(title=paste("EVI vs. Dev,", resolution, "m, AOI", sep=""), x="Frac. Dev", y="Median EVI")+
-  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
-## sloppy, everything above 50% dev is <0.2
-
-ggplot(aes(x=m.hdres, y=m.evi), data=evi.bin)+
-  geom_point(aes(size=bin.frac), colour="salmon")+
-  labs(title=paste("EVI vs. Hdres,", resolution, "m, AOI", sep=""), x="Frac. HD Resid.", y="Median EVI")+
-  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
-## even at max HD resid (>60%) EVI is still ~0.3
-
-ggplot(aes(x=m.medres, y=m.evi), data=evi.bin)+
-  geom_point(aes(size=bin.frac), colour="orange")+
-  labs(title=paste("EVI vs. MDres,", resolution, "m, AOI", sep=""), x="Frac. MD Resid.", y="Median EVI")+
-  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
-## medres never gets very common; the 0% includes very urban and very not urban at either end of scale, but only a slight decrease with increasing MDres
-
-ggplot(aes(x=m.lowres, y=m.evi), data=evi.bin)+
-  geom_point(aes(size=bin.frac), colour="goldenrod")+
-  labs(title=paste("EVI vs. LDres,", resolution, "m, AOI", sep=""), x="Frac. LD Resid.", y="Median EVI")+
-  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
-## similar to MD resid -- even a bit rarer, but little effect on dragging down EVI
-
-ggplot(aes(x=m.lowveg, y=m.evi), data=evi.bin)+
-  geom_point(aes(size=bin.frac), colour="lightgreen")+
-  labs(title=paste("EVI vs. lowveg,", resolution, "m, AOI", sep=""), x="Frac. low veg", y="Median EVI")+
-  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
-## stays rare (<12%), but weakly positive effect
-
-
-
-## do EVI vs ISA coloring the points according to majority area
-lulc.list <- c("dev", "forest", "hdres", "lowres", "medres", "other")
-evi.bin[,lulc.maj:=NA]
-for(m in evi.bin[order(bin), bin]){
-  tot.m <- dat[bin==m, .N]
-  uu <- unlist(dat[bin==m, .(median(dev), median(forest),median(hdres),median(lowres),median(medres),median(other))])
-  # if(max(uu)>0.5) ## this just gets the plurality -- not majority necessarily
-  evi.bin[bin==m, lulc.maj:=lulc.list[which(uu==max(uu))]]
-}
-evi.bin <- evi.bin[order(bin),]
-evi.bin$lulc.maj <- as.factor(evi.bin$lulc.maj)
-
-
-#EVI vs. ISA plot, color by majority area fraction
-# not valid at 1km -- no pixels emerge
-ggplot(aes(x=m.isa, y=m.evi, color=lulc.maj), data=evi.bin)+
-  geom_point(aes(size=bin.frac))+
-  scale_color_manual(breaks=c("1", "2", "3"),
-                     values=c("forestgreen", "gray45", "salmon"),
-                     guide=guide_legend(title="largest LULC"),
-                     labels=c("Forest", "Dev", "HD Resid"))+
-  labs(title=paste("EVI vs. binned ISA, ", resolution, "m, AOI", sep=""), x="Frac. ISA", y="Median EVI")+
-  # scale_size(range=c(0.7,10),breaks=c(0.01, 0.02, 0.40),
-  #            labels=c(">1%","1-2%", ">40%"),
-  #            guide=guide_legend(title="Bin size"))+
-  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
-ggplot(aes(x=m.isa, y=m.evi-Vzi[1:100], color=lulc.maj), data=evi.bin)+
-  geom_point(aes(size=bin.frac))+
-  scale_color_manual(breaks=c("1", "2", "3"),
-                     values=c("forestgreen", "gray45", "salmon"),
-                     guide=guide_legend(title="largest LULC"),
-                     labels=c("Forest", "Dev", "HD Resid"))+
-  labs(title=paste("EVI enhancement, ", resolution, "m, AOI", sep=""), x="Frac. ISA", y="EVI enhancement")+
-  # scale_size(range=c(0.7,10),
-  #            breaks=c(0.01, 0.02, 0.40),
-  #            labels=c(">1%","1-2%", ">40%"),
-  #            guide=guide_legend(title="Bin size"))+
-  geom_hline(yintercept=0, linetype="solid", color="black", size=0.7)
-
-### EVI enhancement in pure pixel samples
-### developed
-dat[water<0.02 & dev>0.5, bin:=findInterval(isa, beta.range, all.inside=T)]
-evi.bin <- dat[water<0.02 & dev>0.5, .(m.isa=median(isa, na.rm=T), 
-                             m.evi=median(evi, na.rm=T),
-                             bin.count=.N), by=bin]
-evi.bin <- evi.bin[order(m.isa),]
-tot <- evi.bin[,sum(bin.count)]
-evi.bin[,bin.frac:=bin.count/tot, by=bin]
-evi.bin <- evi.bin[!is.na(m.isa),]
-evi.bin[,sum(bin.count)] #5k pixels (143 pix at 1km)
-
-ggplot(aes(x=m.isa, y=m.evi), data=evi.bin)+
-  geom_point(aes(size=bin.frac), colour="gray45")+
-  scale_size(name="% total")+
-  scale_x_continuous(limits=c(0, 1))+
-  scale_y_continuous(limits=c(noveg, veg))+
-  labs(title=paste("EVI vs. ISA, ", resolution, "m, >50% Developed", sep=""), x="Frac. ISA", y="Median EVI")+
-  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
-ggplot(aes(x=m.isa, y=m.evi-Vzi[1:100]), data=evi.bin)+
-  geom_point(aes(size=bin.frac), colour="blue")+
-  labs(title=paste("EVI vs. ISA, ", resolution, "m, >50% Developed", sep=""), x="Frac. ISA", y="EVI enhancement")+
-  geom_hline(yintercept=0, linetype="solid", color="black", size=0.7)
-
-## hdres
-dat[water<0.02 & hdres>0.5, bin:=findInterval(isa, beta.range, all.inside=T)]
-evi.bin <- dat[water<0.02 & hdres>0.5, .(m.isa=median(isa, na.rm=T), 
-                                       m.evi=median(evi, na.rm=T),
-                                       bin.count=.N), by=bin]
-evi.bin <- evi.bin[order(m.isa),]
-tot <- evi.bin[,sum(bin.count)]
-evi.bin[,bin.frac:=bin.count/tot, by=bin]
-evi.bin <- evi.bin[!is.na(m.isa),]
-evi.bin[,sum(bin.count)] #6k pixels (243 pix at 1km)
-
-ggplot(aes(x=m.isa, y=m.evi), data=evi.bin)+
-  geom_point(aes(size=bin.frac), colour="salmon")+
-  scale_size(name="% total")+
-  scale_x_continuous(limits=c(0, 1))+
-  scale_y_continuous(limits=c(noveg, veg))+
-  labs(title=paste("EVI vs. ISA, ", resolution, "m, >50% HD+MF Resid.", sep=""), x="Frac. ISA", y="Median EVI")+
-  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
-# not run: not all ISA bins represented
-# ggplot(aes(x=m.isa, y=m.evi-Vzi[1:100]), data=evi.bin)+
-#   geom_point(aes(size=bin.frac), colour="blue")+
-#   labs(title="EVI enhancement, >50% HD Resid", x="Frac. ISA", y="EVI enhancement")+
-#   geom_hline(yintercept=0, linetype="solid", color="black", size=0.7)
-
-## medres
-dat[water<0.02 & medres>0.5, bin:=findInterval(isa, beta.range, all.inside=T)]
-evi.bin <- dat[water<0.02 & medres>0.5, .(m.isa=median(isa, na.rm=T), 
-                                         m.evi=median(evi, na.rm=T),
-                                         bin.count=.N), by=bin]
-evi.bin <- evi.bin[order(m.isa),]
-tot <- evi.bin[,sum(bin.count)]
-evi.bin[,bin.frac:=bin.count/tot, by=bin]
-evi.bin <- evi.bin[!is.na(m.isa),]
-evi.bin[,sum(bin.count)] #5k pixels (141 pix at 1km)
-
-ggplot(aes(x=m.isa, y=m.evi), data=evi.bin)+
-  geom_point(aes(size=bin.frac), colour="orange")+
-  scale_size(name="% total")+
-  scale_x_continuous(limits=c(0, 1))+
-  scale_y_continuous(limits=c(noveg, veg))+
-  labs(title=paste("EVI vs. ISA, ", resolution, "m, >50% MD Resid.", sep=""), x="Frac. ISA", y="Median EVI")+
-  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
-# ggplot(aes(x=m.isa, y=m.evi-Vzi[1:100]), data=evi.bin)+
-#   geom_point(aes(size=bin.frac), colour="blue")+
-#   labs(title="EVI enhancement, >50% HD Resid", x="Frac. ISA", y="EVI enhancement")+
-#   geom_hline(yintercept=0, linetype="solid", color="black", size=0.7)
-
-## lowres
-dat[water<0.02 & lowres>0.5, bin:=findInterval(isa, beta.range, all.inside=T)]
-evi.bin <- dat[water<0.02 & lowres>0.5, .(m.isa=median(isa, na.rm=T), 
-                                         m.evi=median(evi, na.rm=T),
-                                         bin.count=.N), by=bin]
-evi.bin <- evi.bin[order(m.isa),]
-tot <- evi.bin[,sum(bin.count)]
-evi.bin[,bin.frac:=bin.count/tot, by=bin]
-evi.bin <- evi.bin[!is.na(m.isa),]
-evi.bin[,sum(bin.count)] #4k pixels (47 pix at 1km)
-
-ggplot(aes(x=m.isa, y=m.evi), data=evi.bin)+
-  geom_point(aes(size=bin.frac), colour="gold")+
-  scale_x_continuous(limits=c(0, 1))+
-  scale_y_continuous(limits=c(noveg, veg))+
-  labs(title=paste("EVI vs. ISA, ", resolution, "m, >50% VLD+LD Resid.", sep=""), x="Frac. ISA", y="Median EVI")+
-  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
-# ggplot(aes(x=m.isa, y=m.evi-Vzi[1:100]), data=evi.bin)+
-#   geom_point(aes(size=bin.frac), colour="blue")+
-#   labs(title="EVI enhancement, >50% HD Resid", x="Frac. ISA", y="EVI enhancement")+
-#   geom_hline(yintercept=0, linetype="solid", color="black", size=0.7)
-
-## other 
-dat[water<0.02 & other>0.5, bin:=findInterval(isa, beta.range, all.inside=T)]
-evi.bin <- dat[water<0.02 & other>0.5, .(m.isa=median(isa, na.rm=T), 
-                                          m.evi=median(evi, na.rm=T),
-                                          bin.count=.N), by=bin]
-evi.bin <- evi.bin[order(m.isa),]
-tot <- evi.bin[,sum(bin.count)]
-evi.bin[,bin.frac:=bin.count/tot, by=bin]
-evi.bin <- evi.bin[!is.na(m.isa),]
-evi.bin[,sum(bin.count)] #199 pixels (5 pix at 1km)
-
-ggplot(aes(x=m.isa, y=m.evi), data=evi.bin)+
-  geom_point(aes(size=bin.frac), colour="red")+
-  labs(title=paste("EVI vs. ISA, ", resolution, "m, >50% other", sep=""), x="Frac. ISA", y="Median EVI")+
-  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
-
-
-## forest
-dat[water<0.02 & forest>0.5, bin:=findInterval(isa, beta.range, all.inside=T)]
-evi.bin <- dat[water<0.02 & forest>0.5, .(m.isa=median(isa, na.rm=T), 
-                                          m.evi=median(evi, na.rm=T),
-                                          bin.count=.N), by=bin]
-evi.bin <- evi.bin[order(m.isa),]
-tot <- evi.bin[,sum(bin.count)]
-evi.bin[,bin.frac:=bin.count/tot, by=bin]
-evi.bin <- evi.bin[!is.na(m.isa),]
-evi.bin[,sum(bin.count)] #44k pixels (2.5k at 1km)
-
-ggplot(aes(x=m.isa, y=m.evi), data=evi.bin)+
-  geom_point(aes(size=bin.frac), colour="forestgreen")+
-  scale_x_continuous(limits=c(0, 1))+
-  scale_y_continuous(limits=c(noveg, veg))+
-  labs(title=paste("EVI vs. ISA, ", resolution, "m, >50% Forest", sep=""), x="Frac. ISA", y="Median EVI")+
-  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
-
-
-## lowveg
-dat[water<0.02 & lowveg>0.5, bin:=findInterval(isa, beta.range, all.inside=T)]
-evi.bin <- dat[water<0.02 & lowveg>0.5, .(m.isa=median(isa, na.rm=T), 
-                                          m.evi=median(evi, na.rm=T),
-                                          bin.count=.N), by=bin]
-evi.bin <- evi.bin[order(m.isa),]
-tot <- evi.bin[,sum(bin.count)]
-evi.bin[,bin.frac:=bin.count/tot, by=bin]
-evi.bin <- evi.bin[!is.na(m.isa),]
-evi.bin[,sum(bin.count)] #6k pixels, 229 pix at 1km
-
-ggplot(aes(x=m.isa, y=m.evi), data=evi.bin)+
-  geom_point(aes(size=bin.frac), colour="darkolivegreen3")+
-  scale_x_continuous(limits=c(0, 1))+
-  scale_y_continuous(limits=c(noveg, veg))+
-  labs(title=paste("EVI vs. ISA, ", resolution, "m, >50% low veg", sep=""), x="Frac. ISA", y="Median EVI")+
-  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
-
-
-## mixed
-dat[water<0.02 & dev<0.5 & forest<0.5 & hdres<0.5 & lowres<0.5 & lowveg<0.5 & medres<0.5 & other<0.5, bin:=findInterval(isa, beta.range, all.inside=T)]
-evi.bin <- dat[water<0.02 & dev<0.5 & forest<0.5 & hdres<0.5 & lowres<0.5 & lowveg<0.5 & medres<0.5 & other<0.5, .(m.isa=median(isa, na.rm=T), 
-                                          m.evi=median(evi, na.rm=T),
-                                          bin.count=.N), by=bin]
-evi.bin <- evi.bin[order(m.isa),]
-tot <- evi.bin[,sum(bin.count)]
-evi.bin[,bin.frac:=bin.count/tot, by=bin]
-evi.bin <- evi.bin[!is.na(m.isa),]
-evi.bin[,sum(bin.count)] #17k pixels, 1.6k at 1km
-
-ggplot(aes(x=m.isa, y=m.evi), data=evi.bin)+
-  geom_point(aes(size=bin.frac), colour="orchid")+
-  labs(title=paste("EVI vs. ISA, ", resolution, "m, mixed pixels", sep=""), x="Frac. ISA", y="Median EVI")+
-  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2) ## mixed pixels look like they tend to be less paved
 

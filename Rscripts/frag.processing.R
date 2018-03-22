@@ -362,31 +362,38 @@ nonimpbarr <- overlay(b, fun=nib.calc, filename="processed/boston/bos.nonimpbarr
 bos.aoi <- raster("processed/boston/bos.aoi.tif")
 bos.stack <- stack("processed/boston/bos.stack.1m.tif")
 names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
+plot(bos.stack)
+bos.stack <- crop(bos.stack, bos.aoi)
+bos.stack <- mask(bos.stack, bos.aoi)
 
 ndvi.only <- bos.stack[["ndvi"]]
 can.only <- bos.stack[["can"]]
 isa.only <- raster("processed/boston/bos.isa.rereg.tif")
 isa.only <- crop(isa.only, bos.aoi)
 isa.only <- mask(isa.only, bos.aoi)
-# grass.only <- raster("processed/boston/bos.grass.tif")
-# grass.only <- crop(grass.only, bos.aoi)
-# grass.only <- mask(grass.only, bos.aoi, filename="processed/boston/bos.grass.tif", format="GTiff", overwrite=T)
+isa.only <- extend(isa.only, bos.aoi)
+extent(isa.only) <- extent(bos.aoi) ## fuck it, just tweak the x extent 0.4 m
+
+### these cover layers are fucked up somehow and I can't be asked to fix them
+### bos.grass is facing some bizarre internal error where I can process it down but it won't save to disk and evnetually disappears
 grass.only <- raster("processed/boston/bos.grass.tif")
-# barr.only <- raster("processed/boston/bos.barr.tif")
-# barr.only <- crop(barr.only, bos.aoi)
-# barr.only <- mask(barr.only, bos.aoi, filename="processed/boston/bos.barr.tif", format="GTiff", overwrite=T)
+grass.only <- crop(grass.only, bos.aoi)
+grass.only <- mask(grass.only, bos.aoi, filename="processed/boston/bos.grass.tif", format="GTiff", overwrite=T)
+grass.only <- raster("processed/boston/bos.grass.tif")
+writeRaster(grass.only, filename="processed/boston/bos.grass.tif", format="GTiff", overwrite=T)
 barr.only <- raster("processed/boston/bos.barr.tif")
-# nonimp.only <- raster("processed/boston/bos.nonimp.tif")
-# nonimp.only <- crop(nonimp.only, bos.aoi)
-# nonimp.only <- mask(nonimp.only, bos.aoi, filename="processed/boston/bos.nonimp_only.tif", format="GTiff", overwrite=T)
-# nonimpbarr.only <- raster("processed/boston/bos.nonimpbarr.tif")
-# nonimpbarr.only <- crop(nonimpbarr.only, bos.aoi)
-# nonimpbarr.only <- mask(nonimpbarr.only, bos.aoi, filename="processed/boston/bos.nonimpbarr.tif", format="GTiff", overwrite=T)
+barr.only <- crop(barr.only, bos.aoi)
+barr.only <- mask(barr.only, bos.aoi, filename="processed/boston/bos.barr.tif", format="GTiff", overwrite=T)
+barr.only <- raster("processed/boston/bos.barr.tif")
 nonimpbarr.only <- raster("processed/boston/bos.nonimpbarr.tif")
-# vegisa.only <- raster("processed/boston/bos.vegisa.tif")
-# vegisa.only <- crop(vegisa.only, bos.aoi)
-# vegisa.only <- mask(vegisa.only, bos.aoi, filename="processed/boston/bos.vegisa.tif", format="GTiff", overwrite=T)
+nonimpbarr.only <- crop(nonimpbarr.only, bos.aoi)
+nonimpbarr.only <- mask(nonimpbarr.only, bos.aoi, filename="processed/boston/bos.nonimpbarr.tif", format="GTiff", overwrite=T)
+nonimpbarr.only <- raster("processed/boston/bos.nonimpbarr.tif")
 vegisa.only <- raster("processed/boston/bos.vegisa.tif")
+vegisa.only <- crop(vegisa.only, bos.aoi)
+vegisa.only <- mask(vegisa.only, bos.aoi, filename="processed/boston/bos.vegisa.tif", format="GTiff", overwrite=T)
+vegisa.only <- raster("processed/boston/bos.vegisa.tif")
+
 ed10.only <- bos.stack[["ed10"]]
 ed20.only <- bos.stack[["ed20"]]
 ed30.only <- bos.stack[["ed30"]]
@@ -410,22 +417,19 @@ bos.water <- raster("processed/boston/bos.water.tif")
 # ndvi, can, grass, barren, isa, nonimpbarr, vegisa, (1-7)
 # ed10, ed20, ed30, buff.20only, buff.30only, buff.Intonly, (8-13)
 # for, dev, hd.res, med.res, low.res, lowveg, other, water (9-16)
-bos.stack <- stack(ndvi.only, can.only, grass.only, barr.only, isa.only, nonimpbarr.only, vegisa.only,
+bos.stack <- stack(ndvi.only, can.only, barr.only, isa.only, nonimpbarr.only, vegisa.only,
                    ed10.only, ed20.only, ed30.only, buff.20only, buff.30only, buff.Intonly,
                    bos.forest, bos.dev, bos.hd.res, bos.med.res, bos.low.res, bos.lowveg, bos.other, bos.water)
-names(bos.stack) <- c("ndvi", "can", "grass", "barr", "isa", "nonimpbarr", "vegisa", 
+names(bos.stack) <- c("ndvi", "can", "barr", "isa", "nonimpbarr", "vegisa", 
                       "ed10", "ed20", "ed30", "buff.20only", "buff.30only", "buff.Intonly", 
                       "forest", "dev", "hd.res", "med.res", "low.res", "lowveg", "other", "water")
 
 ## make sure everything has been exported as single raster files
 for(l in 1:nlayers(bos.stack)){
-  if(!file.exists(paste("processed/boston/bos.", names(bos.stack)[l], ".tif", sep=""))){
     print(paste("writing ", "processed/boston/bos.", names(bos.stack)[l], ".tif", sep=""))
     writeRaster(bos.stack[[l]], 
                 filename=paste("processed/boston/bos.", names(bos.stack)[l], ".tif", sep=""),
                 format="GTiff", overwrite=T)
-  }
-  print("all files exist as independent rasters")
 }
 
 # ### make up the final raster stack and export
