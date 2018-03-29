@@ -10,9 +10,69 @@ library(ggplot2)
 ### Test Code: Process NAIP 1m CIR data to NDVI
 ### NOTE SO MUCH: BAND ORDER IN NAIP CIR DATA IS RED GREEN BLUE NIR (1,2,3,4)
 
-
-## pull up guidance data
+## step 0: Prep the NAIP scenes that cover the field plots
 guide <- read.csv("docs/MA_Edge_Coordinates.csv", stringsAsFactors = F)
+loc <- unique(guide$NAIP.scene)
+loc1 <- substr(loc, start=1, stop=12)
+loc2 <- substr(loc, start=13, stop=14)
+loc3 <- substr(loc, start=17, stop=24)
+loc.f <- paste(loc1, loc2, "h", loc3, sep="_")
+ndvi.calc <- function(x,y){
+  n <- (x[]-y[])/(x[]+y[])
+  return(n)
+}
+for(s in 1:length(loc.f)){
+  tmp <- stack(paste("data/NAIP/", loc.f[s], "/", loc.f[s], ".tif", sep=""))
+  tmp.n <- overlay(x = tmp[[4]], y = tmp[[1]], fun=ndvi.calc, 
+                   filename=paste("data/NAIP/", loc.f[s], "/", loc.f[s], "ndvi.tif", sep=""),
+                   format="GTiff", overwrite=T)
+  
+}
+
+### step 1: extract data from NAIP ndvi for each plot at each distance polygon
+bounds <- unique(guide$Plot_ID)
+bounds <- bounds[!bounds %in% c("UFFAA", "UFFAB", "UFFAC", "UFFAD", "UDDAE", "UFFAF", "UFFLA", "UFFLB", "R2", "R12")]
+main <- data.frame()
+for(b in 1:length(bounds)){
+  ## load up corresponding NAIP scene
+  loc <- guide$NAIP.scene[guide$Plot_ID==bounds[b]]
+  loc1 <- substr(loc, start=1, stop=12)
+  loc2 <- substr(loc, start=13, stop=14)
+  loc3 <- substr(loc, start=17, stop=24)
+  loc.f <- paste(loc1, loc2, "h", loc3, sep="_")
+  r <- raster(paste("data/NAIP/", loc.f, "/", loc.f, "ndvi.tif", sep="") )
+
+  ### make a data frame of the plot boundaries over the NDVI cropped
+  tmp <- readOGR(dsn = paste("processed/zones/", bounds[b], "_50m.shp", sep=""),
+                 layer=paste(bounds[b], "_50m", sep=""), verbose=F)
+  tmp <- spTransform(tmp, crs(r))
+  r <- crop(r, tmp)
+  tmp.dat <- as.vector(r)
+  tmp@data$include <- 1
+  buff.tmp <- rasterize(tmp[tmp@data$include], r, background=0)
+  tmp.dat <- cbind(tmp.dat, as.vector(buff.tmp))
+  
+  dist <- c(10,20,30,40)
+  for(d in 1:length(dist)){
+    tmp <- readOGR(dsn = paste("processed/zones/", bounds[b], "_", dist[d], "m.shp", sep=""),
+                   layer=paste(bounds[b], "_", dist[d], "m", sep=""), verbose=F)
+    tmp <- spTransform(tmp, crs(r))
+    tmp@data$include <- 1
+    buff.tmp <- rasterize(tmp[tmp@data$include], r, background=0)
+    tmp.dat <- cbind(tmp.dat, as.vector(buff.tmp))
+  }
+  tmp.dat <- as.data.frame(tmp.dat)
+  tmp.dat$plot <- rep(bounds[b], dim(tmp.dat)[1])
+  names(tmp.dat) <- c("ndvi", "buff50", "buff10", "buff20", "buff30", "buff40", "plot")
+  main <- rbind(main, tmp.dat)
+  print(paste("processed plot", bounds[b]))
+}
+
+write.csv(main, "processed/plot.buffers.ndvi.csv")
+
+
+
+## For ANDY plots: process NAIP data
 
 bounds <- c("UFFLA", "UFFLB", "R18", "R19", "R20") # list of plots to look at
 res <- data.frame()
@@ -24,7 +84,7 @@ for(b in 1:length(bounds)){
   loc3 <- substr(loc, start=17, stop=24)
   loc.f <- paste(loc1, loc2, "h", loc3, sep="_")
   n <- stack(paste("data/NAIP/", loc.f, "/", loc.f, ".tif", sep=""))
-  if(substr(bounds[b], 1, 1)=="R"){ ## rope plots go in 50m
+  if(substr(bounds[b], 1, 1) %in% "R"){ ## rope plots go in 50m
     whole <- readOGR(dsn = paste("processed/zones/", bounds[b], "_50m.shp", sep=""),
                      layer=paste(bounds[b],"_50m", sep=""))
     whole@data$include <- 1
