@@ -297,16 +297,16 @@ sum(frog.n) #only 73 pixels differ on the %cover canopy vs. canopy edge classes
 
 
 ## do we get sensible figures for vegisa?
-dat[can>0, range(vegisa)] # 0 to 98% vegisa (this is not likely)
+dat[can>0, range(vegisa)] # 0 to 100% vegisa (this is not likely)
 hist(dat[can>0, vegisa]) # a long tail of >0.6 vegisa wtf
 duck <- dat[vegisa>can,]
-View(duck) ## using 
-hist(duck[,can-vegisa])
-dat[,vegisa.fucked:=0]
-dat[vegisa>can, vegisa.fucked:=1]
-r.duck <- raster("processed/boston/bos.aoi30m.tif")
-r.duck <- setValues(r.duck, values = dat[,vegisa.fucked])
-r.duck <- writeRaster(r.duck, "processed/boston/vegisa.fucked.tif", format="GTiff", overwrite=T)
+plot(duck$can, duck$vegisa) ## vegisa always > can, but usually not by much
+hist(duck$can-duck$vegisa) # most are within 0.2 of each other (is vegisa including non-barren in its calc?)
+# dat[,vegisa.fucked:=0]
+# dat[vegisa>can, vegisa.fucked:=1]
+# r.duck <- raster("processed/boston/bos.aoi30m.tif")
+# r.duck <- setValues(r.duck, values = dat[,vegisa.fucked])
+# r.duck <- writeRaster(r.duck, "processed/boston/vegisa.fucked.tif", format="GTiff", overwrite=T)
 
 # 
 # ### look at values binned by evi range
@@ -411,17 +411,17 @@ a[can>0,vegisa.frac:=vegisa/can]
 a[can==0, ed10.frac:=NA]
 a[ed10.frac>1, ed10.frac:=NA]
 a[can==0, vegisa.frac:=NA]
-dog <- a[,.(m.evi=mean(evi, na.rm=T), 
-            m.ndvi=mean(ndvi, na.rm=T),
-            m.barr=mean(barr, na.rm=T),
-            m.can=mean(can, na.rm=T),
-            m.isa=mean(isa, na.rm=T),
-            m.grass=mean(grass, na.rm=T),
-            m.vegisa=mean(vegisa, na.rm=T),
-            m.nonimpbarr=mean(nonimpbarr, na.rm=T),
-            m.ed10=mean(ed10, na.rm=T),
-            m.ed10frac=mean(ed10.frac, na.rm=T),
-            m.vegisafrac=mean(vegisa.frac, na.rm=T),
+dog <- a[,.(m.evi=median(evi, na.rm=T), 
+            m.ndvi=median(ndvi, na.rm=T),
+            m.barr=median(barr, na.rm=T),
+            m.can=median(can, na.rm=T),
+            m.isa=median(isa, na.rm=T),
+            m.grass=median(grass, na.rm=T),
+            m.vegisa=median(vegisa, na.rm=T),
+            m.nonimpbarr=median(nonimpbarr, na.rm=T),
+            m.ed10=median(ed10, na.rm=T),
+            m.ed10frac=median(ed10.frac, na.rm=T),
+            m.vegisafrac=median(vegisa.frac, na.rm=T),
             count=.N), by=bin]
 dog[,count.frac:=count/sum(count)]
 
@@ -475,20 +475,70 @@ ggplot(dog, aes(x=m.can, y=m.ed10frac))+geom_point(aes(size=count.frac))+labs(ti
 ### same idea: only when canopy cover is >0.4 do you get interior canopies
 ### another thing: Even 100% canopy is still 50% edge (???)
 
+veg <- dog[bin==1, m.evi]
+noveg <- dog[bin==99, m.evi]
+beta.range <- seq(from=dog[,min(m.barr)], to=dog[,max(m.barr)], length.out = dog[,length(unique(bin))])
+Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
+dog <- dog[order(bin),]
+dog[,Vzi:=Vzi]
+
 ggplot(dog, aes(x=m.ed10, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="area canopy <10m edge")
 ggplot(dog, aes(x=m.ed10frac, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="fraction edge canopy vs EVI")
 ggplot(dog, aes(x=m.can, y=m.evi, colour=m.ed10frac))+
   geom_point(aes(size=count.frac))+
   labs(title="Canopy vs EVI")+
-  scale_color_continuous(low="darkgreen", high="salmon", limits=c(0.45, 1))
+  scale_color_continuous(low="darkgreen", 
+                         high="salmon", 
+                         limits=c(0.45, 1),
+                         guide=guide_legend(title="Fraction <10m"))
 ggplot(dog, aes(x=m.barr, y=m.evi, colour=m.ed10frac))+
   geom_point(aes(size=count.frac))+
-  labs(title="Barren vs EVI")+
-  scale_color_continuous(low="darkgreen", high="salmon", limits=c(0.45, 1))
+  labs(x="Fraction barren", y="Median 30m EVI")+
+  labs(title="Barren vs EVI, 30m Landsat (Boston)")+
+  scale_color_continuous(low="darkgreen", 
+                         high="salmon", 
+                         limits=c(0.45, 1),
+                         guide=guide_legend(title="Fraction <10m"))+
+  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
 
-plot(dog$m.evi, dog$m.ndvi)
 
+### inverse: %Veg vs. VI
 
+### EVI 30m landsat
+veg <- dog[bin==1, m.evi]
+noveg <- dog[bin==99, m.evi]
+beta.range <- seq(from=dog[,min(m.barr)], to=dog[,max(m.barr)], length.out = dog[,length(unique(bin))])
+Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
+dog <- dog[order(bin),]
+dog[,Vzi:=Vzi]
+
+ggplot(dog, aes(x=1-m.barr, y=m.evi, colour=m.ed10frac))+
+  geom_point(aes(size=count.frac))+
+  labs(x="Frac. Vegetation", y="Median 30m EVI")+
+  labs(title="%Veg vs EVI, 30m Landsat (Boston)")+
+  scale_color_continuous(low="darkgreen", 
+                         high="salmon", 
+                         limits=c(0.45, 1),
+                         guide=guide_legend(title="Fraction <10m"))+
+  geom_abline(intercept=noveg, slope=(veg-noveg), color="red", linetype="dashed", size=1.2)
+
+### now the aggregated 1m NDVI
+
+veg <- dog[bin==1, m.ndvi]
+noveg <- dog[bin==99, m.ndvi]
+beta.range <- seq(from=dog[,min(m.barr)], to=dog[,max(m.barr)], length.out = dog[,length(unique(bin))])
+Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
+dog <- dog[order(bin),]
+dog[,Vzi:=Vzi]
+ggplot(dog, aes(x=1-m.barr, y=m.ndvi, colour=m.ed10frac))+
+  geom_point(aes(size=count.frac))+
+  labs(x="% vegetation", y="Mean 1m NDVI")+
+  labs(title="% Veg. vs 1m NDVI by 30m footprint (Boston)")+
+  scale_color_continuous(low="darkgreen", 
+                         high="salmon", 
+                         limits=c(0.45, 1),
+                         guide=guide_legend(title="Fraction <10m"))+
+  geom_abline(intercept=noveg, slope=(veg-noveg), color="red", linetype="dashed", size=1.2)
 
 
 
@@ -503,9 +553,6 @@ dog <- a[,.(m.evi=mean(evi, na.rm=T),
 dog[,count.frac:=count/sum(count)]
 ggplot(dog, aes(x=m.isa, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="Canopy")
 # classic decline, falls steeply above first step at 0, bellies out at higher ISA, crashes again at end (looks like full AOI)
-
-
-
 
 
 ## ed10

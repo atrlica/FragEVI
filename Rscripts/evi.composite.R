@@ -13,7 +13,7 @@ files <- files[!grepl(files, pattern="tar")]
 scn.yr <- c(2010, 2011, 2012)
 files <- files[substr(files, 16,19) %in% scn.yr]
 
-### process each file down to a QA-filtered EVI/NDVI stack
+### process each file down to a QA-filtered EVI/NDVI/NIR stack
 for(f in 1:length(files)){
   dir <- paste(set.dir, files[f], sep="")
   scn.ID <- paste(substr(files[f], 1,4), substr(files[f], 9, 14), substr(files[f], 16, 23), sep="_")
@@ -50,15 +50,21 @@ for(f in 1:length(files)){
     ## caluclate NDVI and EVI
     ndvi <- temp.dat[,(SR.B4-SR.B3)/(SR.B4+SR.B3)]
     evi <- temp.dat[, 2.5*((SR.B4-SR.B3)/(SR.B4+6*SR.B3-7.5*SR.B1+1))]
+    nirv <- ndvi*temp.dat[,SR.B4]
     
+    ### is this step really necessary? why not make a data frame for each VI with a column for each scene?
     ### rebuild rasters
     ndvi.r <- setValues(temp[[1]], ndvi)
     evi.r <- setValues(temp[[1]], evi)
+    nirv.r <- setValues(temp[[1]], nirv)
     writeRaster(ndvi.r,
                 filename=paste("processed/NDVI/ARD_", scn.ID, "_NDVI.tif", sep=""),
                 format="GTiff", overwrite=T)
     writeRaster(evi.r,
                 filename=paste("processed/EVI/ARD_", scn.ID, "_EVI.tif", sep=""),
+                format="GTiff", overwrite=T)
+    writeRaster(nirv.r,
+                filename=paste("processed/NIRV/ARD_", scn.ID, "_NIRV.tif", sep=""),
                 format="GTiff", overwrite=T)
     }
   print(paste("finished with ", scn.ID, sep=""))
