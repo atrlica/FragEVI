@@ -44,6 +44,3 @@ for b in range(0,3):
     except Exception as e:
         print(e)
 
-
-
-

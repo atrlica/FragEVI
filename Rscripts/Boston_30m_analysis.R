@@ -54,6 +54,14 @@ ggplot(aes(x=m.isa, y=m.evi), data=evi.bin)+
   labs(title="EVI vs. ISA by bin, 30m", x="Frac. ISA", y="Median EVI")+
   geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
 
+## fractional veg in high-res pixels vs. EVI in 30m pixels
+ggplot(aes(x=1-m.isa, y=m.evi), data=evi.bin)+
+  geom_point(aes(size=bin.frac), colour="green")+
+  scale_size_continuous(range=c(2, 8), breaks=c(0.01, 0.02, 0.40), name="% total")+
+  labs(title="EVI vs. Frac. Veg by bin, 30m", x="Frac. Veg", y="Median EVI")+
+  geom_abline(intercept=noveg, slope=(veg-noveg), color="red", linetype="dashed", size=1.2)
+
+
 ggplot(aes(x=m.isa, y=m.evi-Vzi[1:100]), data=evi.bin)+
   geom_point(aes(size=bin.frac), colour="blue")+
   labs(title="EVI enhancement", x="Frac. ISA", y="EVI enhancement")+
@@ -397,10 +405,12 @@ Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
 dat[,ed10.frac:=ed10/can]
 dat[ed10.frac>1, ed10.frac:=NA]
 dat[water<0.02, bin:=findInterval(barr, beta.range, all.inside=F)]
-evi.bin <- dat[water<0.02, .(m.barr=median(barr, na.rm=T), 
-                           m.evi=median(evi, na.rm=T),
-                           m.can=median(can, na.rm=T),
-                           m.ed10.frac=median(ed10.frac, na.rm=T),
+evi.bin <- dat[water<0.02, .(m.barr=median(barr, na.rm=T),
+                             m.isa=median(isa, na.rm=T),
+                             m.can=median(can, na.rm=T),
+                             m.ed10.frac=median(ed10.frac, na.rm=T),
+                             m.evi=median(evi, na.rm=T),
+                             m.ndvi=median(ndvi, na.rm=T),
                            bin.count=.N), by=bin]
 evi.bin <- evi.bin[order(m.barr),]
 tot <- evi.bin[,sum(bin.count)]
@@ -418,9 +428,18 @@ ggplot(evi.bin, aes(x=m.barr, y=m.evi, colour=m.ed10.frac))+
   scale_color_continuous(low="darkgreen", high="salmon", limits=c(0.45, 1), name="% <10m")+
   scale_size_continuous(name="% total", breaks=c(0.01, 0.02, 0.10), range=c(2, 8))+
   geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
+### contrast to the NDVI from the aggregated fine-scale pixels
+veg <- dat[barr<0.01  & water<0.02, median(ndvi, na.rm=T)]
+noveg <- dat[barr>=0.99 & water<0.02, median(ndvi, na.rm=T)]
+beta.range <- seq(from=0, to=1, by=0.01) 
+Vzi <- ((1-beta.range)*veg)+(beta.range*noveg)
 
-
-plot(dog$m.evi, dog$m.ndvi)
+ggplot(evi.bin, aes(x=m.barr, y=m.ndvi, colour=m.ed10.frac))+
+  geom_point(aes(size=bin.frac))+
+  labs(title="Barren vs aggregated NDVI, Boston", x="Barren Frac.", y="Median EVI")+
+  scale_color_continuous(low="darkgreen", high="salmon", limits=c(0.45, 1), name="% <10m")+
+  scale_size_continuous(name="% total", breaks=c(0.01, 0.02, 0.10), range=c(2, 8))+
+  geom_abline(intercept=veg, slope=(noveg-veg), color="red", linetype="dashed", size=1.2)
 
 
 
@@ -577,7 +596,6 @@ ggplot(dog, aes(x=m.dev, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="
 
 
 #######
-### pure pixels analysis
 #### Analysis of 30m Boston data with 1m cover fractions
 dat <- read.csv("processed/boston.30m.agg.csv")
 dat <- as.data.table(dat)
@@ -586,7 +604,7 @@ dat <- dat[aoi>675,] # only take pixels that have >75% sub-pixel data == 134k pi
 bin.range <- seq(from=dat[,min(isa, na.rm=T)], to=dat[,max(isa, na.rm=T)], length.out = 100)
 dat[, isa.bin:=findInterval(isa, bin.range, all.inside=T)] ## set up markers for isa bin ranges
 bin.range <- seq(from=dat[,min(barr, na.rm=T)], to=dat[,max(barr, na.rm=T)], length.out = 100)
-dat[, isa.bin:=findInterval(barr, bin.range, all.inside=T)] ## set up markers for isa bin ranges
+dat[, isa.bin:=findInterval(barr, bin.range, all.inside=T)] ## set up markers for barr bin ranges
 
 
 ### set up median tables for the different LULC classes and combine for plotting
@@ -722,10 +740,6 @@ ggplot(puro, aes(x=m.barr, y=m.visafrac, color=pure.class, size=count.frac))+
   geom_point()+labs(title="%Canopy over ISA vs. ISA", colour="LULC class", size="Relative %", x="ISA", y="Fraction of Vegetation over ISA")+
   # scale_size("% of LULC", range=c(0,8))+
   scale_size(range=c(1,10),breaks=c(0, 0.01, 0.02, 0.05, 0.10, 0.40),labels=c(">=0",">=1%",">=2%",">=5%",">=10%",">=40%"),guide="legend")## fine but point sizes are shitballs
-
-
-### same analysis viz. barren fraction
-
 
 
 
