@@ -2,19 +2,18 @@
 library(raster)
 library(data.table)
 
-## figure out which files are there, target scene years, and work each file separately
+### swap tile to do N and south
+tile <- "030005"
+tile <- "030006"
 set.dir <- "data/landsat/bulk/"  ### for tile 030/006 (~p12r31)
+med.fun <- function(x){median(x, na.rm=T)}
+
+## figure out which files are there, target scene years, and work each file separately
 scenes <- list.files(set.dir)
 scenes <- unique(substr(scenes, 1, 23))
 scn.yr <- c(2010, 2011, 2012)
 scenes <- scenes[substr(scenes, 16,19) %in% scn.yr]
-med.fun <- function(x){median(x, na.rm=T)}
-
-### process each file down to a QA-filtered EVI/NDVI/NIR stack
-
-### swap tile to do N and south
-scenes <- scenes[grep(scenes, pattern="030005")]
-# scenes <- scenes[grep(scenes, pattern="030006")]
+scenes <- scenes[grep(scenes, pattern=tile)]
 dump.ndvi <- list()
 dump.evi <- list()
 dump.nirv <- list()
@@ -51,6 +50,8 @@ for(f in 1:length(scenes)){
   temp.dat[,c("SR.B1", "SR.B3", "SR.B4"):= lapply(.SD, function(x) x*0.0001)]
   
   ## 
+  #### I am beginnin to suspect that this would go faster to just produce rasters of every scene's VI, then do a block
+  ### function to median the mess togetherand write a final mosaic
   ## caluclate NDVI and EVI
   dump.ndvi[[f]] <- temp.dat[,(SR.B4-SR.B3)/(SR.B4+SR.B3)]
   dump.evi[[f]] <- temp.dat[, 2.5*((SR.B4-SR.B3)/(SR.B4+6*SR.B3-7.5*SR.B1+1))]
@@ -73,67 +74,50 @@ for(f in 1:length(scenes)){
   print(paste("finished exracting VIs for ", scn.ID, sep=""))
 }
 
-### work through this one VI at a time
-dump.m<- matrix(unlist(dump.ndvi), ncol=length(dump.ndvi), byrow=FALSE)
-v <- vector()
-targ <- raster(paste(set.dir, bands.sr[1], sep=""))
-chunks=100
-r <- seq(1, length.out=chunks, by=ncell(targ)/chunks)
-for(a in 1:length(r)){
-  v <- c(v, apply(dump.m[(r[a]:(r[a]+ncell(targ)/chunks)),], 1, med.fun))
-  print(paste("chunk", a))
-}
+## get this shit on disk to free up resources
+save(dump.evi, file="processed/dump/dump.evi")
+rm(dump.evi)
+save(dump.ndvi, file="processed/dump/dump.ndvi")
+rm(dump.ndvi)
+save(dump.nirv, file="processed/dump/dump.nirv")
+rm(dump.nirv)
 
+## get median values, write rasters
+load("processed/dump/dump.ndvi")
 dump.m<- as.data.table(matrix(unlist(dump.ndvi), ncol=length(dump.ndvi), byrow=FALSE))
-dump.m[, vi.med:=med.fun(.SD), by=row.names(dump.m)]
-
-## stuck here -- can't figure out how to get a fast calculation of the median of the different scene days to write to raster -- too long on 25Mx13 matrix
-## pick through the dump files, median values, write as raster
-proc.bl <- function(x, y, c, filename) { # x is input raster, y is matrix of VI values by aquisition date, c is # chunks to break the job into
-  dump.m<- matrix(unlist(dump.ndvi), ncol=length(dump.ndvi), byrow=FALSE)
-  v <- vector()
-  targ <- x
-  chunks=100
-  r <- seq(1, length.out=chunks, by=ncell(targ)/chunks)
-  for(a in 1:length(r)){
-    v <- c(v, apply(dump.m[(r[a]:(r[a]+ncell(targ)/chunks)),], 1, med.fun))
-    print(paste("chunk", a))
-  }
-  out <- raster(x)
-  bs <- blockSize(out)
-  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
-  for (i in 1:bs$n) {
-    vi <- y
-    out <- writeValues(out, y, bs$row[i])
-    print(paste("finished 1m cover block", i, "of", bs$n))
-  }
-  out <- writeStop(out)
-  return(out)
-}
-bos.cov <- cover.bl(bos.can, bos.ndvi, filename="processed/bos.cov.tif")
-
-
-
-
-test <- dump.m[1:3000000,]
-v <- apply(test, 1, med.fun)
-ndvi.r <- setValues(temp[[1]], v, 
-                    filename=paste("processed/NDVI/", scn.ID, "_NDVI.tif", sep=""),
+rm(dump.ndvi)
+dump.m[, vi.med:=apply(dump.m, 1, FUN=med.fun)]
+ndvi.r <- setValues(temp[[1]], dump.m[,vi.med])
+writeRaster(ndvi.r, filename=paste("processed/NDVI/", tile, "_NDVI.tif", sep=""),
                     format="GTiff", overwrite=T)
-dump.m<- matrix(unlist(dump.evi), ncol=length(dump.evi), byrow=FALSE)
-evi.r <- writeRaster(setValues(temp[[1]], apply(dump.m, 1, FUN = med.fun)),
-                      filename=paste("processed/EVI/", scn.ID, "_EVI.tif", sep=""),
-                      format="GTiff", overwrite=T)
-dump.m<- matrix(unlist(dump.nirv), ncol=length(dump.nirv), byrow=FALSE)
-nirv.r <- writeRaster(setValues(temp[[1]], apply(dump.m, 1, FUN = med.fun)),
-                      filename=paste("processed/NIRV/", scn.ID, "_NIRV.tif", sep=""),
-                      format="GTiff", overwrite=T)
+rm(dump.m)
 
 
-## composite the N and S tiles in each VI
-n <- raster()
+load("processed/dump/dump.evi")
+dump.m<- as.data.table(matrix(unlist(dump.evi), ncol=length(dump.evi), byrow=FALSE))
+rm(dump.evi)
+dump.m[, vi.med:=apply(dump.m, 1, FUN=med.fun)]
+evi.r <- setValues(temp[[1]], dump.m[,vi.med])
+writeRaster(evi.r, filename=paste("processed/EVI/", tile, "_EVI.tif", sep=""),
+            format="GTiff", overwrite=T)
+rm(dump.m)
+
+load("processed/dump/dump.nirv")
+dump.m<- as.data.table(matrix(unlist(dump.nirv), ncol=length(dump.nirv), byrow=FALSE))
+rm(dump.nirv)
+dump.m[, vi.med:=apply(dump.m, 1, FUN=med.fun)]
+nirv.r <- setValues(temp[[1]], dump.m[,vi.med])
+writeRaster(nirv.r, filename=paste("processed/nriv/", tile, "_NIRV.tif", sep=""),
+            format="GTiff", overwrite=T)
+rm(dump.m)
 
 
+
+
+
+
+
+### raster-based approach
 
 # ## load up rasters, strip, combine, and mosaic
 # r.files <- list.files("~/Desktop/FragEVI/processed/EVI/")
