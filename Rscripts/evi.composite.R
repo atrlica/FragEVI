@@ -1,10 +1,13 @@
 ### process landsat scenes to produce NDVI/EVI composites
 library(raster)
 library(data.table)
+library(rgeos)
+library(rgdal)
+library(sp)
 
 ### swap tile to do N and south
 tile <- "030005"
-tile <- "030006"
+# tile <- "030006"
 set.dir <- "data/landsat/bulk/"  ### for tile 030/006 (~p12r31)
 med.fun <- function(x){median(x, na.rm=T)}
 
@@ -107,12 +110,24 @@ dump.m<- as.data.table(matrix(unlist(dump.nirv), ncol=length(dump.nirv), byrow=F
 rm(dump.nirv)
 dump.m[, vi.med:=apply(dump.m, 1, FUN=med.fun)]
 nirv.r <- setValues(temp[[1]], dump.m[,vi.med])
-writeRaster(nirv.r, filename=paste("processed/nriv/", tile, "_NIRV.tif", sep=""),
+writeRaster(nirv.r, filename=paste("processed/NIRV/", tile, "_NIRV.tif", sep=""),
             format="GTiff", overwrite=T)
 rm(dump.m)
 
 
+### make final mosaic in local UTM
 
+AOI <- readOGR(dsn="data/AOI/AOI_simple_NAD83UTM19N/AOI_simple_NAD83UTM19N.shp", layer="AOI_simple_NAD83UTM19N")
+master.crs <- crs(AOI)
+for(a in c("NDVI", "EVI", "NIRV")){
+  n <- raster(paste("processed/", a, "/030005_", a, ".tif", sep=""))
+  s <- raster(paste("processed/", a, "/030006_", a, ".tif", sep=""))
+  f <- mosaic(n, s, fun=mean, na.rm=T, 
+              filename=paste("processed/", a, "/AOI.Lsat.", min(scn.yr), "-", max(scn.yr), ".", a, ".tif", sep=""),
+              format="GTiff", overwrite=T)
+  print(paste("finished mosaic", a))
+                     
+}
 
 
 

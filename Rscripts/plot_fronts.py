@@ -46,6 +46,23 @@ for a in range(0,nfronts):
         print(e)
 
 
+plots = ["UFFAF", "UFFAA", "UFFAB", "UFFLA", "UFFLB"]
+side = ["RIGHT", "LEFT", "LEFT", "RIGHT", "RIGHT"]
+buffs = [10, 20, 30]
+nfronts = len(plots)
+for a in range(0,nfronts):
+    try:
+        front="E:/FragEVI/processed/zones/"+str(plots[a])+"_front.shp"
+        print("found front of plot "+str(plots[a]))
+        for b in range(0,5):
+              distField = str(buffs[b])+" Meters"
+              if arcpy.Exists("E:/FragEVI/processed/zones/"+str(plots[a])+"_"+str(buffs[b])+"m.shp"):
+                  arcpy.Delete_management("E:/FragEVI/processed/zones/"+str(plots[a])+"_"+str(buffs[b])+"m.shp")
+              frontBuff = arcpy.Buffer_analysis(in_features=front, out_feature_class="E:/FragEVI/processed/zones/"+str(plots[a])+"_"+str(buffs[b])+"m.shp", buffer_distance_or_field=distField, line_side=str(side[a]), line_end_type="FLAT", dissolve_option="NONE", dissolve_field="", method="PLANAR")
+              print("did " + str(buffs[b]) + "m front buffer and wrote .shp to /processed/zones")
+    except Exception as e:
+        print(e)
+
 ##
 ### plot R19 -- LEFT
 ##try:
