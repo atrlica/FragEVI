@@ -1,79 +1,143 @@
 ### process landsat scenes to produce NDVI/EVI composites
 library(raster)
 library(data.table)
+library(rgeos)
+library(rgdal)
+library(sp)
 
-## be sure to set correct local director
-write.files <- FALSE ### force raster rewrite
+### swap tile to do N and south
+tile <- "030005"
+# tile <- "030006"
+set.dir <- "data/landsat/bulk/"  ### for tile 030/006 (~p12r31)
+med.fun <- function(x){median(x, na.rm=T)}
 
 ## figure out which files are there, target scene years, and work each file separately
-set.dir <- "data/landsat/ARDsr_030006_072005-072013/"  ### for tile 030/006 (~p12r31)
-# set.dir <- "data/landsat/ARDsr_030005_072005-072013/"  ### for tile 030/005 (~p12r30)
-files <- list.files(set.dir)
-files <- files[!grepl(files, pattern="tar")]
+scenes <- list.files(set.dir)
+scenes <- unique(substr(scenes, 1, 23))
 scn.yr <- c(2010, 2011, 2012)
-files <- files[substr(files, 16,19) %in% scn.yr]
-
-### process each file down to a QA-filtered EVI/NDVI/NIR stack
-for(f in 1:length(files)){
-  dir <- paste(set.dir, files[f], sep="")
-  scn.ID <- paste(substr(files[f], 1,4), substr(files[f], 9, 14), substr(files[f], 16, 23), sep="_")
-  bands <- list.files(dir)
+scenes <- scenes[substr(scenes, 16,19) %in% scn.yr]
+scenes <- scenes[grep(scenes, pattern=tile)]
+dump.ndvi <- list()
+dump.evi <- list()
+dump.nirv <- list()
+for(f in 1:length(scenes)){
+  scn.ID <- scenes[f]
+  bands <- list.files(set.dir)
+  bands <- bands[substr(bands, 1, 23) == scn.ID]
   bands.sr <- bands[grep(bands, pattern ="SRB")]
   bands.qa <- bands[grep(bands, pattern="PIXELQA")]
   
-  if(write.files | !file.exists(paste("processed/EVI/ARD_", scn.ID, "_EVI.tif", sep=""))){
-    
-    ## load up the band stack
-    temp <- stack(paste(dir, bands.sr[1], sep="/"))
-    for(g in 2:length(bands.sr)){
-      temp[[g]] <- raster(paste(dir, bands.sr[g], sep="/"))
-      }
-    
-    ### convert to data.table and QA filter
-    temp.dat <- as.data.table(as.data.frame(temp))
-    qa.dat <- as.data.table(as.data.frame(raster(paste(dir, bands.qa, sep="/"))))
-    temp.dat <- cbind(temp.dat, qa.dat)
-    names(temp.dat) <- c("SR.B1", "SR.B2", "SR.B3", "SR.B4", "SR.B5", "SR.B7", "QA")
-    temp.dat[!QA%in%c(66,130), c("SR.B1", "SR.B2","SR.B3", "SR.B4", "SR.B5", "SR.B7"):=NA] ### kill values out of QA spec
-    
-    ## eliminate saturated values
-    temp.dat[SR.B1>10000,] <- NA
-    temp.dat[SR.B2>10000,] <- NA
-    temp.dat[SR.B3>10000,] <- NA
-    temp.dat[SR.B4>10000,] <- NA
-    temp.dat[SR.B5>10000,] <- NA
-    temp.dat[SR.B7>10000,] <- NA
-    
-    ## scale values
-    temp.dat[,c("SR.B1", "SR.B2", "SR.B3", "SR.B4", "SR.B5", "SR.B7"):= lapply(.SD, function(x) x*0.0001)]
-    
-    ## caluclate NDVI and EVI
-    ndvi <- temp.dat[,(SR.B4-SR.B3)/(SR.B4+SR.B3)]
-    evi <- temp.dat[, 2.5*((SR.B4-SR.B3)/(SR.B4+6*SR.B3-7.5*SR.B1+1))]
-    nirv <- ndvi*temp.dat[,SR.B4]
-    
-    ### is this step really necessary? why not make a data frame for each VI with a column for each scene?
-    ### rebuild rasters
-    ndvi.r <- setValues(temp[[1]], ndvi)
-    evi.r <- setValues(temp[[1]], evi)
-    nirv.r <- setValues(temp[[1]], nirv)
-    writeRaster(ndvi.r,
-                filename=paste("processed/NDVI/ARD_", scn.ID, "_NDVI.tif", sep=""),
-                format="GTiff", overwrite=T)
-    writeRaster(evi.r,
-                filename=paste("processed/EVI/ARD_", scn.ID, "_EVI.tif", sep=""),
-                format="GTiff", overwrite=T)
-    writeRaster(nirv.r,
-                filename=paste("processed/NIRV/ARD_", scn.ID, "_NIRV.tif", sep=""),
-                format="GTiff", overwrite=T)
-    }
-  print(paste("finished with ", scn.ID, sep=""))
+
+  ## load up the necessary bands
+  grabby <- c("SRB1", "SRB3", "SRB4")
+  temp <- stack()
+  for(g in 1:3){
+    yep <- bands.sr[grep(bands.sr, pattern=grabby[g])]
+    temp <- stack(temp, raster(paste(set.dir, yep, sep="")))
+  }
+
+  ### convert to data.table and QA filter
+  temp.dat <- as.data.table(as.data.frame(temp))
+  qa.dat <- as.data.table(as.data.frame(raster(paste(set.dir, bands.qa, sep=""))))
+  temp.dat <- cbind(temp.dat, qa.dat)
+  names(temp.dat) <- c("SR.B1",  "SR.B3", "SR.B4", "QA")
+  temp.dat[!QA%in%c(66,130), c("SR.B1","SR.B3", "SR.B4"):=NA] ### kill values out of QA spec
+  
+  ## eliminate saturated values
+  temp.dat[SR.B1>10000, SR.B1:=NA] 
+  temp.dat[SR.B3>10000, SR.B3:=NA]
+  temp.dat[SR.B4>10000, SR.B4:=NA]
+
+  ## scale values
+  temp.dat <- temp.dat[,c("SR.B1", "SR.B3", "SR.B4")] # dump QA
+  temp.dat[,c("SR.B1", "SR.B3", "SR.B4"):= lapply(.SD, function(x) x*0.0001)]
+  
+  ## 
+  #### I am beginnin to suspect that this would go faster to just produce rasters of every scene's VI, then do a block
+  ### function to median the mess togetherand write a final mosaic
+  ## caluclate NDVI and EVI
+  dump.ndvi[[f]] <- temp.dat[,(SR.B4-SR.B3)/(SR.B4+SR.B3)]
+  dump.evi[[f]] <- temp.dat[, 2.5*((SR.B4-SR.B3)/(SR.B4+6*SR.B3-7.5*SR.B1+1))]
+  dump.nirv[[f]] <- temp.dat[,(SR.B4-SR.B3)/(SR.B4+SR.B3)]*temp.dat[,SR.B4]
+  
+  # ### is this step really necessary? why not make a data frame for each VI with a column for each scene?
+  # ### rebuild rasters
+  # ndvi.r <- setValues(temp[[1]], ndvi)
+  # evi.r <- setValues(temp[[1]], evi)
+  # nirv.r <- setValues(temp[[1]], nirv)
+  # writeRaster(ndvi.r,
+  #             filename=paste("processed/NDVI/ARD_", scn.ID, "_NDVI.tif", sep=""),
+  #             format="GTiff", overwrite=T)
+  # writeRaster(evi.r,
+  #             filename=paste("processed/EVI/ARD_", scn.ID, "_EVI.tif", sep=""),
+  #             format="GTiff", overwrite=T)
+  # writeRaster(nirv.r,
+  #             filename=paste("processed/NIRV/ARD_", scn.ID, "_NIRV.tif", sep=""),
+  #             format="GTiff", overwrite=T)
+  print(paste("finished exracting VIs for ", scn.ID, sep=""))
 }
 
-## load up rasters, strip, combine, and mosaic
-r.files <- list.files("~/Desktop/FragEVI/processed/EVI/")
-r.files <- r.files[!grepl(r.files, pattern=".xml")]
-r.files <- r.files[substr(r.files, 17, 20)%in%scn.yr]
+## get this shit on disk to free up resources
+save(dump.evi, file="processed/dump/dump.evi")
+rm(dump.evi)
+save(dump.ndvi, file="processed/dump/dump.ndvi")
+rm(dump.ndvi)
+save(dump.nirv, file="processed/dump/dump.nirv")
+rm(dump.nirv)
+
+## get median values, write rasters
+load("processed/dump/dump.ndvi")
+dump.m<- as.data.table(matrix(unlist(dump.ndvi), ncol=length(dump.ndvi), byrow=FALSE))
+rm(dump.ndvi)
+dump.m[, vi.med:=apply(dump.m, 1, FUN=med.fun)]
+ndvi.r <- setValues(temp[[1]], dump.m[,vi.med])
+writeRaster(ndvi.r, filename=paste("processed/NDVI/", tile, "_NDVI.tif", sep=""),
+                    format="GTiff", overwrite=T)
+rm(dump.m)
+
+
+load("processed/dump/dump.evi")
+dump.m<- as.data.table(matrix(unlist(dump.evi), ncol=length(dump.evi), byrow=FALSE))
+rm(dump.evi)
+dump.m[, vi.med:=apply(dump.m, 1, FUN=med.fun)]
+evi.r <- setValues(temp[[1]], dump.m[,vi.med])
+writeRaster(evi.r, filename=paste("processed/EVI/", tile, "_EVI.tif", sep=""),
+            format="GTiff", overwrite=T)
+rm(dump.m)
+
+load("processed/dump/dump.nirv")
+dump.m<- as.data.table(matrix(unlist(dump.nirv), ncol=length(dump.nirv), byrow=FALSE))
+rm(dump.nirv)
+dump.m[, vi.med:=apply(dump.m, 1, FUN=med.fun)]
+nirv.r <- setValues(temp[[1]], dump.m[,vi.med])
+writeRaster(nirv.r, filename=paste("processed/NIRV/", tile, "_NIRV.tif", sep=""),
+            format="GTiff", overwrite=T)
+rm(dump.m)
+
+
+### make final mosaic in local UTM
+
+AOI <- readOGR(dsn="data/AOI/AOI_simple_NAD83UTM19N/AOI_simple_NAD83UTM19N.shp", layer="AOI_simple_NAD83UTM19N")
+master.crs <- crs(AOI)
+for(a in c("NDVI", "EVI", "NIRV")){
+  n <- raster(paste("processed/", a, "/030005_", a, ".tif", sep=""))
+  s <- raster(paste("processed/", a, "/030006_", a, ".tif", sep=""))
+  f <- mosaic(n, s, fun=mean, na.rm=T, 
+              filename=paste("processed/", a, "/AOI.Lsat.", min(scn.yr), "-", max(scn.yr), ".", a, ".tif", sep=""),
+              format="GTiff", overwrite=T)
+  print(paste("finished mosaic", a))
+                     
+}
+
+
+
+
+### raster-based approach
+
+# ## load up rasters, strip, combine, and mosaic
+# r.files <- list.files("~/Desktop/FragEVI/processed/EVI/")
+# r.files <- r.files[!grepl(r.files, pattern=".xml")]
+# r.files <- r.files[substr(r.files, 17, 20)%in%scn.yr]
 med.fun <- function(x){median(x, na.rm=T)}
 
 ### north raster combine and rebuild (row 005)
