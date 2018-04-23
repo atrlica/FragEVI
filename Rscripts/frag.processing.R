@@ -4,6 +4,8 @@ library(rgdal)
 library(rgeos)
 library(raster)
 library(data.table)
+library(qdapRegex)
+library(zoo)
 
 
 #########
@@ -11,7 +13,7 @@ library(data.table)
 ### combine 2.4m NDVI and canopy map to produce 1m veg classification map
 ### use Arcmap to resample + snap to 1m grid (bilinear) for NDVI 2.4m -- get good alignment with original data and features in canopy map
 
-# ### step 1: 1m Canopy presence/absence map 
+# ### step 1: 1m Canopy presence/absence map
 # bos.can <- raster("data/dataverse_files/bostoncanopy_1m.tif")
 
 # ### set no canopy (0) values to NA
@@ -55,7 +57,214 @@ library(data.table)
 # pyth.path = './Rscripts/canopy_process.py'
 # output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
 # print(output)
-# 
+
+### Canopy area by cumulative distance from edge
+bos.canF <- raster("processed/boston/bos_can01_filt.tif")
+# bos.can <- raster("data/dataverse_files/bostoncanopy_1m.tif")
+
+can.sum <- function(x) { # x is canopy 0/1 1m raster object
+  bs <- blockSize(x)
+  y <- integer()
+  for (i in 1:bs$n) {
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i])
+    v[v>1] <- NA  # for some reason some of the NA's are getting labeled as 120
+    y <- c(y, sum(v, na.rm=T))
+    print(paste("finished block", i, "of", bs$n))
+  }
+  return(y)
+}
+
+### get the total area of canopy (excluding tiny canopy gaps that are filtered in buffer calculations)
+can.buffs <- list.files("processed/boston/")
+can.buffs <- can.buffs[grep(pattern = "bos.nocan_", x = can.buffs)]
+can.buffs <- can.buffs[grep(pattern=".tif", x=can.buffs)]
+can.buffs <- can.buffs[!grepl(pattern = ".vat", x=can.buffs)]
+can.buffs <- can.buffs[!grepl(pattern = ".aux", x=can.buffs)]
+can.buffs <- can.buffs[!grepl(pattern = ".ovr", x=can.buffs)]
+buff.dist <- as.integer(unlist(rm_between(can.buffs, "nocan_", "mbuff", extract=TRUE)))
+
+### prep masking rasters
+## all of Boston
+# towns <- readOGR(dsn = "F:/BosAlbedo/data/towns/town_AOI.shp", layer = "town_AOI" )
+# bos.AOI <- towns[towns@data$TOWN=="BOSTON",]
+# bos.AOI <- bos.AOI[bos.AOI@data$SHAPE_AREA>1E07,] ## remove Harbor Islands
+# bos.AOI <- spTransform(bos.AOI, crs(bos.canF))
+# bos.AOI@data$include <- 1
+# bos.AOI.r <- rasterize(bos.AOI[bos.AOI@data$include], bos.canF)
+# ba.dat <- as.data.table(as.data.frame(bos.AOI.r))
+# ba.dat[!is.na(OBJECTID) | !is.na(OBJECTID.1), dogshit:=1] ## set all areas to same value
+# bos.AOI.r <- setValues(bos.AOI.r, ba.dat$dogshit)
+# writeRaster(bos.AOI.r, filename="processed/boston/bos.AOI.1m.tif", format="GTiff", overwrite=T)
+
+### whole area of canopy first
+print("getting total canopy and area for all Boston")
+ma <- raster("processed/boston/bos.AOI.1m.tif")
+# bos.canF<- mask(bos.canF, ma) ## masking takes awhile and isn't necessary for whole-city -- use mask for full area calc
+tot <- integer()
+dog <- can.sum(bos.canF)
+tot <- c(tot, sum(dog, na.rm=T))
+dist <- 0 ## keep track of the buffer distances as you process the rasters in whatever random order they come in
+area.tot <- can.sum(ma)
+area.tot <- sum(area.tot, na.rm=T)
+
+## now load up each 0/1 classed canopy raster (1 represents canopy interior to the indicated buffer distance -- areas diminish with greater buffer)
+for(g in 1:length(can.buffs)){
+  print(paste("working on", can.buffs[g]))
+  r <- raster(paste("processed/boston/", can.buffs[g], sep=""))
+  dog <- can.sum(r)
+  tot <- c(tot, sum(dog, na.rm=T))
+  dist <- c(dist, buff.dist[g])
+}
+results <- cbind(dist, tot)
+results <- results[order(dist),]
+results <- as.data.frame(results)
+colnames(results) <- c("dist", "pix.more.than")
+results$pix.less.than <- results$pix.more.than[1]-results$pix.more.than ## recall that this method completely leaves out any gap areas that are <50m2 -- neither counted as canopy nor as gap area
+results$less.rel <- results$pix.less.than/results$pix.more.than[1]
+results$frac.tot.area <- results$pix.less.than/area.tot
+plot(results$dist, results$less.rel) ## cumulative distribution of canopy edge
+write.csv(results, "processed/bos.can.cummdist.csv")
+
+### do same canopy area calcs for buffers in specific sub-areas
+hoods <- c("downtown", "jamaica", "allston", "southie", "dorchester", "hydepark", "common")
+
+
+### masks for individual test AOIs
+for(d in 1:length(hoods)){
+  print(paste("rasterizing", hoods[d]))
+  clipme <- readOGR(dsn=paste("processed/zones/bos.", hoods[d], ".shp", sep=""), layer=paste("bos.", hoods[d], sep=""))
+  # rasterize(clipme, bos.canF, format="GTiff", overwrite=T, filename=paste("processed/zones/bos.", hoods[d], ".tif", sep=""))
+  ma <- raster(paste("processed/zones/bos.", hoods[d], ".tif", sep=""))
+  ma <- crop(ma, extent(clipme))
+  writeRaster(ma, format="GTiff", overwrite=T, filename=paste("processed/zones/bos.", hoods[d], ".tif", sep=""))
+}
+
+### get 0 buffer canopy area first, then mask as you go
+for(d in 1: length(hoods)){
+  print(paste("initializing", hoods[d]))
+  rm(results)
+  tot <- integer()
+  dist <- 0
+  ma <- raster(paste("processed/zones/bos.", hoods[d], ".tif", sep=""))
+  area.tot <- sum(getValues(ma), na.rm=T) ## total size of the AOI
+  r <- raster("processed/boston/bos_can01_filt.tif")
+  r <- crop(r, ma)
+  r <- mask(r, ma)
+  dog <- can.sum(r)
+  tot <- c(tot, sum(dog, na.rm=T))
+  
+  for(g in 1:length(can.buffs)){
+    print(paste("working on", can.buffs[g], "in", hoods[d]))
+    r <- raster(paste("processed/boston/", can.buffs[g], sep=""))
+    r <- crop(r, ma)
+    r <- mask(r, ma)
+    dog <- can.sum(r)
+    tot <- c(tot, sum(dog, na.rm=T))
+    dist <- c(dist, buff.dist[g])
+  }
+  results <- cbind(dist, tot)
+  results <- results[order(dist),]
+  results <- as.data.frame(results)
+  colnames(results) <- c("dist", "pix.more.than")
+  results$pix.less.than <- results$pix.more.than[1]-results$pix.more.than ## recall that this method completely leaves out any gap areas that are <50m2 -- neither counted as canopy nor as gap area
+  results$less.rel <- results$pix.less.than/results$pix.more.than[1]
+  results$frac.tot.area <- results$pix.less.than/area.tot
+  write.csv(results, paste("processed/bos.can.cummdist.", hoods[d], ".csv", sep=""))
+}
+
+### combined plot, canopy edge area as fraction of total area
+results <- read.csv("processed/bos.can.cummdist.csv")
+hoods <- c("downtown", "jamaica", "allston", "southie", "dorchester", "hydepark", "common")
+cols=rainbow(length(hoods))
+plot(results$dist, results$frac.tot.area, pch=1, col="black", type="l", lwd=3, 
+     xlab="distance from edge (m)", ylab="area fraction",
+     ylim=c(0, 0.65))
+for(d in 1:length(hoods)){
+  dat <- read.csv(paste("processed/bos.can.cummdist.", hoods[d], ".csv", sep=""))
+  lines(dat$dist, dat$frac.tot.area, col=cols[d], type="l", lwd=2)
+}
+legend(x=60, y=0.4, bty = "n", legend=c("Boston", hoods), fill=c("black", cols))
+
+
+
+######
+### canopy edge area cumulative, extract by LULC collapsed classes
+bos.forest <- raster("processed/boston/bos.forest.tif")
+bos.dev <- raster("processed/boston/bos.dev.tif")
+bos.hd.res <- raster("processed/boston/bos.hd.res.tif")
+bos.med.res <- raster("processed/boston/bos.med.res.tif")
+bos.low.res <- raster("processed/boston/bos.low.res.tif")
+bos.lowveg <- raster("processed/boston/bos.lowveg.tif")
+bos.other <- raster("processed/boston/bos.other.tif")
+bos.water <- raster("processed/boston/bos.water.tif")
+
+### modify this to mask by row for the lulc analysis
+can.sum.ma <- function(x,m) { # x is canopy 0/1 1m raster object, m is mask
+  bs <- blockSize(x)
+  y <- integer()
+  for (i in 1:bs$n) {
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i])
+    z <- getValues(m, row=bs$row[i], nrows=bs$nrows[i])
+    v[v>1 | v<0] <- NA  # for some reason some of the NA's are getting labeled as 120
+    v[z!=1] <- 0 ## cancel values outside mask area
+    y <- c(y, sum(v, na.rm=T))
+    print(paste("finished block", i, "of", bs$n))
+  }
+  return(y)
+}
+
+lu.classes <- c("dev", "hd.res", "med.res", "low.res", "lowveg", "other")
+for(l in 1:length(lu.classes)){
+  print(paste("initializing", lu.classes[l]))
+  rm(results)
+  tot <- integer()
+  dist <- 0
+  ma <- raster(paste("processed/boston/bos.", lu.classes[l], ".tif", sep=""))
+  area.tot <- sum(getValues(ma), na.rm=T) ## total size of the AOI, forest =3% of whole canopy raster
+  r <- raster("processed/boston/bos_can01_filt.tif")
+  can.tot <- sum(getValues(r), na.rm=T) ### 12% of boston raster is canopy
+  # r <- crop(r, ma)
+  # r <- mask(r, ma, maskvalue=0)
+  # dog <- can.sum(r)
+  dog <- can.sum.ma(r, ma)
+  tot <- c(tot, sum(dog, na.rm=T))
+  
+  for(g in 1:length(can.buffs)){
+    print(paste("working on", can.buffs[g], "in", lu.classes[l]))
+    r <- raster(paste("processed/boston/", can.buffs[g], sep=""))
+    # r <- crop(r, ma)
+    # r <- mask(r, ma)
+    # dog <- can.sum(r)
+    dog <- can.sum.ma(r, ma)
+    tot <- c(tot, sum(dog, na.rm=T))
+    dist <- c(dist, buff.dist[g])
+  }
+  results <- cbind(dist, tot)
+  results <- results[order(dist),]
+  results <- as.data.frame(results)
+  colnames(results) <- c("dist", "pix.more.than")
+  results$pix.less.than <- results$pix.more.than[1]-results$pix.more.than ## recall that this method completely leaves out any gap areas that are <50m2 -- neither counted as canopy nor as gap area
+  results$less.rel <- results$pix.less.than/results$pix.more.than[1]
+  results$frac.tot.area <- results$pix.less.than/area.tot
+  write.csv(results, paste("processed/bos.can.cummdist.", lu.classes[l], ".csv", sep=""))
+}
+
+### combined plot, canopy edge area as fraction of total area (by LULC class)
+results <- read.csv("processed/bos.can.cummdist.csv")
+lu.classes <- c("forest", "dev", "hd.res", "med.res", "low.res", "lowveg", "other")
+cols=rainbow(length(lu.classes))
+plot(results$dist, results$frac.tot.area, pch=1, col="black", type="l", lwd=3, 
+     xlab="distance from edge (m)", ylab="area fraction",
+     ylim=c(0, 1))
+for(d in 1:length(lu.classes)){
+  dat <- read.csv(paste("processed/bos.can.cummdist.", lu.classes[d], ".csv", sep=""))
+  lines(dat$dist, dat$frac.tot.area, col=cols[d], type="l", lwd=2)
+}
+legend(x=60, y=0.9, bty = "n", legend=c("Boston", lu.classes), fill=c("black", cols))
+### forest is fucked up
+res.for <- read.csv("processed/bos.can.cummdist.forest.csv")
+
+
 # ### read in edge rasters and correct classifications to produce raster of edge rings (>10, 10-20, 20-30, >30)
 # bos.cov <- raster("processed/bos.cov.tif")
 # ed1 <- raster("processed/nocan_10mbuff.tif")
