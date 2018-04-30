@@ -253,12 +253,12 @@ for(l in 1:length(lu.classes)){
 results <- read.csv("processed/bos.can.cummdist.csv")
 lu.classes <- c("forest", "dev", "hd.res", "med.res", "low.res", "lowveg", "other")
 cols=rainbow(length(lu.classes))
-plot(results$dist, results$frac.tot.area, pch=1, col="black", type="l", lwd=3, 
-     xlab="distance from edge (m)", ylab="area fraction",
+plot(results$dist, results$less.rel, pch=1, col="black", type="l", lwd=3, 
+     xlab="distance from edge (m)", ylab="cummulative fraction",
      ylim=c(0, 1))
 for(d in 1:length(lu.classes)){
   dat <- read.csv(paste("processed/bos.can.cummdist.", lu.classes[d], ".csv", sep=""))
-  lines(dat$dist, dat$frac.tot.area, col=cols[d], type="l", lwd=2)
+  lines(dat$dist, dat$less.rel, col=cols[d], type="l", lwd=2)
 }
 legend(x=60, y=0.9, bty = "n", legend=c("Boston", lu.classes), fill=c("black", cols))
 ### forest is fucked up
