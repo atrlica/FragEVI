@@ -969,7 +969,7 @@ ggplot(dog, aes(x=m.can, y=m.evi))+geom_point(aes(size=count.frac))+labs(title="
 ######
 ###### MODIS 250m + 1 km analysis
 ### 250m analysis
-resolution <- 1000
+resolution <- 250
 if(resolution==250){dat <- read.csv("processed/AOI.250m.dat.csv")}
 if(resolution==1000){dat <- read.csv("processed/AOI.1km.dat.csv")}
 dat <- dat[,2:12]
