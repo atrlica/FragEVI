@@ -46,35 +46,28 @@ a <- a[order(a$V1, decreasing = T),]
 sum(a$V1[1:12])
 focus <- a$genus[1:12]
 ## dominated by Acer, Gleditsia, Tilia, Zlekova, Ulmus, Fraxinus
+
 plotme <- street[standing.dead.2014==0 & genus %in% focus,]
 plotme <- plotme[ann.npp>0,]
 plot(street$dbh.2014, street$ann.npp, ylim=c(0, 110))
 plot(plotme$dbh.2014, plotme$ann.npp)
 plot(plotme$biomass.2006, plotme$ann.npp)
-plot(plotme$biomass.2014, plotme$ann.npp)
+plot(plotme$biomass.2014, plotme$ann.npp) ### this is biomass kg per tree, related to biomass gain per year
 biom.top <- plotme[,mean(biomass.2014)+1.96*(sd(biomass.2014))]
 biom.bot <- plotme[,mean(biomass.2014)-1.96*(sd(biomass.2014))]
 plot(plotme[biomass.2014<biom.top, biomass.2014], plotme[biomass.2014<biom.top, ann.npp])
-plot(plotme[biomass.2014<biom.top, dbh.2014], plotme[biomass.2014<biom.top, ann.npp])
+plot(plotme[biomass.2014<biom.top, dbh.2014], plotme[biomass.2014<biom.top, ann.npp]) ## we don't have dbh
 
 lin.mod <- lm(formula = plotme[biomass.2014<biom.top, ann.npp]~plotme[biomass.2014<biom.top, biomass.2014])
 summary(lin.mod)
 pol.mod <- lm(formula = plotme[biomass.2014<biom.top, ann.npp]~poly(plotme[biomass.2014<biom.top, biomass.2014], 2))
 summary(pol.mod)
 
-
 ### biomass in 2014 doesn't really predict annual growth much in the preceding years, R2 0.43 for poly2
-plot(plotme[biomass.2014<biom.top, biomass.2014], plotme[biomass.2014<biom.top, ann.npp])
-plot(fitted(pol.mod), residuals(pol.mod))
-q <- seq(0, 1500)
-y2 <- pol.mod$coefficients[1]+(pol.mod$coefficients[2]*q)+(pol.mod$coefficients[3]*(q^2))
-y <- lin.mod$coefficients[1]+(lin.mod$coefficients[2]*q)
-lines(q, y)
-plot(q, y2)
 
 for(g in 1:length(focus)){
-  # plot(plotme[genus==focus[g], dbh.2014], plotme[genus==focus[g], ann.npp], 
-  #      main=focus[g])
+  plot(plotme[genus==focus[g], biomass.2014], plotme[genus==focus[g], ann.npp],
+       main=focus[g])
   print(summary(lm(plotme[genus==focus[g], ann.npp]~plotme[genus==focus[g], dbh.2014])))
   
 }
@@ -111,18 +104,61 @@ npp.ss.r <- raster(biom)
 npp.ss.r <- setValues(npp.ss.r, biom.dat$npp.ss) ## ok, just a linear transform, 0-300 kg biomass/cell/yr, equiv to 1.66 MgC/ha/yr
 
 ## check: can we get figures same as reported in Raciti et al?
-plot(biom1m) ## seem to get the same figure as Raciti, in MgC/ha
+plot(biom1m) ## Raciti lists this as MgC/ha, but it's really Mg-biomass/ha
 biom1m.dat <- as.data.table(as.data.frame(biom1m))
-names(biom1m.dat) <- c("biom.MgC.ha")
-biom1m.dat[,MgC.cell:=biom.MgC.ha/1E4]
-biom1m.totC <- biom1m.dat[,sum(MgC.cell, na.rm=T)] # 71k MgC total storage, contrast 355k MgC in Raciti
-biom1m.totar <- biom1m.dat[!is.na(MgC.cell), length(MgC.cell)]
-biom1m.totar/ncell(biom1m) ### 37% of study area has valid pixels for biomass 
-biom1m.totar.km <- biom1m.totar/1E6 ## 124 km2 (12 kha), contrast 123.3 km2 reported total
-biom1m.totC/(biom1m.totar.km*100) ## this represents avg of 5.75 MgC/ha for the study area, 
-28.8*biom1m.totar/10^4 ## would need 357k MgC total storage to make the figures reported in Raciti
-#### Summary: Raciti reports greater overall C storage than is represented in his data, not clear where/how this deviates from other reported results
+names(biom1m.dat) <- c("biom.raw")
+biom1m.dat[, MgC.ha.corr:=2*biom.raw]
+biom1m.dat[, Mgbiom:=biom.raw/(10^4)]
+biom1m.dat[, mean(Mgbiom, na.rm=T)]
+mean.biom.raw <- biom1m.dat[, mean(biom.raw, na.rm=T)] ## 5.75 Mgbiom/ha
+sum.biom.raw <- biom1m.dat[, sum(biom.raw, na.rm=T)]
+area <- biom1m.dat[!is.na(biom.raw), length(biom.raw)] ## 124 km2
+(340000-315000)*(4695000-4680000)/(10^6) ## size of raw raster approx: 3.75E8 = 375km2
+mean.biom.raw*(area/10^4) ## 71412 Mgbiom/ha
+sum.biom.raw/(10^4) ## 71.4k Mgbiom
+(sum.biom.raw/(10^4))/(area/(10^4)) ## 5.75 Mg biom/ha
 
+## biomass formula, basically just lidar canopy height linear transform h(m)-->bm(kg)
+biomass=(2.1015*h)+0.8455
+biomass=82 ## max biomass in this 1m raster
+h=27 ### actual canopy height in the highest biomass pixels (brief visual search of a single area) is about 27m
+(2.1015*h)+0.8455 ### a single pixel of 27m height gives biomass of 57kg (this is consistent with the biom1m raster value)
+biomass=57
+## at max biomass/pixel
+biomass=82
+(biomass-0.8455)/2.1015 ### this would imply a 39m canopy height
+
+### test, single open-grown tree
+## a tree of 14m diameter, max height ~19m, area = 153m, ~30 kg biomass per pixel average
+153*30 ## about 4.5 Mg biomass
+### actual extract
+library(rgeos)
+library(rgdal)
+tree.foot <- readOGR(dsn="processed/boston/tree.footprint.shp", layer="tree.footprint")
+crs(tree.foot)
+crs(biom1m)
+tree.foot <- spTransform(tree.foot, crs(biom1m))
+### this is a open-grown tree, 14m diameter canopy roughly circular, max height is 19m
+a <- extract(biom1m, tree.foot)
+a <- unlist(a)
+sum(a) ### 3941 kg biomass in this tree
+## general equation for biomass (Ian street tree)
+biomass=exp(-2.48+(2.4835(log(dbh))))
+biomass=sum(a)
+exp((log(biomass)+2.48)/2.4835) ## this would imply a 76cm dbh tree with 19m height
+## at 19m high, this tree, according to the transform in Raciti
+h=19
+(2.1015*h)+0.8455 ## about 40 kg/pixel
+40*153 ## roughly correct, somewhat too high (max pixel height)
+
+### CONCLUSION: RACITI'S 1m BIOMASS DATA is correct transform of lidar height, yielding kg-biomass/1m.cell
+sum.biom.raw <- biom1m.dat[, sum(biom.raw, na.rm=T)]
+area <- biom1m.dat[!is.na(biom.raw), length(biom.raw)] ## 124 km2
+(sum.biom.raw/10^3)/(area/(10^4)) ### average of 57.5 Mgbiomass/ha
+(sum.biom.raw/10^3)/(area/(10^4))/2 ### average of 28.8 MgC/ha --> same as raciti
+(sum.biom.raw/10^3)/2/(10^3) ### 357 GgC total storage --> same as raciti
+### the scale on the corrected figures from Raciti is what you get when you take
+### kgbiomass/m2 * 1E4m2/ha * 1kgC/2kgbiomass * 1MgC/1E3kgC (e.g. 82 kgbiomass/m2 --> 410 MgC/ha)
 
 plot(can1m)
 can1m.dat <- as.data.table(as.data.frame(can1m))
@@ -131,3 +167,6 @@ can.totcan <- can1m.dat[!is.na(can), sum(can)]
 can.totar <- can1m.dat[!is.na(can), length(can)]
 can.totcan/can.totar ## avg cover 25.8%, contrast 25.5% reported 
 ### summary: canopy data looks about like what was reported in Raciti
+
+
+
