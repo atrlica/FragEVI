@@ -170,3 +170,68 @@ can.totcan/can.totar ## avg cover 25.8%, contrast 25.5% reported
 
 
 
+#### OK with that out of the way: Let's try to figure out the tree distribution per 30m cell and uptake
+biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m 
+plot(biom)
+street <- read.csv("docs/ian/Boston_Street_Trees.csv") ## Street tree resurvey, biomass 2006/2014, species
+length(unique(street$Species)) ## 77 species!
+street$ann.npp <- (street$biomass.2014-street$biomass.2006)/8
+street <- as.data.table(street)
+street[is.na(Species), Species:="Unknown unknown"]
+street[Species=="Unknown", Species:="Unknown unknown"]
+street[Species=="unknown", Species:="Unknown unknown"]
+street[Species=="Purpleleaf plum", Species:="Prunus cerasifera"]
+street[Species=="Bradford pear", Species:="Pyrus calleryana"]
+street[Species=="Liriondendron tulipifera", Species:="Liriodendron tulipifera"]
+street[Species=="Thornless hawthorn", Species:="Crataegus crus-galli"]
+genspec <- strsplit(as.character(street$Species), " ")
+gen <- unlist(lapply(genspec, "[[", 1))
+street[,genus:=gen] ## 40 genera
+a <- street[,length(ann.npp)/dim(street)[1], by=genus]
+a <- a[order(a$V1, decreasing = T),]
+sum(a$V1[1:12])
+focus <- a$genus[1:12]
+focus
+
+### approach 0: get npp biomass increment as function of median tree biomass, FAI growth rates
+## take median value of tree dbh, ignore genus (using inline biomass ~ common hardwood allometric)
+dbh <- street[standing.dead.2014==0 & genus %in% focus, median(dbh.2014, na.rm=T)]
+biomass <- street[standing.dead.2014==0 & genus %in% focus, median(biomass.2014, na.rm=T)]
+hist(street[standing.dead.2014==0 & genus %in% focus, biomass.2014]) ## highly skewed towards <1000kg
+biom.dat <- as.data.table(as.data.frame(biom))
+biom.dat[,num.trees.med:=bos.biom30m/biomass]
+biom.dat[,range(num.trees.med, na.rm=T)] ## max 280 trees per cell i.e. a tree per every 3m2
+
+## the FIA use this equation for volume of wood in a stand by stand age
+a=123.67
+b=0.04
+AGE=40
+y = a*(1-exp(-b*AGE))^3
+y
+### standing live wood C storage in local forest that resemble (?) what we'd have in Boston:
+### i.e. N.red oak; red maple/oak; mixed upland hwoods; red maple uplands: Range is  94.7-105.1 MgC/ha
+## read in summaries of C stock change in Q.alba/Q.rubra/Carya and Q.rubra forest
+## both forest types include values for reforestation and afforestation conditions
+ne.summ <- read.csv("docs/FIA_CTMANHRI.csv")
+plot(ne.summ$Age.yrs, ne.summ$live.tree.c.inc)
+
+mix.oak.ref <- read.csv("docs/FIA_QUALQURUCATO_Reforest.csv")
+plot(mix.oak.ref$Age.yrs, mix.oak.ref$live.tree.c.inc)
+mix.oak.aff <- read.csv("docs/FIA_QUALQURUCATO_Afforest.csv")
+plot(mix.oak.aff$Age.yrs, mix.oak.aff$live.tree.c.inc)
+
+red.oak.ref <- read.csv("docs/FIA_QURU_Reforest.csv")
+plot(red.oak.ref$Age.yrs, red.oak.ref$live.tree.c.inc)
+red.oak.aff <- read.csv("docs/FIA_QURU_Afforest.csv")
+plot(red.oak.aff$Age.yrs, red.oak.aff$live.tree.c.inc)
+
+fia.summ <- as.data.frame(cbind(ne.summ$Age.yrs, ne.summ$live.tree.c.inc, mix.oak.ref$live.tree.c.inc,
+                  mix.oak.aff$live.tree.c.inc, red.oak.ref$live.tree.c.inc, red.oak.aff$live.tree.c.inc))
+colnames(fia.summ) <- c("Age", "NE.total", "mix.oak.ref", "mix.oak.aff", "red.oak.ref", "red.oak.aff")
+plot(fia.summ$Age, fia.summ$NE.total, pch=15, col="black")
+points(fia.summ$Age, fia.summ$mix.oak.aff, pch=16, col="lightblue")
+points(fia.summ$Age, fia.summ$mix.oak.ref, pch=16, col="blue")
+points(fia.summ$Age, fia.summ$red.oak.aff, pch=17, col="pink")
+points(fia.summ$Age, fia.summ$red.oak.ref, pch=17, col="red")
+### the only thing that changes between reforestation and afforestation are values for forest floor and soil C
+
