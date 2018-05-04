@@ -125,6 +125,32 @@ results$frac.tot.area <- results$pix.less.than/area.tot
 plot(results$dist, results$less.rel) ## cumulative distribution of canopy edge
 write.csv(results, "processed/bos.can.cummdist.csv")
 
+
+### pie chart, relative canopy distance fraction
+dist <- read.csv("processed/bos.can.cummdist.csv")
+dist <- as.data.table(dist)
+ed.all <- dist[dist==0, pix.more.than]
+ed.10m <- dist[dist==10, pix.less.than]
+ed.20m <- dist[dist==20, pix.less.than]
+ed.30m <- dist[dist==30, pix.less.than]
+ed.int <- dist[dist==30, pix.more.than]
+ed.all
+ed.10m/ed.all
+ed.20m.only <- ed.20m-ed.10m
+ed.20m.only/ed.all
+ed.30m.only <- ed.30m-ed.20m
+ed.30m.only/ed.all
+ed.int/ed.all
+
+slices <- c(ed.10m/ed.all, ed.20m.only/ed.all, ed.30m.only/ed.all, ed.int/ed.all)*100
+
+par(mar=c(1, 1,3, 4))
+  
+pie(slices, labels=paste(c("<10m, ", "10-20m, ", "20-30m, ", ">30m, "), round(slices, 0), "%", sep=""),
+    main="", font=2, cex=2,
+    col = c("salmon", "orange", "lightgoldenrod1", "green3"))
+mtext("Fraction of canopy per distance class", side = 3, cex=2.3, font=2)
+
 ### do same canopy area calcs for buffers in specific sub-areas
 hoods <- c("downtown", "jamaica", "allston", "southie", "dorchester", "hydepark", "common")
 
@@ -198,6 +224,16 @@ bos.lowveg <- raster("processed/boston/bos.lowveg.tif")
 bos.other <- raster("processed/boston/bos.other.tif")
 bos.water <- raster("processed/boston/bos.water.tif")
 
+for.sum <- sum(getValues(bos.forest), na.rm=T)
+dev.sum <- sum(getValues(bos.dev), na.rm=T)
+res.sum <- sum(getValues(bos.hd.res), na.rm=T)
+bos.aoi <- raster("processed/boston/bos.AOI.1m.tif")
+plot(bos.aoi)
+aoi.sum <- sum(getValues(bos.aoi), na.rm=T)
+for.sum/aoi.sum
+dev.sum/aoi.sum
+res.sum/aoi.sum
+
 ### modify this to mask by row for the lulc analysis
 can.sum.ma <- function(x,m) { # x is canopy 0/1 1m raster object, m is mask
   bs <- blockSize(x)
@@ -252,17 +288,22 @@ for(l in 1:length(lu.classes)){
 ### combined plot, canopy edge area as fraction of total area (by LULC class)
 results <- read.csv("processed/bos.can.cummdist.csv")
 lu.classes <- c("forest", "dev", "hd.res", "med.res", "low.res", "lowveg", "other")
+lu.classes <- c("forest", "dev", "hd.res")
 cols=rainbow(length(lu.classes))
-plot(results$dist, results$less.rel, pch=1, col="black", type="l", lwd=3, 
-     xlab="distance from edge (m)", ylab="cummulative fraction",
-     ylim=c(0, 1))
+cols=c("forestgreen", "blue", "red")
+par(mar=c(4.5, 5.5, 1, 1), oma=c(0,0,0, 0), xpd=F)
+
+plot(results$dist, results$frac.tot.area, pch=1, col="black", type="l", lwd=7, bty="n", lty=1, 
+     xlab="Distance from edge (m)", ylab="Cummulative area fraction",
+     ylim=c(0, 0.9), xlim=c(0, 60), yaxt="n", font.lab=2, cex.lab=2, cex.axis=2)
+axis(2, at=c(0, 0.2, 0.4, 0.6, 0.8), labels=c("0", "20%", "40%", "60%", "80%"), cex.axis=2)
 for(d in 1:length(lu.classes)){
   dat <- read.csv(paste("processed/bos.can.cummdist.", lu.classes[d], ".csv", sep=""))
-  lines(dat$dist, dat$less.rel, col=cols[d], type="l", lwd=2)
+  lines(dat$dist, dat$frac.tot.area, col=cols[d], type="l", lwd=3)
 }
-legend(x=60, y=0.9, bty = "n", legend=c("Boston", lu.classes), fill=c("black", cols))
-### forest is fucked up
-res.for <- read.csv("processed/bos.can.cummdist.forest.csv")
+legend("right", x=40, y=0.80, cex=2, legend=c("Boston", "Forest", "Developed", "Residential"), fill=c("black", cols), bty="n")
+
+
 
 
 # ### read in edge rasters and correct classifications to produce raster of edge rings (>10, 10-20, 20-30, >30)
