@@ -235,3 +235,213 @@ points(fia.summ$Age, fia.summ$red.oak.aff, pch=17, col="pink")
 points(fia.summ$Age, fia.summ$red.oak.ref, pch=17, col="red")
 ### the only thing that changes between reforestation and afforestation are values for forest floor and soil C
 
+biom.dat
+biom.dat[,Mgbiom.ha:=((bos.biom30m/900)*1E4)/1E3]
+hist(biom.dat[,Mgbiom.ha]) ## skewed, most below 100 Mgbiom/ha (~50 MgC/ha), max 569 = 284 MgC/ha, contrast: Max 1m = 469 MgC/ha
+biom.dat[,MgC.ha:=Mgbiom.ha/2]
+
+## what is relationship between standing live biomass-C and C increment
+plot(ne.summ$mean.vol.m3, ne.summ$live.tree.c.inc)
+plot(ne.summ$live.tree.tCha, ne.summ$live.tree.c.inc)
+plot(ne.summ$Age.yrs, ne.summ$live.tree.tCha)
+plot(ne.summ$Age.yrs, ne.summ$mean.vol.m3) ## basic sigmoid 0 to max at 100
+
+### this is the controlling volume/live biomass C equation for all the figures produced in the FIA report
+## coefficients below apply to NE total summary
+## live C
+a=123.67
+b=0.04
+x=seq(0,200) ## age of stand
+y=a*(1-(exp(-b*x)))^3 
+plot(x,y)
+
+
+
+##########
+### prototype process for using FIA aggregate data to figure npp from Raciti biomass
+# 1) determine MgC/ha in 30m plot, normalize to %canopy (i.e. there is X many ha of forest there with Y much living carbon in place)
+# ie. as far as FIA is concerned, that is a forest, in the area it occupies, that has Y much AGB
+# 2) figure out how old FIA would say a plot like that is
+# 3) Figure out the next-year tC/ha in the plot
+# 4) apply this incrememnt to the area of "forest" (canopy) in the pixel
+
+## example: X=40 yrs,
+x=40
+a=123.67
+b=0.04
+y=a*(1-(exp(-b*x)))^3 
+y ## 62.9 tC/ha
+### what is equivalent age of stand if we know live biomass?
+log(1-(y/a)^(1/3))/(-b) ## predicts 40 years
+
+## what is age of a forest with 100% canopy and 30000 kg/pixel biomass
+y=30000/1000/2*(10^4)/900 ### 166 MgC/ha --> out of bounds)
+y=20000/1000/2*(10^4)/900  ### at 30m pixel values over about 20000 kg biomass, you're out of bounds for stand age -- too thick with biomass!
+
+biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel
+aoi <- raster("processed/boston/bos.aoi30m.tif")
+plot(aoi)
+plot(biom)
+biom <- crop(biom, aoi) ## biomass was slightly buffered, need to clip to match canopy fraction raster
+biom.dat <- as.data.table(as.data.frame(biom))
+biom.dat[,aoi:=as.vector(getValues(aoi))]
+### live MgC by area in each pixel
+biom.dat[, live.MgC.ha:=(bos.biom30m/aoi)*(1/2)*(1/1000)*(10^4)] ## convert kg-biomass/pixel based on size of pixel (summed by 1m2 in "aoi"), kgC:kgbiomass, Mg:kg, m2:ha
+biom.dat[, range(live.MgC.ha, na.rm=T)] ## up to 284 MgC/ha, as we'd expect from what we saw in Raciti
+biom.MgC.ha <- raster(biom)
+biom.MgC.ha <- setValues(biom.MgC.ha, biom.dat[, live.MgC.ha])
+plot(biom.MgC.ha)
+hist(biom.dat[,live.MgC.ha]) #v skewed, most below 50 MgC/ha
+
+## correct biomass figures for the amount of canopy present per cell
+### i.e. we assume FIA is measuring trees in "forest" with essentially continuous canopy, so that differences in tC/ha as a function of age are purely a function of tree growth and not differences in tree %coverage
+can <- raster("processed/boston/bos.can30m.tif")
+can.dat <- as.data.table(as.data.frame(can))
+biom.dat[, can.frac:=can.dat$bos.can30m]
+### live MgC/ha for "forest" fraction in each pixel
+biom.dat[,live.MgC.ha.forest:=live.MgC.ha/can.frac]
+biom.dat[can.frac<=0.005, live.MgC.ha.forest:=0]
+range(biom.dat[,live.MgC.ha.forest],  na.rm=T)
+hist(biom.dat[,live.MgC.ha.forest]) ## correcting for canopy cover, most pixels are <100 MgC/ha (good -- the FIA only really handles stuff up to ~120 MgC/ha, about 100 years old)
+biom.dat[live.MgC.ha.forest<100, length(live.MgC.ha.forest)]/dim(biom.dat[!is.na(can.frac),])[1] ## 84% of pixels are below 100 MgC/ha
+biom.MgC.ha.forest <- raster(biom)
+biom.MgC.ha.forest <- setValues(biom.MgC.ha.forest, biom.dat[,live.MgC.ha.forest])
+plot(biom.MgC.ha.forest)
+
+### figure out forest "age" for the cells (using coefficients for NE total)
+a=123.67
+b=0.04
+biom.dat[,age:=log(1-(live.MgC.ha.forest/a)^(1/3))/(-b)] ## some of these will produce infinities with too dense biomass
+biom.dat[age>100, age:=100] ## fix the divergent ones to just "old, not growing"
+biom.dat[!is.finite(age), age:=100] ## again, fix the ones that got fucked to "old, not growing"
+biom.dat[is.na(aoi), age:=NA] # cancel places out of bounds
+biom.dat[bos.biom30m<=10, age:=NA] ## cancel places with no biomass
+biom.dat[is.na(bos.biom30m), age:=NA]
+
+forest.age <- raster(biom)
+forest.age <- setValues(forest.age, biom.dat[,age])
+plot(forest.age)
+hist(biom.dat[,age]) ## got a lot of "old" ones, indicating high density of biomass
+
+# ### test to see the range of this shit
+# x=seq(1:500)
+# plot(x, log(1-(x/a)^(1/3))/(-b)) ## dies after about 120
+
+## figure out next annual increment possible for the "forest" average present in each cell, based on projected "age"
+biom.dat[,npp.ann:=(a*(1-(exp(-b*(age+1))))^3)-(a*(1-(exp(-b*(age))))^3)]
+## note these units are in MgC/ha/yr
+npp.ann <- raster(biom)
+npp.ann <- setValues(npp.ann, biom.dat[,npp.ann])
+plot(npp.ann)
+
+## now correct for the size of the pixel
+biom.dat[, npp.ann.actual:=(npp.ann/10^4)*900*can.frac]
+hist(biom.dat[,npp.ann.actual])
+npp.actual <- raster(biom)
+npp.actual <- setValues(npp.actual, biom.dat[,npp.ann.actual]) ## units are in MgC/yr for each pixel
+plot(npp.actual)
+biom.dat[,sum(npp.ann.actual, na.rm=T)] ## 4887 MgC/yr citywide
+biom.dat[,sum(aoi, na.rm=T)/(10^4)] ## city area in ha
+biom.dat[,sum(npp.ann.actual, na.rm=T)]/biom.dat[,sum(aoi, na.rm=T)/(10^4)]
+## predit about 0.39 MgC/ha/yr NPP across the city: contrast 10.3-8.9 = 1.4 NEP for boston region in Hardiman
+writeRaster(npp.actual, filename="processed/boston/bos.npp.actual.fia.NEdefault.tif", format="GTiff", overwrite=T)
+
+
+######################
+### FIA factors to estimate 30m annual NPP (MgC/yr)
+
+library(data.table)
+library(raster)
+
+## cleaned up code, handles different growth parameters for different forests (note "Afforestation" and "Reforestation" values are same viz. live biomass growth rates)
+## initialize parameters for different forest types that ?? resemble tree species distributions in Boston
+for.type <- c("NEdefault","Mixoak", "Redoak")
+a <- c(123.67, 130.81, 123.09)
+b <- c(0.04, 0.03, 0.04)
+
+# ## test limits of the live biomass~stand age function
+# for(f in 1:length(for.type)){
+#   x=seq(0,150)
+#   y=a[f]*(1-(exp(-b[f]*x)))^3
+#   plot(x,y, main=for.type[f], ylab="live tC/ha", xlab="stand age")
+#   x <- seq(0, 140) ## inverse: model age vs. live biomass
+#   y=log(1-(x/a[f])^(1/3))/(-b[f]) ## 
+#   plot(x, y, main=for.type[f], ylab="live tC/ha", xlab="stand age")
+# }
+# ## conservatively, none of the models is particularly stable over 100 yrs stand age
+
+## as before, procedure is:
+# 1) scale up pixel biomass to MgC/ha 
+# 2) adjust live C Mg/ha by %canopy of pixel (i.e. MgC ha *in forested area of pixel*)
+# 3) figure out how old FIA would say a forest with that much C/ha is; set anything with age>100 to 100 (old, not growing)
+# 4) Figure out the next-year tC/ha in the plot
+# 5) apply this incrememnt to the area of "forest" (canopy) in the pixel, adjust by pixel size
+
+biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel
+aoi <- raster("processed/boston/bos.aoi30m.tif")
+biom <- crop(biom, aoi) ## biomass was slightly buffered, need to clip to match canopy fraction raster
+biom.dat <- as.data.table(as.data.frame(biom))
+biom.dat[,aoi:=as.vector(getValues(aoi))]
+biom.dat[aoi<800, bos.biom30m:=NA] ### cancel values in cells that are not at least ~90% complete coverage in AOI
+
+### live MgC by area in each pixel
+biom.dat[, live.MgC.ha:=(bos.biom30m/aoi)*(1/2)*(1/1000)*(10^4)] ## convert kg-biomass/pixel based on size of pixel (summed by 1m2 in "aoi"), kgC:kgbiomass, Mg:kg, m2:ha
+# biom.dat[, range(live.MgC.ha, na.rm=T)] ## up to 284 MgC/ha, as we'd expect from what we saw in Raciti
+# biom.MgC.ha <- raster(biom)
+# biom.MgC.ha <- setValues(biom.MgC.ha, biom.dat[, live.MgC.ha]) 
+# plot(biom.MgC.ha, main="biomass Mg/ha, whole pixels") ## compare to Raciti, looks about right
+# hist(biom.dat[,live.MgC.ha]) #v skewed, most below 50 MgC/ha -- so resembles either very young forest (mostly below 30 yrs) or fragmented forest with incomplete coverage
+
+## correct biomass figures for the amount of canopy present per pixel
+can <- raster("processed/boston/bos.can30m.tif")
+biom.dat[, can.frac:=getValues(can)]
+biom.dat[,live.MgC.ha.forest:=live.MgC.ha/can.frac] ### live MgC/ha for "forest" fraction in each pixel
+biom.dat[can.frac<=0.01, live.MgC.ha.forest:=0] ## for pixels with very little canopy coverage, cancel biomass effect altogether (otherwise tiny biomass+tiny canopy could imply super old tiny forest patch)
+# range(biom.dat[,live.MgC.ha.forest],  na.rm=T)
+# hist(biom.dat[,live.MgC.ha.forest]) ## correcting for canopy cover, most pixels are <100 MgC/ha (good -- the FIA only really handles stuff up to ~120 MgC/ha, about 100 years old)
+# biom.dat[live.MgC.ha.forest<120, length(live.MgC.ha.forest)]/dim(biom.dat[!is.na(can.frac),])[1] ## 90% of pixels are below 120 MgC/ha, where the thing starts to fall apart
+# biom.MgC.ha.forest <- raster(biom)
+# biom.MgC.ha.forest <- setValues(biom.MgC.ha.forest, biom.dat[,live.MgC.ha.forest])
+# plot(biom.MgC.ha.forest, main="biomass MgC/ha, forest fraction of pixel")
+
+### back-project forest "age" for the cells, calculate annual increment based on age, readjust to pixel dimensions and %canopy
+for(f in 1:length(for.type)){
+  biom.dat[,age:=log(1-(live.MgC.ha.forest/a[f])^(1/3))/(-b[f])] ## some of these will produce infinities with too dense biomass
+  biom.dat[age>100, age:=100] ## fix the divergent ones to just "old, not growing"
+  biom.dat[!is.finite(age), age:=100] ## again, fix the ones that got fucked to "old, not growing"
+  biom.dat[is.na(aoi), age:=NA] # cancel places out of bounds
+  biom.dat[bos.biom30m<=10, age:=NA] ## cancel places with very little biomass
+  biom.dat[is.na(bos.biom30m), age:=NA]
+  # forest.age <- raster(biom)
+  # forest.age <- setValues(forest.age, biom.dat[,age])
+  # plot(forest.age) ## places with a fair amount of dense biomass cover look like stable non-growing forests
+  # hist(biom.dat[,age]) ## peak in the 20-40 range, but a lot of "old" forest pixels, indicating high density of biomass
+  ## figure out next annual increment possible for the "forest" average present in each cell, based on projected "age"
+  biom.dat[,npp.ann:=(a[f]*(1-(exp(-b[f]*(age+1))))^3)-(a[f]*(1-(exp(-b[f]*(age))))^3)] ## note these units are in MgC/ha/yr, treating the whole pixel as a forest
+  # npp.ann <- raster(biom)
+  # npp.ann <- setValues(npp.ann, biom.dat[,npp.ann]) ## reduced in the densely forested parts compared to the mod.developed; nothing in the very developed)
+  # plot(npp.ann, main="Annual NPP tC/ha/yr, whole pixel basis")
+  
+  ## correct for the size and forested area of the pixel
+  biom.dat[, npp.ann.actual:=(npp.ann/10^4)*aoi*can.frac] ## this is now MgC/yr for each pixel
+  # hist(biom.dat[,npp.ann.actual]) ## mostly below 0.1 MgC/yr (i.e. 100 kgC per pixel, compare to >30000 kg biomass in some pixels)
+  npp.actual <- raster(biom)
+  npp.actual <- setValues(npp.actual, biom.dat[,npp.ann.actual]) ## units are in MgC/yr for each pixel
+  plot(npp.actual, main=paste("Annual NPP MgC/yr,", for.type[f], ", forested area of each pixel"))
+  # biom.dat[,sum(npp.ann.actual, na.rm=T)] ## total MgC/yr uptake in NPP, citywide
+  # biom.dat[,sum(aoi, na.rm=T)/(10^4)] ## city area in ha
+  # biom.dat[,sum(npp.ann.actual, na.rm=T)]/biom.dat[,sum(aoi, na.rm=T)/(10^4)] ## avg citywide NPP
+  writeRaster(npp.actual, format="GTiff", overwrite=T,
+              filename=paste("processed/boston/bos.npp.actual.fia", for.type[f], "tif", sep="."))
+}
+
+
+### immediate notes: The dense forest parts can be
+## 1) fairly low in NPP -- they exceed the threshold of biomass density, get classed as "very old", and have low annual increment even though canopy cover is high
+## 2) high in NPP -- they have high canopy cover and moderate biomass so they have the most capacity for uptake ove the greatest area
+
+
+
+
+
+
