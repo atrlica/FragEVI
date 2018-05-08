@@ -434,14 +434,54 @@ for(f in 1:length(for.type)){
   writeRaster(npp.actual, format="GTiff", overwrite=T,
               filename=paste("processed/boston/bos.npp.actual.fia", for.type[f], "tif", sep="."))
 }
-
-
-### immediate notes: The dense forest parts can be
+### immediate post-hoc notes: The dense forest parts can be
 ## 1) fairly low in NPP -- they exceed the threshold of biomass density, get classed as "very old", and have low annual increment even though canopy cover is high
 ## 2) high in NPP -- they have high canopy cover and moderate biomass so they have the most capacity for uptake ove the greatest area
 
 
 
+##########
+##########
+### Approach 2: Per-cell growth rate derived from local street tree increment
+### 2a: Assume distribution of trees that are all median dbh/biomass
 
+# figure out median dbh/biomass of a street tree
+street <- read.csv("docs/ian/Boston_Street_Trees.csv") ## Street tree resurvey, biomass 2006/2014, species
+street$ann.npp <- (street$biomass.2014-street$biomass.2006)/8
+street <- as.data.table(street)
+street[is.na(Species), Species:="Unknown unknown"]
+street[Species=="Unknown", Species:="Unknown unknown"]
+street[Species=="unknown", Species:="Unknown unknown"]
+street[Species=="Purpleleaf plum", Species:="Prunus cerasifera"]
+street[Species=="Bradford pear", Species:="Pyrus calleryana"]
+street[Species=="Liriondendron tulipifera", Species:="Liriodendron tulipifera"]
+street[Species=="Thornless hawthorn", Species:="Crataegus crus-galli"]
+genspec <- strsplit(as.character(street$Species), " ")
+gen <- unlist(lapply(genspec, "[[", 1))
+street[,genus:=gen] ## 40 genera
+a <- street[,length(ann.npp)/dim(street)[1], by=genus]
+a <- a[order(a$V1, decreasing = T),]
+# sum(a$V1[1:12]) ### top 12 is 94% of trees present
+focus <- a$genus[1:12]
 
+plot(street$dbh.2006, street$biomass.2006)
+plot(street$dbh.2014, street$biomass.2014)
+street[dbh.2014<=45, length(dbh.2014)]/street[!is.na(dbh.2014), length(dbh.2014)] #80% of trees below 45cm dbh
+hist(street$dbh.2014) # steep drop north of 40cm
+hist(street$dbh.2006) ## looks somehow higher than 2014
+post.dbh <- street[dead.by.2014==0, median(dbh.2014, na.rm=T)] #28.4cm
+street[dead.by.2014==0, median(biomass.2014, na.rm=T)] #172 kg/tree
+### working biomass eq (generalized Eastern hardwood, Smith et al. 2018)
+biomass <- exp(-2.48+2.4835*log(post.dbh)) # the biomass of a median tree is 341kg
+
+## determine the number of standard street trees present in each cell
+biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel
+aoi <- raster("processed/boston/bos.aoi30m.tif")
+biom <- crop(biom, aoi) ## biomass was slightly buffered, need to clip to match canopy fraction raster
+biom.dat <- as.data.table(as.data.frame(biom))
+biom.dat[,aoi:=as.vector(getValues(aoi))]
+biom.dat[aoi<800, bos.biom30m:=NA] ### cancel values in cells that are not at least ~90% complete coverage in AOI
+
+### live MgC by area in each pixel
+biom.dat[, live.MgC.ha:=(bos.biom30m/aoi)*(1/2)*(1/1000)*(10^4)] ## convert kg-biomass/pixel based on size of pixel (summed by 1m2 in "aoi"), kgC:kgbiomass, Mg:kg, m2:ha
 
