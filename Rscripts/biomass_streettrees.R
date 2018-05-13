@@ -62,7 +62,7 @@ clean <- street[record.good==1,] # get a good street tree set ready
 setkey(clean, at.biom.2006)
 
 ### first part: process the low biomass with distributions drawn from the unmodified street set
-runme <- biom.dat[!is.na(bos.biom30m) & !is.na(bos.can30m) & bos.biom30m<20000 & bos.biom30m>0,] #99k
+runme <- biom.dat[!is.na(bos.biom30m) & !is.na(bos.can30m) & bos.biom30m<20000 & bos.biom30m>5 & bos.can30m>0,] #99k, filter for very small biomass and 0 canopy
 
 ## set up containers
 cage.num.trees <- list()
