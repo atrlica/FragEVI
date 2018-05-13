@@ -6,6 +6,8 @@ library(raster)
 library(rgdal)
 library(rgeos)
 
+setwd("/projectnb/buultra/atrlica/FragEVI/")
+
 ### biomass equation biom~dbh
 b0 <- -2.48
 b1 <- 2.4835 ## these are eastern hardwood defaults
