@@ -1,6 +1,6 @@
 #!/bin/sh -l
 
-#$ -l h_rt=48:00:00
+#$ -l h_rt=24:00:00
 #$ -N biom.proc
 #$ -V
 #$ -j y
@@ -10,8 +10,6 @@
 #$ -m e
 #$ -M atrlica@bu.edu
 #$ -o /projectnb/buultra/atrlica/FragEVI/logs
-
-# cd /projectnb/buultra/atrlica/BosAlbedo/working/logs
 
 module load R_earth/3.1.0
 Rscript /projectnb/buultra/atrlica/FragEVI/Rscripts/biomass_streettrees.R

@@ -33,7 +33,7 @@ street[,genus:=gen] ## 40 genera
 # focus <- a$genus[1:12]
 street[, delta.dbh:=dbh.2014-dbh.2006]
 street[, record.good:=0]
-street[is.finite(dbh.2014) & is.finite(dbh.2006) & dead.by.2014==0 & delta.dbh>=0, record.good:=1] 
+street[is.finite(dbh.2014) & is.finite(dbh.2006) & dead.by.2014==0 & delta.dbh>=0, record.good:=1] # exclude fishy looking records
 street[record.good==1, at.biom.2014:=biom.pred(dbh.2014)]
 street[record.good==1, at.biom.2006:=biom.pred(dbh.2006)]
 street[record.good==1, at.delta.biom:=at.biom.2014-at.biom.2006]
@@ -64,13 +64,15 @@ clean <- street[record.good==1,] # get a good street tree set ready
 setkey(clean, at.biom.2006)
 
 ### first part: process the low biomass with distributions drawn from the unmodified street set
-### NOTE To parallelize this process, the script checks for already-written chunks of results, and then tries to produce the next chunk
+### NOTE To parallelize this process (for the lower biomass pixels), the script checks for already-written chunks of results, and then tries to produce the next chunk
 ### calling the script multiple times will result in multiple successive chunks of pixels being run at the same time
+
+### code commented to exclusively run the "big tree" code modification below
 runme <- biom.dat[!is.na(bos.biom30m) & !is.na(bos.can30m) & bos.biom30m<20000 & bos.biom30m>5 & bos.can30m>0,] #99k, filter for very small biomass and 0 canopy
 runme.x <- runme[1:10000,] ## initialize first chunk
 
 ## parallel process: check to see if any containers have been written to disk, if not queue up the next chunk
-check <- list.files("processed/boston/")
+check <- list.files("processed/boston/biom_street")
 check <- check[grep(check, pattern="ann.npp.street.small")]
 already <- substr(check, start = 22, stop=26)
 if(length(check)!=0){ ## ie if you detect that results have already been written to disk, take the next chunk
@@ -91,11 +93,11 @@ biom.track <- rep(9999, dim(runme.x)[1])
 
 ## create an empty save file to warn the script next time that this chunk is being worked on
 if(length(check)!=0){
-  stor <- (y+10000)
-  save(cage.ann.npp, file=paste("processed/boston/ann.npp.street.small", stor, sep=".")) 
+  stor <- (y+10000) ## will name the end files up to its max, but it might not be that long
+  save(cage.ann.npp, file=paste("processed/boston/biom_street/ann.npp.street.small", stor, sep=".")) 
 } else{
   stor <- 10000
-  save(cage.ann.npp, file=paste("processed/boston/ann.npp.street.small", stor, sep="."))
+  save(cage.ann.npp, file=paste("processed/boston/biom_street/ann.npp.street.small", stor, sep="."))
 }
 
 ## loop each row (pixel) of the chunk
@@ -145,44 +147,48 @@ for(t in 1:dim(runme.x)[1]){
 }
 
 ## when complete dump everything back into the save file
-save(cage.ann.npp, file=paste("processed/boston/ann.npp.street.small", stor, sep="."))
-save(cage.num.trees, file=paste("processed/boston/num.trees.street.small", stor, sep="."))
-save(cage.dbh, file=paste("processed/boston/dbh.street.small", stor, sep="."))
-save(cage.genus, file=paste("processed/boston/genus.street.small", stor, sep="."))
-save(biom.track, file=paste("processed/boston/biom.track.street.small", stor, sep="."))
-save(index.track, file=paste("processed/boston/index.track.street.small", stor, sep="."))
+save(cage.ann.npp, file=paste("processed/boston/biom_street/ann.npp.street.small", stor, sep="."))
+save(cage.num.trees, file=paste("processed/boston/biom_street/num.trees.street.small", stor, sep="."))
+save(cage.dbh, file=paste("processed/boston/biom_street/dbh.street.small", stor, sep="."))
+save(cage.genus, file=paste("processed/boston/biom_street/genus.street.small", stor, sep="."))
+save(biom.track, file=paste("processed/boston/biom_street/biom.track.street.small", stor, sep="."))
+save(index.track, file=paste("processed/boston/biom_street/index.track.street.small", stor, sep="."))
 
 
-# 
-# 
+
+
 # ####
 # ### now specificially tackle the high-biomass areas
 # ### modify the street tree record to amplify high-dbh trees
 # clean <- street[record.good==1 & dbh.2006>=5,]
 # bar <- clean[,quantile(dbh.2006, probs= 0.80)] ## what part of the high end to amplify
 # bar2 <- clean[,quantile(dbh.2006, probs= 0.90)]
-# clean <- rbind(clean, clean[dbh.2006>bar,], clean[dbh.2006>bar,], clean[dbh.2006>bar,], clean[dbh.2006>bar,], clean[dbh.2006>bar,]) ## add the top 20% in another 3 times
+# clean <- rbind(clean, clean[dbh.2006>bar,], clean[dbh.2006>bar,], clean[dbh.2006>bar,], clean[dbh.2006>bar2,], clean[dbh.2006>bar2,]) ## add the top 20% in another 3 times, the top 10% x2
 # setkey(clean, at.biom.2006)
 # 
 # ### first part: process the low biomass with distributions drawn from the unmodified street set
-# runme <- biom.dat[!is.na(bos.biom30m) & !is.na(bos.can30m) & bos.biom30m>=20000 & bos.biom30m<30000,] #6k
+# runme <- biom.dat[!is.na(bos.biom30m) & !is.na(bos.can30m) & bos.biom30m>=20000 & bos.biom30m<30000,] #6k, ditch the small fraction that are too large to ever solve
+# runme.x <- runme
 # 
 # ## set up containers
 # cage.num.trees <- list()
 # cage.ann.npp <- list()
 # cage.dbh <- list()
-# index.track <- integer()
-# biom.track <- numeric()
+# cage.genus <- list()
+# index.track <- rep(9999, dim(runme.x)[1])
+# biom.track <- rep(9999, dim(runme.x)[1])
 # 
 # ## loop each row
 # for(t in 1:dim(runme)[1]){
 #   ann.npp <- numeric()
 #   num.trees <- numeric()
+#   cage.genus[[t]] <- list()
+#   cage.dbh[[t]] <- list()
 #   x <- 0
 #   q <- 0
-#   while(x<100 & q<1000){ ## select 100 workable samples, or quit after 4000 attempts
+#   while(x<100 & q<3000){ ## select 100 workable samples, or quit after 4000 attempts
 #     ## grab a random number of randomly selected trees
-#     grasp <- clean[, .(dbh.2006, at.biom.2006)]
+#     grasp <- clean[, .(dbh.2006, at.biom.2006, genus)]
 #     n <- min(c(80, dim(grasp)[1])) ## if you get a really tiny biomass it might try to sample too many rows
 #     grasp <- grasp[sample(dim(grasp)[1], size=n),]
 #     w=grasp[1, at.biom.2006] ## keep cummulative tally of biomass
@@ -192,37 +198,33 @@ save(index.track, file=paste("processed/boston/index.track.street.small", stor, 
 #       d=d+1
 #     }
 #     ### if you've gone too far or if you've packed them in too tight, ditch this sample
-#     if(grasp[1:d, sum((((dbh.2006/2)^2)*pi)/1E4)]<(runme[t, bos.can30m]*3.6) & w<(1.10*runme[t, bos.biom30m])){ ## if the BA density is low enough & didn't overshoot biomass too much
+#     if(grasp[1:d, sum((((dbh.2006/2)^2)*pi)/1E4)]<(runme.x[t, bos.can30m]*3.6) & w<(1.10*runme.x[t, bos.biom30m])){ ## if the BA density is low enough & didn't overshoot biomass too much
 #       ann.npp <- c(ann.npp, sum(grasp[1:d, at.biom.2006]*exp((mod.biom.rel$coefficients[2]*log(grasp[1:d, dbh.2006]))+mod.biom.rel$coefficients[1])))
 #       num.trees <- c(num.trees, d)
 #       x <- x+1
+#       cage.dbh[[t]][[x]] <- grasp[1:d, dbh.2006] ## which dbhs did you select
+#       cage.genus[[t]][[x]] <- grasp[1:d, genus] # running list of which genera you select  
 #     }
 #     q=q+1 ## if you can't find a combination that works, try q times to get develop a sample and if you can't fuck this pixel
 #   }
-#   if(q<1000){
+#   if(q<3000){
 #     cage.ann.npp[[t]] <- ann.npp
 #     cage.num.trees[[t]] <- num.trees
-#     cage.dbh[[t]] <- grasp[1:d, dbh.2006]
-#     biom.track <- c(biom.track, runme[t, bos.biom30m])
-#     index.track <- c(index.track, runme[t, index])
+#     biom.track[t] <- runme.x[t, bos.biom30m]
+#     index.track[t] <- runme.x[t, index]
 #     print(paste("finished pixel", t))
 #   } else{
 #     cage.ann.npp[[t]] <- 9999 ## could not find a solution
 #     cage.num.trees[[t]] <- 9999
-#     cage.dbh[[t]] <- 9999
-#     biom.track <- c(biom.track, runme[t, bos.biom30m])
-#     index.track <- c(index.track, runme[t, index])
+#     biom.track[t] <- runme[t, bos.biom30m]
+#     index.track[t] <- runme[t, index]
 #     print(paste("pixel", t, "error"))
 #   }
 # }
 # 
-# # hist(unlist(cage.ann.npp[[3]]))
-# # hist(unlist(cage.dbh[[3]]))
-# # hist(unlist(cage.num.trees[[3]]))
-# # biom.track
-# ## appears working
-# save(cage.ann.npp, file=paste("processed/boston/ann.npp.street.big"))
-# save(cage.num.trees, file=paste("processed/boston/num.trees.street.big"))
-# save(cage.dbh, file=paste("processed/boston/dbh.street.big"))
-# save(biom.track, file=paste("processed/boston/biom.track.street.big"))
-# save(cage.ann.npp, file=paste("processed/boston/index.track.street.big"))
+# save(cage.ann.npp, file=paste("processed/boston/biom_street/ann.npp.street.big"))
+# save(cage.num.trees, file=paste("processed/boston/biom_street/num.trees.street.big"))
+# save(cage.dbh, file=paste("processed/boston/biom_street/dbh.street.big"))
+# save(biom.track, file=paste("processed/boston/biom_street/biom.track.street.big"))
+# save(cage.ann.npp, file=paste("processed/boston/biom_street/index.track.street.big"))
+# save(cage.genus, file=paste("processed/boston/biom_street/genus.street.big"))
