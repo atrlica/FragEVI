@@ -1240,3 +1240,150 @@ save(biom.track, file=paste("processed/boston/biom.track.street.big"))
 save(cage.ann.npp, file=paste("processed/boston/index.track.street.big"))
 
 
+
+################
+### reconstitute the data from the pixel guesser run on the cluster
+#### import results objects pulled from parallel processing on the cluster (chunks of 10k pixels)
+### reconstitute the NPP estimates
+### small biomass pixels first -- have consistent pix id scheme
+obj.dump <- list.files("processed/boston/biom_street/")
+npp.dump <- obj.dump[grep(obj.dump, pattern = "ann.npp.street.small*")]
+npp.dump.chunks <- sub('.*small.', '', npp.dump)
+
+## to get basal area
+ba <- function(x){(((((x/2)^2)*pi)/900))} ## this is in m2/ha (correct for 900m2 pixel footprint)
+
+### for each pixel, get median estimated npp, median # trees
+container <- data.frame()
+for(c in 1:length(npp.dump)){
+  load(paste("processed/boston/biom_street/", npp.dump[c], sep=""))
+  tmp.npp <- sapply(cage.ann.npp, FUN=median)
+  tmp.npp[tmp.npp==9999] <- NA ## filter the NA flags
+  
+  ## grab the corresponding other dump files
+  load(paste("processed/boston/biom_street/num.trees.street.small.", npp.dump.chunks[c], sep=""))
+  tmp.num <- sapply(cage.num.trees, FUN=median)
+  tmp.num[tmp.num==9999] <- NA ## filter the NA flags
+  load(paste("processed/boston/biom_street/index.track.street.small.", npp.dump.chunks[c], sep="")) ## comes in as "index.track" object
+  tmp.index <- index.track
+  load(paste("processed/boston/biom_street/biom.track.street.small.", npp.dump.chunks[c], sep="")) ## comes in as "biom.track" object
+  tmp.biom <- biom.track
+  
+  ### figure median dbh and median basal area for each pixel
+  load(paste("processed/boston/biom_street/dbh.street.small.", npp.dump.chunks[c], sep="")) ## comes in as "index.track" object
+  ba.track <- rep(9999, length(cage.dbh))
+  dbh.track <- rep(9999, length(cage.dbh))
+  print(paste("patience! Doing BA calculations on chunk", npp.dump.chunks[c]))
+  for(b in 1:length(cage.dbh)){
+    if(is.na(tmp.npp[b])){  ## if a valid NPP was retrieved only
+      ba.track[b] <- NA
+      dbh.track[b] <- NA
+      } else{
+      ba.track[b] <- median(sapply(sapply(cage.dbh[[b]], FUN=ba), FUN=sum)) ## median of the summed dbh-->ba values for each sample
+      dbh.track[b] <- median(unlist(cage.dbh[[b]])) ## grand median dbh of all trees selected for all samples
+      }
+    if(b%%1000==0){print(b)}
+  }
+  
+  ## bind to container
+  g <- cbind(index.track, biom.track, tmp.npp, tmp.num, ba.track, dbh.track)
+  container <- rbind(container, g)
+  hist(tmp.npp, main=paste(npp.dump.chunks[c]))
+  hist(tmp.num, main=paste(npp.dump.chunks[c]))
+  hist(dbh.track, main=paste(npp.dump.chunks[c]))
+  hist(ba.track, main=paste(npp.dump.chunks[c]))
+}
+
+## collect, export, make maps
+names(container) <- c("id.proc1", "biom.kg", "ann.npp.street.sim", "tree.num.street.sim", 
+                      "ba.street.sim", "med.dbh.street.sim")
+
+# write.csv(container, "processed/boston/bos.street.trees.small.npp.simulatorv1.results.csv")
+dim(container) # 98974 -- small only -- compare to 108974 when big trees included
+sum(container$tree.num.street.sim, na.rm=T) #1.1M trees
+
+### tedious reconstruction of the raster comenses here
+### this is how the biomass raster was processed prior to the street tree simulator start
+biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel
+aoi <- raster("processed/boston/bos.aoi30m.tif")
+biom <- crop(biom, aoi) ## biomass was slightly buffered, need to clip to match canopy fraction raster
+biom.dat <- as.data.table(as.data.frame(biom))
+biom.dat[,aoi:=as.vector(getValues(aoi))]
+biom.dat[aoi<800, bos.biom30m:=NA] ### cancel values in cells that are not at least ~90% complete coverage in AOI
+can <- raster("processed/boston/bos.can30m.tif")
+can.dat <- as.data.table(as.data.frame(can))
+biom.dat <- cbind(biom.dat, can.dat)
+biom.dat[,id.proc1:=1:dim(biom.dat)[1]] # 1:354068
+biom.dat.proc <- biom.dat ## save a copy here
+
+map <- merge(x=biom.dat.proc, y=container, by="id.proc1", all.x=T, all.y=T)
+map[!is.na(bos.biom30m),] ## seems alright
+plot(map[,bos.biom30m], map[,biom.kg]) ## lines up, but doesn't capture anything larger than 20k kg
+range(map[,bos.biom30m], na.rm=T) ## original data still goes up to 50k kg
+
+
+### big tree processing
+### repeat processing for the ~6k "big biomass" pixels
+obj.dump <- list.files("processed/boston/biom_street/")
+npp.dump <- obj.dump[grep(obj.dump, pattern = "ann.npp.street.big*")]
+
+container.big <- data.frame()
+### for each pixel, get median estimated npp, median # trees
+for(c in 1){
+  load(paste("processed/boston/biom_street/", npp.dump[c], sep=""))
+  tmp.npp <- sapply(cage.ann.npp, FUN=median)
+  tmp.npp[tmp.npp==9999] <- NA ## filter the NA flags
+  
+  ## grab the corresponding other dump files
+  load(paste("processed/boston/biom_street/num.trees.street.big"))
+  tmp.num <- sapply(cage.num.trees, FUN=median)
+  tmp.num[tmp.num==9999] <- NA ## filter the NA flags
+  load(paste("processed/boston/biom_street/index.track.street.big")) ## comes in as "index.track" object
+  tmp.index <- index.track
+  load(paste("processed/boston/biom_street/biom.track.street.big")) ## comes in as "biom.track" object
+  tmp.biom <- biom.track
+  
+  ### figure median dbh and median basal area for each pixel
+  load(paste("processed/boston/biom_street/dbh.street.big")) ## comes in as "index.track" object
+  ba.track <- rep(9999, length(cage.dbh))
+  dbh.track <- rep(9999, length(cage.dbh))
+  print(paste("patience! Doing BA calculations on chunk big"))
+  for(b in 1:length(cage.dbh)){
+    if(is.na(tmp.npp[b])){  ## if a valid NPP was retrieved only
+      ba.track[b] <- NA
+      dbh.track[b] <- NA
+    } else{
+      ba.track[b] <- median(sapply(sapply(cage.dbh[[b]], FUN=ba), FUN=sum)) ## median of the summed dbh-->ba values for each sample
+      dbh.track[b] <- median(unlist(cage.dbh[[b]])) ## grand median dbh of all trees selected for all samples
+    }
+    if(b%%1000==0){print(b)}
+  }
+  
+  ## bind to container
+  g <- cbind(index.track, biom.track, tmp.npp, tmp.num, ba.track, dbh.track)
+  container.big <- rbind(container.big, g)
+  hist(tmp.npp, main=paste("big"))
+  hist(tmp.num, main=paste("big"))
+  hist(dbh.track, main=paste("big"))
+  hist(ba.track, main=paste("big"))
+}
+
+## collect, export, make maps
+names(container.big) <- c("id.proc1", "biom.kg", "ann.npp.street.sim", "tree.num.street.sim", 
+                      "ba.street.sim", "med.dbh.street.sim")
+
+### the runme file is altered for the big trees
+runme <- biom.dat[!is.na(bos.biom30m) & !is.na(bos.can30m) & bos.biom30m>=20000 & bos.biom30m<30000,] #6k, ditch the small fraction that are too large to ever solve
+dim(runme) # 6131
+runme[,range(id.proc1)] # id.proc1 range 11385:350224
+plot(runme[,id.proc1])
+check <- as.vector(runme$id.proc1)
+sum(check %in% container$id.proc1) ## none of these pixels appears in the list of small biom. pixels
+range(container$id.proc1) # 1109:352514
+dim(container) # 98974 small trees
+
+range(container.big$id.proc1) # 251972:277668
+plot(container.big$id.proc1) ## something is fucked about how index was assigned to the big processing
+# runme.x gives proper index range in processing script
+## saved the wrong object as index track, need to rerun
+
