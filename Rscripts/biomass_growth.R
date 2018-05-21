@@ -664,7 +664,7 @@ street[record.good==1 & dbh.2006>28 & dbh.2006<32, mean(at.npp.ann.rel, na.rm=T)
 exp(a+(b*log(10))) ## 10cm dbh in 2006 predicts a 36.2% annualized increase in biomass
 street[record.good==1 & dbh.2006>8 & dbh.2006<12, mean(at.biom.2006, na.rm=T)] ## mean biomass is 26.8kg
 street[record.good==1 & dbh.2006>8 & dbh.2006<12, mean(at.npp.ann.rel, na.rm=T)] ## mean annualized %change is 56.7%
-exp(a+(b*log(60))) ## 10cm dbh in 2006 predicts a 2.1% annualized increase in biomass
+exp(a+(b*log(60))) ## 60cm dbh in 2006 predicts a 2.1% annualized increase in biomass
 street[record.good==1 & dbh.2006>58 & dbh.2006<62, mean(at.biom.2006, na.rm=T)] ## mean biomass is 2190kg
 street[record.good==1 & dbh.2006>58 & dbh.2006<62, mean(at.npp.ann.rel, na.rm=T)] ## mean annualized %change is 2.5%
 ### note there is some real tiny shit still in here -- like ~70 records below 5cm dbh
@@ -1300,7 +1300,7 @@ names(container) <- c("id.proc1", "biom.kg", "ann.npp.street.sim", "tree.num.str
 
 # write.csv(container, "processed/boston/bos.street.trees.small.npp.simulatorv1.results.csv")
 dim(container) # 98974 -- small only -- compare to 108974 when big trees included
-sum(container$tree.num.street.sim, na.rm=T) #1.1M trees
+sum(container$tree.num.street.sim, na.rm=T) #1.1M trees #938k
 
 ### tedious reconstruction of the raster comenses here
 ### this is how the biomass raster was processed prior to the street tree simulator start
@@ -1380,10 +1380,33 @@ plot(runme[,id.proc1])
 check <- as.vector(runme$id.proc1)
 sum(check %in% container$id.proc1) ## none of these pixels appears in the list of small biom. pixels
 range(container$id.proc1) # 1109:352514
-dim(container) # 98974 small trees
 
-range(container.big$id.proc1) # 251972:277668
-plot(container.big$id.proc1) ## something is fucked about how index was assigned to the big processing
-# runme.x gives proper index range in processing script
-## saved the wrong object as index track, need to rerun
+## rebuild container file before final merge into map vectors
+container.f <- rbind(container, container.big)
+dim(container.f) # 105k cells
+map <- merge(x=biom.dat, y=container.f, by="id.proc1", all.x=T, all.y=T)
+map[!is.na(bos.biom30m),] ## seems alright
+plot(map[,bos.biom30m], map[,biom.kg]) ## lines up, ignores the range above 50k kg
+range(map[,bos.biom30m], na.rm=T) ## original data still goes up to 50k kg
+range(map[, biom.kg], na.rm=T) ## processed only goes up to 30k kg
+map[bos.biom30m>30000, length(bos.biom30m)]/map[,length(bos.biom30m)] ## only 0.5% of pixels greater than 30k kg
+write.csv(map, "processed/boston/biom_street/streetsim.v1.results.csv")
 
+hist(map$ann.npp.street.sim)
+hist(map$tree.num.street.sim)
+hist(map$ba.street.sim)
+hist(map$med.dbh.street.sim)
+map[,sum(ann.npp.street.sim, na.rm=T)]/(2*(10^3)) ## 12k MgC/yr
+map[,sum(ann.npp.street.sim, na.rm=T)]/(2*(10^3))/(map[,sum(aoi, na.rm=T)]/(10^4)) ## ~1 MgC/ha/yr, compare Hardiman 1.5 MgC/ha/yr for Boston region
+
+### export the tifs
+for(j in 1:4){
+  r <- biom
+  r <- setValues(r, map[[(j+5)]])
+  writeRaster(r, paste("processed/boston/", names(map)[5+j], ".v1.tif", sep=""),
+              format="GTiff", overwrite=T)
+}
+
+
+
+##### now need to figure how to incorporate the andy edge effects for the forested members.
