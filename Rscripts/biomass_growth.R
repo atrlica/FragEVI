@@ -2,17 +2,6 @@ library(data.table)
 library(reticulate)
 library(raster)
 
-hf.dbh <- read.csv("docs/ian/Harvard_Forest_biomass.csv") ## edge plto data for HF
-length(unique(hf.dbh$Spp)) ## 18 species ID'd
-
-andy.dbh <- read.csv("docs/ian/Reinmann_Hutyra_2016_DBH.csv") ##edge plot data for Andy's suburban sites
-length(unique(andy.dbh$Species_Code)) ## 17 species ID'd
-
-andy.bai <- read.csv("docs/ian/Reinmann_Hutyra_2016_BAI.csv")
-dim(andy.bai) ## 195 individuals, dbh by year -- convert to biomass by year? Edge plot data from surburb sites
-
-rope <- read.csv("docs/ian/Rope_Plots_Data_Entry.csv") ## Rope plots, probably not useful, just a description of 
-
 ### should we also see if Britt's biomass increment~biomass is worth trying in here?
 
 street <- read.csv("docs/ian/Boston_Street_Trees.csv") ## Street tree resurvey, biomass 2006/2014, species
@@ -1408,5 +1397,450 @@ for(j in 1:4){
 }
 
 
-
+##### ANDY FOREST EDGE EFFECTS ANALYSIS
 ##### now need to figure how to incorporate the andy edge effects for the forested members.
+ba.pred <- function(x){(x/2)^2*pi*0.0001} ## get BA per stump from dbh
+
+### key things from PNAS: 
+## BA was ~40-->35-->25 m2/ha from 0-10-20
+## BAI was ~0.7--->0.6-->0.4
+
+### what is biomass density in Andy's plots? (according to dbh by position?)
+hf.dbh <- read.csv("docs/ian/Harvard_Forest_biomass.csv") ## edge plto data for HF
+length(unique(hf.dbh$Spp)) ## 18 species ID'd, 393 records
+colnames(hf.dbh) <- c("Plot.ID", "Tree.ID", "Spp", "X", "Y", "dbh", "Can.class", "DMG",
+                      "Core", "a.dir", "b.dir", "a.ID", "b.ID", "Notes")
+hf.dbh$ba <- ba.pred(hf.dbh$dbh)
+hf.dbh <- as.data.table(hf.dbh)
+hf.dbh[Y<10, seg:=10]
+hf.dbh[Y>=10 & Y<20, seg:=20]
+hf.dbh[Y>=20, seg:=30]
+a <- hf.dbh[,(sum(ba)*1E4)/(10*20), by= .(seg, Plot.ID)]
+plot(a$seg, a$V1)
+hf.dbh[,ba.plot:=sum(ba)*1E4/(20*30), by=Plot.ID]
+plot(hf.dbh$ba.plot)
+hf.dbh[,ba.rel:=(sum(ba)*1E4/(10*20))/ba.plot, by=seg] ### generally there's an increase in ba (m2/ha) in outer segments, but lots of variability between plots (40-70 m2/ha)
+hf.dbh[,site:="HF"]
+hist(hf.dbh$dbh) #0-80, most below 40
+
+### BA for rope plots
+rope <- read.csv("docs/ian/Rope_Plots_Data_Entry.csv") ## Rope plots, probably not useful, just a description of 
+rope <- as.data.table(rope) ## 1872 records
+names(rope) <- c("Plot.ID", "Tree.ID", "Spp", "dbh", "SNAG", "seg", "Can.class", "Notes")
+rope[,ba:=ba.pred(dbh)]
+unique(rope$Plot.ID) ## 22 separate plots, but Andy only reports on 13 in PNAS, doesn't mention separate HF plots
+a <- rope[,(sum(ba)*1E4)/((pi*(10^2))/2), by=.(Plot.ID, seg)]
+plot(a$seg, a$V1) ##~40 interior, ~80 edge, up to 140 m2/ha --> 348 ft/ac (80) 174 (40), mean is 100-149 ft2/ac for NE
+### OK so the rope plots and the HF plots appear to be much more dense than is considered typical for NE forestry
+rope[,site:="Rope"]
+hist(rope$dbh) # 0-100, most below 40
+
+## andy suburban plots
+andy.dbh <- read.csv("docs/ian/Reinmann_Hutyra_2016_DBH.csv") ##edge plot data for Andy's suburban sites
+length(unique(andy.dbh$Species_Code)) ## 17 species ID'd, #425 records
+andy.dbh <- as.data.table(andy.dbh)
+names(andy.dbh) <- c("Tree.ID", "Plot.ID", "Spp", "X", "Y", "dbh", "Can.class")
+andy.dbh[Y<10, seg:=10]
+andy.dbh[Y>=10 & Y<20, seg:=20]
+andy.dbh[Y>=20, seg:=30]
+andy.dbh[,ba:=ba.pred(dbh)]
+a <- andy.dbh[, sum(ba)*1E4/(10*20), by=.(Plot.ID, seg)]
+plot(a$seg, a$V1)
+a[,mean(V1), by=seg] ## this is where Fig 1 in PNAS comes from -- considerablly lower BA in the suburban plots, but same pattern of higher BA at edge
+andy.dbh[,site:="Andy"]
+hist(andy.dbh$dbh) # 0-100, most below 40
+
+## collate
+ba.results <- rbind(hf.dbh[,.(Plot.ID, Spp, dbh, ba, seg, site)], 
+                    rope[,.(Plot.ID, Spp, dbh, ba, seg, site)],
+                    andy.dbh[,.(Plot.ID, Spp, dbh, ba, seg, site)])
+ba.results$site <- as.factor(ba.results$site)
+b <- ba.results[site=="Rope",(sum(ba)*1E4)/((pi*(10^2))/2), by=.(Plot.ID, seg)]
+b[,site:="Rope"]
+c <- ba.results[site=="HF",(sum(ba)*1E4)/(10*20), by=.(Plot.ID, seg)]
+c[,site:="HF"]
+d <- ba.results[site=="Andy",(sum(ba)*1E4)/(10*20), by=.(Plot.ID, seg)]
+d[,site:="Andy"]
+e <- rbind(b,c,d)
+e$site <- as.factor(e$site) ## 148 plots along distance gradient, >2000 dbh records
+cols <- c("gray40", "red", "goldenrod")
+plot(e$seg, e$V1, col=cols[as.numeric(e$site)], pch=as.numeric(e$site)+13,
+     main="BA (m2/ha) by edge depth, Andy (grey), Rope (yellow), HF (red)",
+     ylab="BA m2/ha", xlab="edge distance m")
+### ok, so Andy's suburb data is at the low end of the range, but maybe HF plots aren't super representative of urban forest fragments
+
+## anyway, we have 1m data specifically on the edge class and biomass density -- we won't need to guess at it
+## BUT BA is how biomass GROWTH is expressed in Andy's work
+
+### Query: what are the dbh and BA distributions along edge in Andy's data and how does that shake out viz. area-based C assimilation
+### ie. apply the growth~dbh relationships BY SPECIES in the Andy/Rope/HF data: what is magnitude of C assimilation along edge (MgC/ha/yr) vs. what our model will predict
+ba.results ### this is every tree record (n=2690) for Andy/HF/Rope sites: Spp, dbh, ba (stump), edge segment
+e ## total basal area for each plot, all sites Andy/HF/Rope (n=148)
+e[,mean(V1), by=.(site, seg)] ## BA by site/edge: Rope is 82-->42ish, HF is 76-->40, Andy is 38-->25 -- so Andy's biomass density represents a lower end for fully forested sites
+ba.results[,mean(dbh), by=.(site,seg)] ## avg dbh by site: Rope is ~20cm throughout, HF is 21-->20, Andy is about 17 but with 21 in 20m -- so forest trees are not dramatically bigger/smaller than street trees
+hist(ba.results[, dbh]) ## skewed not unlike street trees, most below 40cm
+ba.results[,median(dbh)] ## 14.1cm, even smaller than street trees, but they grow slower than street trees on average (!)
+
+### what does species distributions out there look like (fix genus first)
+ba.results[, genus:="Unassigned"]
+ba.results[grep(ba.results[,Spp], pattern="Acer*"), genus:="Acer"]
+ba.results[Spp %in% c("ACRU", "ACPE", "ACSA"), genus:="Acer"]
+ba.results[grep(ba.results[,Spp], pattern="Querc*"), genus:="Quercus"]
+ba.results[Spp %in% c("QURU", "QUVE", "QUAL", "QUCO"), genus:="Quercus"]
+ba.results[grep(ba.results[,Spp], pattern="Pinus*"), genus:="Pinus"]
+ba.results[Spp %in% c("PIRE", "PIST", "PIRI"), genus:="Pinus"]
+ba.results[grep(ba.results[,Spp], pattern="Picea*"), genus:="Picea"]
+ba.results[grep(ba.results[,Spp], pattern="Betu*"), genus:="Betula"]
+ba.results[Spp %in% c("BEAL", "BELE", "BEPA", "BEPO", "BEPE"), genus:="Betula"]
+ba.results[grep(ba.results[,Spp], pattern="Fag*"), genus:="Fagus"]
+ba.results[Spp %in% c("FAGR"), genus:="Fagus"]
+ba.results[grep(ba.results[,Spp], pattern="Frax*"), genus:="Fraxinus"]
+ba.results[Spp %in% c("FRAM", "FAAM", "FRAL"), genus:="Fraxinus"]
+ba.results[grep(ba.results[,Spp], pattern="Prun*"), genus:="Prunus"]
+ba.results[Spp %in% c("PRPE", "PRSE"), genus:="Prunus"]
+ba.results[grep(ba.results[,Spp], pattern="Ulm*"), genus:="Ulmus"]
+ba.results[grep(ba.results[,Spp], pattern="Cary*"), genus:="Carya"]
+ba.results[grep(ba.results[,Spp], pattern="Tsu*"), genus:="Tsuga"]
+ba.results[Spp %in% c("TSCA"), genus:="Tsuga"]
+ba.results[grep(ba.results[,Spp], pattern="Cast*"), genus:="Castanea"]
+ba.results[Spp %in% c("CAGL", "CAOV"), genus:="Castanea"]
+ba.results[grep(ba.results[,Spp], pattern="Celas*"), genus:="Celastrus"]
+ba.results[Spp %in% c("JUVI"), genus:="Juniperus"]
+ba.results[Spp %in% c("HAVI", "HAVL"), genus:="Hamamelis"]
+ba.results[Spp %in% c("TIAM"), genus:="Tilia"] ## just a guess, Tilia americana
+ba.results[Spp %in% c("Snag", "Unknown", "SNAG"), genus:="Unknown"]
+# ba.results[Spp=="AMAR",] ## no idea, 1 record
+# ba.results[Spp=="TASp",] ## no idea, 1 record
+# ba.results[genus=="Unassigned",] ## 15 
+ba.results[genus=="Unassigned", genus:="Unknown"] ## I give up
+ba.results[genus=="Unknown", length(genus)] ## 97/2690, 4% -- ok
+
+## species distributions in the different sites
+site.tots <- ba.results[,length(genus), by=site] # listed HF, Rope, Andy
+dim(ba.results[site=="HF",]) #393
+dim(ba.results[site=="Rope",]) #1872 
+dim(ba.results[site=="Andy",]) #425
+
+oak <- ba.results[genus=="Quercus", length(genus), by=site]
+oak$V1/site.tots$V1 # 16-53%, andy a lot more oaks (he specifically cored the oaks but this is the raw dbh measures, everything >5cm?)
+acer <- ba.results[genus=="Acer", length(genus), by=site]
+acer$V1/site.tots$V1 # 7-43%, way more in HF and Rope, Andy only got 7%
+pine <- ba.results[genus=="Pinus", length(genus), by=site]
+pine$V1/site.tots$V1 # 11, 21, 16%, about even
+bet <- ba.results[genus=="Betula", length(genus), by=site]
+bet$V1/site.tots$V1 # 6, 18, 3%
+fag <- ba.results[genus=="Fagus", length(genus), by=site]
+fag$V1/site.tots$V1 # 12, 3, 12
+carya <- ba.results[genus=="Carya", length(genus), by=site]
+carya$V1/site.tots$V1 # 8, 2, 8%
+frax <- ba.results[genus=="Fraxinus", length(genus), by=site]
+frax$V1/site.tots$V1 # 7, 1, 1%
+ulm <- ba.results[genus=="Ulmus", length(genus), by=site]
+ulm$V1/site.tots$V1 # 3,1,3%
+cast <- ba.results[genus=="Castanea", length(genus), by=site]
+cast$V1/site.tots$V1[1:2] # 4, <1, 0 
+pic <- ba.results[genus=="Picea", length(genus), by=site]
+pic$V1/site.tots$V1 # 5, 1, 4
+tsug <- ba.results[genus=="Tsuga", length(genus), by=site]
+tsug$V1/site.tots$V1 # 7, 9, <1
+jun <- ba.results[genus=="Juniperus", length(genus), by=site]
+jun$V1/site.tots$V1 
+prun <- ba.results[genus=="Prunus", length(genus), by=site]
+prun$V1/site.tots$V1 
+
+genus.results <- rbind(oak$V1, acer$V1, pine$V1, bet$V1, frax$V1, tsug$V1, prun$V1)
+genus.results <- rbind(genus.results, c(cast$V1, 0)) # no castanea in Andy
+genus.results <- rbind(genus.results, c(0, fag$V1, 0)) # No fagus in HF or Andy
+genus.results <- rbind(genus.results, c(0, carya$V1, 0)) # No carya in HF or Andy
+genus.results <- rbind(genus.results, c(0, ulm$V1, 0)) # no ulmus in HF or Andy
+genus.results <- rbind(genus.results, c(0, pic$V1, 0)) # no picea in HF or Andy
+genus.results <- rbind(genus.results, c(0, 0, pic$V1)) # no juniperus in HF or Rope
+genus.results[,1] <- round(genus.results[,1]/site.tots$V1[1], 3)*100
+genus.results[,2] <- round(genus.results[,2]/site.tots$V1[2], 3)*100
+genus.results[,3] <- round(genus.results[,3]/site.tots$V1[3], 3)*100
+tots <- c(sum(genus.results[,1]), sum(genus.results[,2]), sum(genus.results[,3]))
+genus.results <- data.frame(genus.results)
+genus.results <- cbind(c("Quercus", "Acer", "Pinus", "Betula", "Fraxinus", "Tsuga", "Prunus",
+                         "Castanea", "Fagus", "Carya", "Ulmus", "Picea", "Juniperus"),
+                       genus.results)
+colnames(genus.results) <- c("Genus", "HF", "Rope", "Andy")
+genus.results$Genus <- as.character(genus.results$Genus)
+genus.results <- rbind(genus.results, c("Total", tots)) ## didn't get many of the Andy genera
+genus.results ## way more oaks in Andy, way more maples in HF+Rope, weirdly few Chestnuts/Birch/Ash/Hemlock but a lot of Juniper/Cherry in Andy
+
+### how does dbh look along the edge gradient (all sites)?
+ba.results[, mean(dbh), by=seg] ## everything is about the same, ~19 cm or so
+hist(ba.results[,dbh]) ## highly skewed
+ba.results[, median(dbh), by=seg] ## still within 1-2 cm in all segments
+plot(andy.dbh$Y, andy.dbh$dbh) ## nothing obvious jumps out
+plot(hf.dbh$Y, hf.dbh$dbh) ## slightly more at edge
+plot(rope$seg, rope$dbh) ## not much
+plot(ba.results[,seg], ba.results[, dbh], col=as.numeric(ba.results[,site]), pch=13+as.numeric(ba.results[,site]))
+## the rope plots contain some of the monsters in each of the distance classes, but seem about comparable
+### density of stems by distance class
+ba.results[site=="HF", plot.area:=(20*30)/3]
+ba.results[site=="Andy", plot.area:=(20*30)/3]
+ba.results[site=="Rope", plot.area:=pi*(10^2)/2]
+
+
+#### HOW does BA, stem density, and average dbh vary within sites along edge gradient
+## HF plots
+## stem density (stems/m2) vs. BA
+hf.dens <- ba.results[site=="HF" & dbh>5, .(length(dbh), sum(ba), mean(dbh)), by=.(Plot.ID, seg)]
+names(hf.dens)[3:5] <- c("stems.m2", "BA", "mean.dbh")
+hf.dens$stems.m2 <- hf.dens$stems.m2/200
+hf.dens$BA <- (hf.dens$BA/200)*1E4
+mean(hf.dens$stems.m2) # 0.108
+mean(hf.dens$mean.dbh) #21.6cm
+mean(hf.dens$BA) # 55 m2/ha
+# relationship to edge distance
+plot(hf.dens$seg, hf.dens$BA) ## BA higher at edge
+plot(hf.dens$seg, hf.dens$stems.m2) ## stem density higher at edge
+plot(hf.dens$seg, hf.dens$mean.dbh) ## just more variable at edge
+plot(hf.dens$stems.m2, hf.dens$BA) ## 0.27 higher density --> higher BA
+cor(hf.dens$stems.m2, hf.dens$BA)
+plot(hf.dens$stems.m2, hf.dens$mean.dbh) # more stems -- lower mean dbh
+cor(hf.dens$stems.m2, hf.dens$mean.dbh) #-0.62
+plot(hf.dens$mean.dbh, hf.dens$BA) ## higher dbh -- higher BA
+cor(hf.dens$mean.dbh, hf.dens$BA) # 0.54 
+
+## Rope plots
+## stem density (stems/m2) vs. BA
+rope.dens <- ba.results[site=="Rope" & dbh>5, .(length(dbh), sum(ba), mean(dbh)), by=.(Plot.ID, seg)]
+names(rope.dens)[3:5] <- c("stems.m2", "BA", "mean.dbh")
+rope.dens$stems.m2 <- rope.dens$stems.m2/157 # stems/m2
+rope.dens$BA <- (rope.dens$BA/157)*1E4
+mean(rope.dens$stems.m2) # 0.112
+mean(rope.dens$mean.dbh) # 20.5cm
+mean(rope.dens$BA) # 54 m2/ha
+## relationship to edge distance
+plot(rope.dens$seg, rope.dens$BA) ## BA higher at edge
+plot(rope.dens$seg, rope.dens$stems.m2) ## stem density higher at edge
+plot(rope.dens$seg, rope.dens$mean.dbh) ## not much effect
+# relationship between them
+plot(rope.dens$stems.m2, rope.dens$BA) ##  higher density --> higher BA
+cor(rope.dens$stems.m2, rope.dens$BA) # 0.39
+plot(rope.dens$stems.m2, rope.dens$mean.dbh) ## higher density at lower dbh
+cor(rope.dens$stems.m2, rope.dens$mean.dbh) #-0.41
+plot(rope.dens$mean.dbh, rope.dens$BA) # higher BA with higher dbh
+cor(rope.dens$mean.dbh, rope.dens$BA) # 0.56
+
+## andy plots
+## stem density (stems/m2) vs. BA
+andy.dens <- ba.results[site=="Andy" & dbh>5, .(length(dbh), sum(ba), mean(dbh)), by=.(Plot.ID, seg)]
+names(andy.dens)[3:5] <- c("stems.m2", "BA", "mean.dbh")
+andy.dens$stems.m2 <- andy.dens$stems.m2/200
+andy.dens$BA <- (andy.dens$BA/200)*1E4
+mean(andy.dens$stems.m2) ## 0.088
+mean(andy.dens$mean.dbh) # 19cm
+mean(andy.dens$BA) ## 33 m2/ha
+# relationship to edge distance
+plot(andy.dens$seg, andy.dens$BA) ## BA higher at edge
+plot(andy.dens$seg, andy.dens$stems.m2) ## stem density higher at edge, variable
+plot(andy.dens$seg, andy.dens$mean.dbh) ## just more variable at edge, lower interior
+## relationship between them
+plot(andy.dens$stems.m2, andy.dens$BA) # higher density --> higher BA
+cor(andy.dens$stems.m2, andy.dens$BA) # 0.18
+plot(andy.dens$stems.m2, andy.dens$mean.dbh) ## high densiy -- lower dbh
+cor(andy.dens$stems.m2, andy.dens$mean.dbh) #-0.51
+plot(andy.dens$mean.dbh, andy.dens$BA) # higher dbh -- more BA
+cor(andy.dens$mean.dbh, andy.dens$BA) # 0.67
+
+
+
+####
+### BAI assessment
+andy.bai <- read.csv("docs/ian/Reinmann_Hutyra_2016_BAI.csv") 
+dim(andy.bai) ## 195 individuals, dbh by year, suburb "andy" plots only
+andy.bai <- as.data.table(andy.bai)
+### need to get an average delta-dbh/yr for each tree
+### set up some basic allometrics to get biomass
+## Jenkins, C.J., D.C. Chojnacky, L.S. Heath and R.A. Birdsey. 2003. Forest Sci 49(1):12-35.
+## Chojnacky, D.C., L.S. Heath and J.C. Jenkins. 2014. Forestry 87: 129-151.
+
+# Pinus rigida, Pinus strobus, both spg>0.45
+# Acer rubrum, Aceraceae <0.50 spg
+# Quercus alba, Quercus coccinea, Quercus rubra, Quercus velutina, deciduous Fagaceae
+# Pinus, Acer, Quercus
+b0.l <- c(-3.0506, -2.0470, -2.0705)
+b1.l <- c(2.6465, 2.3852, 2.4410)
+biom.pred <- function(x, b0, b1){exp(b0+(b1*log(x)))} ## dbh in cm, biom. in kg
+
+# andy.bai[Spp %in% c("PIRI", "PIST"), biom.tree:=biom.pred(dbh, b0.l[1], b1.l[1])]
+# andy.bai[Spp %in% c("ACRU"), biom.tree:=biom.pred(dbh, b0.l[2], b1.l[2])]
+# andy.bai[Spp %in% c("QUAL", "QUCO", "QURU", "QUVE"), biom.tree:=biom.pred(dbh, b0.l[3], b1.l[3])]
+# hist(andy.bai$biom.tree) ## most below 2000
+
+## artifact: dbh's have hidden NA's that are marked as repeating numbers, basically when the dbh gets too small -- they are higher than the min dbh though
+cleanup <- as.matrix(andy.bai[,7:33])
+# which(diff(cleanup[11,], lag = 1)>0) ## tells you where the sequence breaks
+for(r in 1:nrow(cleanup)){
+  bust <- which(diff(cleanup[r,], lag = 1)>0)
+  if(length(bust)>0){
+    cleanup[r, bust:ncol(cleanup)] <- NA
+  }
+}
+cleanup <- as.data.table(cleanup)
+andy.bai <- cbind(andy.bai[,1:6], cleanup)
+names(andy.bai)[7:33] <- paste0("dbh", 2016:1990)
+andy.bai[,incr.ID:=seq(1:dim(andy.bai)[1])]
+names(andy.bai)[1:6] <- c("Plot.ID", "Tree.ID", "Spp", "X", "Y", "Can.class")
+
+### to figure the biomass change as a % of previous biomass per year from the increment data
+## this might not quite be working right
+taxa <- list(c("PIRI", "PIST"),
+             c("ACRU"),
+             c("QUAL", "QUCO", "QURU", "QUVE"))
+biom.rel <- list()
+bop <- data.table()
+for(sp in 1:3){
+  tmp <- andy.bai[Spp %in% taxa[[sp]],]
+  a <- tmp[, lapply(tmp[,7:33], function(x){biom.pred(x, b0.l[sp], b1.l[sp])})]
+  a <- cbind(tmp[,.(Tree.ID, incr.ID, Spp, Y, dbh2016)], a)
+  bop <- rbind(bop, a)
+}
+bop$Spp <- as.character(bop$Spp) ### bop is the biomass time series for every core
+names(bop)[6:32] <- paste0("biom", 2016:1990)
+View(bop[order(incr.ID),])
+
+biom.rel <- data.frame(c(2015:1990))
+## get lagged 1yr biomass differences
+for(i in 1:dim(bop)[1]){
+  te <- unlist(bop[i,6:32])
+  te.di <- (-1*diff(te, lag=1))
+  biom.rel[,i+1] <- te.di/te[-1]
+}
+names(biom.rel)[-1] <- paste0("Tree", bop[,incr.ID])
+names(biom.rel)[1] <- "Year" ## this has all the relative biomass gains by year (row) for each tree with increment (column)
+plot(biom.rel$Year, biom.rel$Tree2)
+plot(biom.rel$Year, biom.rel$Tree4)
+names(biom.rel)
+for(u in 41:60){  
+  plot(biom.rel$Year, biom.rel[,u], main=paste(colnames(biom.rel)[u]))
+}
+## everything looks like a slow decline in relative growth (not clear if that is just a funciton of trees getting bigger or canopy closing)
+## most are in the 2-8% range, but some are v. high (20-40%)
+mean.na <- function(x){mean(x, na.rm=T)}
+m <- apply(biom.rel[,-1], FUN=mean.na, 2)
+class(m)
+growth.mean <- data.frame(cbind(c(sub("Tree", '', colnames(biom.rel[,-1]))), m))
+names(growth.mean) <- c("incr.ID", "growth.mean")
+growth.mean$incr.ID <- as.integer(as.character(growth.mean$incr.ID))
+andy.bai <- merge(andy.bai, growth.mean, by="incr.ID")
+andy.bai[Y<10, seg:=10]
+andy.bai[Y>=10 & Y<20, seg:=20]
+andy.bai[Y>=20, seg:=30]
+andy.bai[seg==10, seg.F:="A"]
+andy.bai[seg==20, seg.F:="B"]
+andy.bai[seg==30, seg.F:="C"]
+andy.bai$seg.F <- as.factor(andy.bai$seg.F)
+andy.bai$growth.mean <- as.numeric(as.character(andy.bai$growth.mean))
+mod <- aov(growth.mean~seg.F, data=andy.bai)
+summary(mod)
+mod <- lm(growth.mean~seg.F, data=andy.bai)
+summary(mod)
+mod2 <- lm(growth.mean~seg.F*dbh2016, data=andy.bai)
+summary(mod2)
+
+plot(andy.bai$dbh2016, andy.bai$growth.mean) ## looks like the standard exponential relationship
+dim(andy.bai[seg==10,]) ## about ~60 trees per segment
+dim(andy.bai[seg==20,])
+dim(andy.bai[seg==30,])
+dim(andy.bai[Spp %in% c("PIST", "PIRI"),]) ## 23 pines
+dim(andy.bai[Spp %in% c("QURU", "QUAL", "QUVE", "QUCO", "ACRU"),]) #170 oaks + 2 maple
+
+### best street tree model was a log~log relationship between dbh and ann.npp.rel
+plot(andy.bai[,log(dbh2016)], andy.bai[,log(growth.mean)]) ## pretty shotgunned
+summary(lm(log(growth.mean)~log(dbh2016), data=andy.bai)) #r2=0.18
+### look at soft/hardwoods separately
+## hardwoods
+plot(andy.bai[Spp %in% c("QURU", "QUAL", "QUVE", "QUCO", "ACRU"),log(dbh2016)], andy.bai[Spp %in% c("QURU", "QUAL", "QUVE", "QUCO", "ACRU"),log(growth.mean)]) ## kinda sloppy but there
+summary(lm(log(growth.mean)~log(dbh2016), data=andy.bai[Spp %in% c("QURU", "QUAL", "QUVE", "QUCO", "ACRU"),])) #r2=0.08
+## softwoods
+plot(andy.bai[Spp %in% c("PIST", "PIRI"),log(dbh2016)], andy.bai[Spp %in% c("PIST", "PIRI"),log(growth.mean)]) ## sparse, maybe negative
+summary(lm(log(growth.mean)~log(dbh2016), data=andy.bai[Spp %in% c("PIST", "PIRI"),])) #r2=0.48... BUT this is minority of samples AND this doesn't control for edge distance
+
+plot(andy.bai[Spp %in% c("QURU", "QUAL", "QUVE", "QUCO", "ACRU"), log(dbh2016)],
+     andy.bai[Spp %in% c("QURU", "QUAL", "QUVE", "QUCO", "ACRU"),log(growth.mean)],
+     col=as.numeric(andy.bai[Spp %in% c("QURU", "QUAL", "QUVE", "QUCO", "ACRU"), seg.F])) ## they sort by segment
+
+## interactive model with edge segment
+mod.int <- summary(lm(log(growth.mean)~log(dbh2016)*seg.F, data=andy.bai[Spp %in% c("QURU", "QUAL", "QUVE", "QUCO", "ACRU"),])) #r2=0.24 :-(
+## basically everyting below 20cm and <10m grows like hell, most other things grow more slowly, and big things grow v. slow 
+
+## try with an "average" dbh over the life of the tree measurements
+andy.bai[,avg.dbh:=apply(as.matrix(andy.bai[,8:34]), FUN=mean.na, 1)]
+plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean)) ## this cleans it up some
+plot(log(andy.bai$dbh2016), log(andy.bai$growth.mean))
+mod.int <- summary(lm(log(growth.mean)~log(avg.dbh)*seg.F, data=andy.bai[Spp %in% c("QURU", "QUAL", "QUVE", "QUCO", "ACRU"),])) #r2=0.36
+plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean), col=as.numeric(andy.bai$seg.F))
+### OK, here's a reasonably ok relationship IN THE OAKS between dbh, edge position, and biomass % gain/yr 
+mod.int.all <- summary(lm(log(growth.mean)~log(avg.dbh)*seg.F, data=andy.bai)) #r2=0.47 when you include the pines
+
+### compare: do Andy trees grow like street trees?
+mod.biom.rel <- summary(lm(log(at.npp.ann.rel)~log(dbh.2006), data=street[record.good==1 & ann.npp!=0])) #r2=0.54! so relative %change biomass per year is the most predictive so far
+mod.street <- mod.biom.rel ### R2=0.54
+mod.andy.simple <- summary(lm(log(growth.mean)~log(avg.dbh), data=andy.bai)) ## R2=0.37
+## test: 25cm dbh tree
+test <- 25
+exp(mod.street$coefficients[1]+(mod.street$coefficients[2]*log(25))) # 8.4% pred.growth
+exp(mod.andy.simple$coefficients[1]+(mod.andy.simple$coefficients[2]*log(25))) # 3.6% pred.growth
+## compare across range of dbh
+test <- 10:100
+test.street <- exp(mod.street$coefficients[1]+(mod.street$coefficients[2]*log(test)))
+test.andy <- exp(mod.andy.simple$coefficients[1]+(mod.andy.simple$coefficients[2]*log(test))) # 3.6% pred.growth
+plot(test, test.street, col="red", pch=14, cex=0.4, 
+     main="Street vs. Forest, no edge effects", ylab="% biomass growth/yr", xlab="dbh, cm")
+points(test, test.andy, col="blue", pch=15, cex=0.4) ## so they differ a fair amount below ~dbh 30cm
+
+## but if you correct for edge, do the EDGE trees begin to resemble the street trees?
+### need the interaction model here
+## note: interaction model only applies correction coefficients for the interior segments
+test.andy.edge <- exp(mod.int.all$coefficients[1]+(mod.int.all$coefficients[2]*log(test)))
+plot(test, test.street, col="red", pch=14, cex=0.4,
+     main="Street vs. Forest, edge effect by segment", ylab="% biomass growth/yr", xlab="dbh, cm")
+points(test, test.andy.edge, col="salmon", pch=16, cex=0.4) ## look pretty good! close above 20cm
+test.andy.20m <- exp(mod.int.all$coefficients[1]+(mod.int.all$coefficients[2]*log(test))+mod.int.all$coefficients[3]+(mod.int.all$coefficients[5]*log(test)))
+points(test, test.andy.20m, col="goldenrod2", pch=17, cex=0.4)
+test.andy.30m <- exp(mod.int.all$coefficients[1]+(mod.int.all$coefficients[2]*log(test))+mod.int.all$coefficients[4]+(mod.int.all$coefficients[6]*log(test)))
+points(test, test.andy.30m, col="darkgreen", pch=15, cex=0.4)
+legend(x = 60, y = 0.25, bty="n", legend = c("street", "10m", "20m", "30m"), fill = c("red", "salmon", "goldenrod2", "darkgreen"))
+plot(test, test.andy.edge, col="salmon", pch=14)
+points(test, test.andy.20m, col="goldenrod2", pch=15)
+points(test, test.andy.30m, col="darkgreen", pch=16) ## this one sees the edge and 30m as similar coefficients
+
+### try a model with just edge vs. interior
+andy.bai[seg.F=="A", seg.Edge:="E"]
+andy.bai[seg.F %in% c("B", "C"), seg.Edge:="I"]
+mod.int.edge <- summary(lm(log(growth.mean)~log(avg.dbh)*seg.Edge, data=andy.bai)) #r2=0.46, just edge vs. interior, no sig. dbh*edge interaction
+test.andy.edge2 <- exp(mod.int.edge$coefficients[1]+(mod.int.edge$coefficients[2]*log(test)))
+test.andy.inter <- exp(mod.int.edge$coefficients[1]+(mod.int.edge$coefficients[2]*log(test))+mod.int.all$coefficients[3])
+plot(test, test.street, col="red", pch=16, cex=0.4, 
+     main="Street vs. Forest, edge vs. interior", ylab="% biomass growth/yr", xlab="dbh, cm")
+points(test, test.andy.edge2, col="salmon", pch=15, cex=0.4)
+points(test, test.andy.inter, col="darkgreen", pch=14, cex=0.4)
+legend(x = 60, y = 0.25, bty="n", legend=c("street", "10m", "20m+30m"), fill=c("red", "salmon", "darkgreen"))
+
+## compare
+mod.int.edge
+mod.int.all ## same b0 and b1 for the edge trees, different handling of interior plots but about comparable
+### so the edge trees resemble the street trees than the interior trees (but no different slope coefficient with dbh for interior)
+### does the raw data look like this? Do we get slower growing trees in interior? why?
+andy.bai[,.(mean(avg.dbh), mean(growth.mean)), by=.(seg.F, Spp)] ## can vary a bit, v. small QUAL at edge, and PIST is high and peculiar
+andy.bai[,.(mean(avg.dbh), mean(growth.mean)), by=.(seg.F)] ## irrespective, you get similar dbh but higher growth in the edge
+
+
+
+### to get the 30m cells in forest to tell you NPP
+## 1) get area of 10/20/30 in each cell
+## 2) somehow map a DBH*SPECIES*DENSITY(BA) relationship to edge (viz results of assesment of Andy/Rope/HF plots)
+## 3) apply growth~dbh*edge relationship to the trees that ought to be there to produce biomass density shown in Raciti data
+
+
+
+### How to model a forest from Andy's trees
+## 1) dbh distribution along edge gradient
+## 2) BA/total biomass distribution along edge
+## 3) Guess at a tree distribution in each segment that resembles the dbh*density distribution in the field plots
+## 4) apply generalized %growth~dbh*edge to get npp (irrespetive of species)
+
