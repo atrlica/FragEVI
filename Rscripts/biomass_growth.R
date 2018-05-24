@@ -1646,8 +1646,6 @@ cor(andy.dens$stems.m2, andy.dens$mean.dbh) #-0.51
 plot(andy.dens$mean.dbh, andy.dens$BA) # higher dbh -- more BA
 cor(andy.dens$mean.dbh, andy.dens$BA) # 0.67
 
-
-
 ####
 ### BAI assessment
 andy.bai <- read.csv("docs/ian/Reinmann_Hutyra_2016_BAI.csv") 
@@ -1844,3 +1842,67 @@ andy.bai[,.(mean(avg.dbh), mean(growth.mean)), by=.(seg.F)] ## irrespective, you
 ## 3) Guess at a tree distribution in each segment that resembles the dbh*density distribution in the field plots
 ## 4) apply generalized %growth~dbh*edge to get npp (irrespetive of species)
 
+### idea for how to model forest using Andy data
+# 1) Take the cell, figure the area of 10m, +10m
+# 2) Pre-select a stem density from +/- 1std of the stem density distribution of the edge plots
+# 3) Take a sample from the main andy.dbh list with n that gives you the correct density in the area of edge for that cell
+# 4) Evaluate the BA for the trees selected: if it doesn't fall within +/- 1 std of the edge distribution in the Andy plots, reject
+# 5) Repeat steps for the interior plots, with stem density + BA appropriate to the edge plots (aggregated)
+# 6) Get sum of biomass in edge+interior segments for the selected trees. Reject if not +/- 10% of cell biomass
+# 7) Apply edge-approrpiate growth function to the edge trees, interior-appropriate growth function to the interior trees
+# 8) For each cell, for each edge class, record: BA, density, number, dbh's, taxa, total biomass, npp
+
+### to begin...
+library(raster)
+library(data.table)
+biom <- raster("processed/boston/bos.biom30m.tif")
+forest <- raster("processed/boston/bos.forest30m.tif")
+aoi <- raster("processed/boston/bos.aoi30m.tif")
+biom <- crop(biom, aoi)
+biom.dat <- as.data.table(as.data.frame(biom))
+aoi.dat <- as.data.table(as.data.frame(aoi))
+forest.dat <- as.data.table(as.data.frame(forest))
+ed.dat <- raster("processed/boston/bos.ed.tif")### get the 30m ed 10?
+biom.dat <- cbind(biom.dat, aoi.dat, forest.dat)
+biom.dat[,pix.ID:=seq(1:dim(biom.dat)[1])]
+proc <- biom.dat[bos.forest30m>0.75 & bos.aoi30m>800,] ## only pixels that are mostly forest and mostly inside the aoi
+proc[,range(bos.biom30m, na.rm=T)] ### spans from 0 to max 51k
+
+## how to select the number of stems to draw, based on distribution of stem denstiy by edge in the plots
+hist(andy.dens[seg==10, stems.m2]) ## this is a very sparse and skewed distribution
+andy.dens[seg==10, median(stems.m2)]#0.08 stems/m2
+ad <- andy.dbh[,length(ba), by=.(seg, Plot.ID)]
+plot(ad$seg, ad$V1)
+pd <- ba.results[site=="Andy" & seg==10, length(ba), by=Plot.ID] ## number of stems in each 10m plot
+fitdistr(pd$V1, "poisson") #lambda = 21.1
+edge.dist <- fitdistr(pd$V1, "normal") ## mean 21 (11)
+hist(rpois(1000, 21.1))
+library(fitdistrplus)
+gg.p <- fitdist(pd$V1, "pois")
+plotdist(pd$V1, "pois", para=list(lambda=gg.p$estimate[1])) ## kinda funky
+gg.n <- fitdist(pd$V1, "norm")
+plotdist(pd$V1, "norm", para=list(mean=gg.n$estimate[1], sd=gg.n$estimate[2])) # also kinda funky
+## what about interior?
+pd <- ba.results[site=="Andy" & seg %in% c(20,30), length(ba), by=Plot.ID] ## number of stems in each 10m plot
+int <- pd$V1/2 ## correct for area (double the size of the 10m segment)
+hist(int)
+fitdistr(int, "poisson") ## no can do
+int.dist <- fitdistr(int, "normal") ## mean 16 (3.6)
+hist(rpois(1000, 32))
+gg.p <- fitdist(int, "pois")
+plotdist(int, "pois", para=list(lambda=gg.p$estimate[1])) ## kinda funky
+gg.n <- fitdist(int, "norm")
+plotdist(int, "norm", para=list(mean=gg.n$estimate[1], sd=gg.n$estimate[2])) # also kinda funky
+## distribution can't be estimated for poisson
+
+## we will assume a normal distribution for stem number with mean/sd as given above
+ndist.edge <- rnorm(10000, mean=edge.dist$estimate[1], sd = edge.dist$estimate[2])
+ndist.int <- rnorm(10000, mean=int.dist$estimate[1], sd = int.dist$estimate[2])
+hist(ndist.edge)
+hist(ndist.int) ## fuck it, good enough
+n.stems <- round(sample(ndist.edge, 1), 0) # e.g. number of stems to sample *** FOR 200m PLOT**
+
+### loop for determining tree distribution + productivity in forest-only pixels
+for(p in 1:dim(proc)[1]){
+  round((sample(ndist.edge, 1)/200)*proc[p, (900*bos.forest30m)],0) ## need also to control for the area of 10m fraction of this pixel
+}
