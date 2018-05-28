@@ -1400,7 +1400,8 @@ for(j in 1:4){
 ##### ANDY FOREST EDGE EFFECTS ANALYSIS
 ##### now need to figure how to incorporate the andy edge effects for the forested members.
 ba.pred <- function(x){(x/2)^2*pi*0.0001} ## get BA per stump from dbh
-
+library(raster)
+library(data.table)
 ### key things from PNAS: 
 ## BA was ~40-->35-->25 m2/ha from 0-10-20
 ## BAI was ~0.7--->0.6-->0.4
@@ -1699,7 +1700,6 @@ for(sp in 1:3){
 }
 bop$Spp <- as.character(bop$Spp) ### bop is the biomass time series for every core
 names(bop)[6:32] <- paste0("biom", 2016:1990)
-View(bop[order(incr.ID),])
 
 biom.rel <- data.frame(c(2015:1990))
 ## get lagged 1yr biomass differences
@@ -1720,7 +1720,6 @@ for(u in 41:60){
 ## most are in the 2-8% range, but some are v. high (20-40%)
 mean.na <- function(x){mean(x, na.rm=T)}
 m <- apply(biom.rel[,-1], FUN=mean.na, 2)
-class(m)
 growth.mean <- data.frame(cbind(c(sub("Tree", '', colnames(biom.rel[,-1]))), m))
 names(growth.mean) <- c("incr.ID", "growth.mean")
 growth.mean$incr.ID <- as.integer(as.character(growth.mean$incr.ID))
@@ -1856,53 +1855,455 @@ andy.bai[,.(mean(avg.dbh), mean(growth.mean)), by=.(seg.F)] ## irrespective, you
 library(raster)
 library(data.table)
 biom <- raster("processed/boston/bos.biom30m.tif")
+biom <- crop(biom, aoi)
 forest <- raster("processed/boston/bos.forest30m.tif")
 aoi <- raster("processed/boston/bos.aoi30m.tif")
-biom <- crop(biom, aoi)
+ed <- raster("processed/boston/bos.ed1030m.tif")### get the 30m ed 10?
+can <- raster("processed/boston/bos.can30m.tif")
+
 biom.dat <- as.data.table(as.data.frame(biom))
 aoi.dat <- as.data.table(as.data.frame(aoi))
 forest.dat <- as.data.table(as.data.frame(forest))
-ed.dat <- raster("processed/boston/bos.ed.tif")### get the 30m ed 10?
-biom.dat <- cbind(biom.dat, aoi.dat, forest.dat)
+ed.dat <- as.data.table(as.data.frame(ed))
+can.dat <- as.data.table(as.data.frame(can))
+biom.dat <- cbind(biom.dat, aoi.dat, forest.dat, ed.dat, can.dat)
 biom.dat[,pix.ID:=seq(1:dim(biom.dat)[1])]
-proc <- biom.dat[bos.forest30m>0.75 & bos.aoi30m>800,] ## only pixels that are mostly forest and mostly inside the aoi
+proc <- biom.dat[bos.forest30m>0.50 & bos.aoi30m>800,] ## only pixels that are mostly forest and mostly inside the aoi
 proc[,range(bos.biom30m, na.rm=T)] ### spans from 0 to max 51k
+names(proc) <- c("biom", "aoi", "forest", "ed", "can", "pix.ID")
+proc[,int:=can-ed]
+
+## a little data hygenie
+plot(proc[,biom], proc[,can]) ## most highly canopied and >20000kg
+hist(proc[,aoi]) ## almost all 900 m2
+plot(proc[,ed], proc[,can]) # none where %edge is higher than %can; places where %edge=0 but can is 90-100 (like no edge but not full canopy either...)
+plot(proc[,ed], proc[,forest]) ## only above 50% forest, a lot of pix at the 1.0 forest line
+plot(proc[,forest], proc[,can]) ## full forest has a range 0-1 range of canopy, most full canopy are also nearly full forest
+hist(proc[,forest])
+hist(proc[,can])
+hist(proc[forest>0.8, can]) ## most majority-forest cells are >80% canopy
+hist(proc[can>0.8, forest]) ## even more of the majority-canopy pixels are 100% forest
+### OK: So even though we cannot tell what fraction of canopy is forest vs. non-forest in each cell, in majority-forest cells we will treat all canopy as pertaining to the forest (non-forest canopy will be minority of canopy)
 
 ## how to select the number of stems to draw, based on distribution of stem denstiy by edge in the plots
-hist(andy.dens[seg==10, stems.m2]) ## this is a very sparse and skewed distribution
-andy.dens[seg==10, median(stems.m2)]#0.08 stems/m2
-ad <- andy.dbh[,length(ba), by=.(seg, Plot.ID)]
-plot(ad$seg, ad$V1)
-pd <- ba.results[site=="Andy" & seg==10, length(ba), by=Plot.ID] ## number of stems in each 10m plot
-fitdistr(pd$V1, "poisson") #lambda = 21.1
-edge.dist <- fitdistr(pd$V1, "normal") ## mean 21 (11)
-hist(rpois(1000, 21.1))
-library(fitdistrplus)
-gg.p <- fitdist(pd$V1, "pois")
-plotdist(pd$V1, "pois", para=list(lambda=gg.p$estimate[1])) ## kinda funky
-gg.n <- fitdist(pd$V1, "norm")
-plotdist(pd$V1, "norm", para=list(mean=gg.n$estimate[1], sd=gg.n$estimate[2])) # also kinda funky
-## what about interior?
-pd <- ba.results[site=="Andy" & seg %in% c(20,30), length(ba), by=Plot.ID] ## number of stems in each 10m plot
-int <- pd$V1/2 ## correct for area (double the size of the 10m segment)
-hist(int)
-fitdistr(int, "poisson") ## no can do
-int.dist <- fitdistr(int, "normal") ## mean 16 (3.6)
-hist(rpois(1000, 32))
-gg.p <- fitdist(int, "pois")
-plotdist(int, "pois", para=list(lambda=gg.p$estimate[1])) ## kinda funky
-gg.n <- fitdist(int, "norm")
-plotdist(int, "norm", para=list(mean=gg.n$estimate[1], sd=gg.n$estimate[2])) # also kinda funky
-## distribution can't be estimated for poisson
+# library(fitdistrplus)
+# hist(andy.dens[seg==10, stems.m2]) ## this is a very sparse and skewed distribution
+# andy.dens[seg==10, median(stems.m2)]#0.08 stems/m2
+# ad <- andy.dbh[,length(ba), by=.(seg, Plot.ID)]
+# plot(ad$seg, ad$V1)
+# pd <- ba.results[site=="Andy" & seg==10, length(ba), by=Plot.ID] ## number of stems in each 10m plot
+# fitdistr(pd$V1, "poisson") #lambda = 21.1
+# edge.dist <- fitdistr(pd$V1, "normal") ## mean 21 (11)
+# hist(rpois(1000, 21.1))
+# 
+# gg.p <- fitdist(pd$V1, "pois")
+# plotdist(pd$V1, "pois", para=list(lambda=gg.p$estimate[1])) ## kinda funky
+# gg.n <- fitdist(pd$V1, "norm")
+# plotdist(pd$V1, "norm", para=list(mean=gg.n$estimate[1], sd=gg.n$estimate[2])) # also kinda funky
+# ## what about interior?
+# pd <- ba.results[site=="Andy" & seg %in% c(20,30), length(ba), by=Plot.ID] ## number of stems in each 10m plot
+# int <- pd$V1/2 ## correct for area (double the size of the 10m segment)
+# hist(int)
+# fitdistr(int, "poisson") ## no can do
+# int.dist <- fitdistr(int, "normal") ## mean 16 (3.6)
+# hist(rpois(1000, 32))
+# gg.p <- fitdist(int, "pois")
+# plotdist(int, "pois", para=list(lambda=gg.p$estimate[1])) ## kinda funky
+# gg.n <- fitdist(int, "norm")
+# plotdist(int, "norm", para=list(mean=gg.n$estimate[1], sd=gg.n$estimate[2])) # also kinda funky
+# ## distribution can't be estimated for poisson
 
-## we will assume a normal distribution for stem number with mean/sd as given above
-ndist.edge <- rnorm(10000, mean=edge.dist$estimate[1], sd = edge.dist$estimate[2])
-ndist.int <- rnorm(10000, mean=int.dist$estimate[1], sd = int.dist$estimate[2])
-hist(ndist.edge)
-hist(ndist.int) ## fuck it, good enough
-n.stems <- round(sample(ndist.edge, 1), 0) # e.g. number of stems to sample *** FOR 200m PLOT**
+
+
+### get your DBH database ready to rock
+ba.pred <- function(x){(x/2)^2*pi*0.0001} ## get BA per stump from dbh
+andy.dbh <- read.csv("docs/ian/Reinmann_Hutyra_2016_DBH.csv")
+andy.dbh <- as.data.table(andy.dbh)
+names(andy.dbh) <- c("Tree.ID", "Plot.ID", "Spp", "X", "Y", "dbh", "Can.class")
+andy.dbh[Y<10, seg:=10]
+andy.dbh[Y>=10 & Y<20, seg:=20]
+andy.dbh[Y>=20, seg:=30]
+andy.dbh[,ba:=ba.pred(dbh)]
+setkey(andy.dbh, Tree.ID)
+andy.dbh[Spp=="FRAL", Spp:="FRAM"] # Fraxinus americana
+
+### get biomass for all the trees in andy.dbh
+biom.pred.key <- data.frame(unique(andy.dbh$Spp))
+# For HAVI (Witch hazel), CRSp ?? and TASp ?? we will use Jenkins generalized hardwood coefficients
+b0 <- c(-2.0705, -3.0506, -2.6177, -2.0705, -2.0705, -2.2118, -2.0470, -2.0705, -2.6327, -2.3480, -2.48, -2.2271, -1.8384, -2.48, -2.48, -1.8011, -2.2271)
+b1 <- c(2.4410, 2.6465, 2.4638, 2.4410, 2.4410, 2.4133, 2.3852, 2.4410, 2.4757, 2.3876, 2.4835, 2.4513, 2.3524, 2.4835, 2.4835, 2.3852, 2.4513)
+biom.pred.key <- cbind(biom.pred.key, b0, b1)
+biom.pred.key <- as.data.table(biom.pred.key)
+names(biom.pred.key) <- c("Spp", "b0", "b1")
+for(b in 1:dim(biom.pred.key)[1]){
+  andy.dbh[Spp==biom.pred.key[b, Spp], biom:=exp(biom.pred.key[b, b0]+(biom.pred.key[b,b1]*log(dbh)))]
+}
+
+### how does biomass density (kg/m2) compare in andy plots to the city cells?
+bdens.andy <- andy.dbh[,sum(biom)/200*900, by=.(Plot.ID, seg)] ## range from 9k to 55k
+range(bdens.andy$V1)
+hist(bdens.andy$V1)
+proc[, range(biom)] ## contrast, forest pixels are 0-51k
+hist(proc[,biom]) ## there's more small-biomass forested pixels than are present in the andy sample
+a <- andy.dbh[seg==10, sum(ba)/(10*20)*1E4, by=Plot.ID] ## 29-46 m2/ha in the edge plots
+range(a$V1)
+b <- andy.dbh[seg%in%c(20,30), sum(ba)/(10*20)*1E4, by=.(seg, Plot.ID)] ## 29-46 m2/ha in the edge plots
+range(b$V1) ## 15-47
+# ### in version 0, we first tried to determine a stem density and BA for the sample then test the biomass against the observation but we aren't finding solutions
+# # get limits for stem density in edge or interior area
+# dens.edge <- andy.dbh[seg==10, length(ba)/(10*20), by=Plot.ID] ## number of stems/m2 first 10m
+# de <- fitdist(dens.edge$V1, "norm")
+# dens.int <- andy.dbh[seg%in%c(20,30), length(ba)/(10*20*2), by=Plot.ID] # stems/m2 int. 20+30m (twice as much area)
+# di <- fitdist(dens.int$V1, "norm")
+# ## we will assume a normal distribution for stem number with mean/sd as given above
+# ndist.edge <- rnorm(10000, mean=de$estimate[1], sd = de$estimate[2])
+# ndist.edge <- ndist.edge[ndist.edge<de$estimate[1]+de$estimate[2]]
+# ndist.edge <- ndist.edge[ndist.edge>de$estimate[1]-de$estimate[2]] ## cut off anything above/below 1 stdev
+# ndist.int <- rnorm(10000, mean=di$estimate[1], sd = di$estimate[2])
+# ndist.int <- ndist.int[ndist.int<di$estimate[1]+di$estimate[2]]
+# ndist.int <- ndist.int[ndist.int>di$estimate[1]-di$estimate[2]] ## cut off anything above/below 1 stdev
+# 
+# 
+# ## get limits for basal area by edge fraction, assuming normal distribution of BA's by edge
+ba.dist <- andy.dbh[,sum(ba)/(20*10)*1E4, by=.(Plot.ID, seg)]
+# # hist(ba.dist$V1)
+# # plot(ba.dist[,seg], ba.dist[, V1])
+# e.ba <- fitdist(ba.dist[seg==10, V1], "norm")
+# badist.edge <- rnorm(10000, mean=e.ba$estimate[1], sd = e.ba$estimate[2])
+# badist.edge <- badist.edge[badist.edge>e.ba$estimate[1]-e.ba$estimate[2]]
+# badist.edge <- badist.edge[badist.edge<e.ba$estimate[1]+e.ba$estimate[2]] ## cut off above/below 1 stdev
+# i.ba <- fitdist(ba.dist[seg%in%c(20,30), V1], "norm")
+# badist.int <- rnorm(10000, mean=i.ba$estimate[1], sd = i.ba$estimate[2])
+# badist.int <- badist.int[badist.int>i.ba$estimate[1]-i.ba$estimate[2]]
+# badist.int <- badist.int[badist.int<i.ba$estimate[1]+i.ba$estimate[2]]
+# 
 
 ### loop for determining tree distribution + productivity in forest-only pixels
-for(p in 1:dim(proc)[1]){
-  round((sample(ndist.edge, 1)/200)*proc[p, (900*bos.forest30m)],0) ## need also to control for the area of 10m fraction of this pixel
+# ## Version 0: stem density first
+# for(p in 1:dim(proc)[1]){
+#   q=0
+#   x=0
+#   j=0
+#   k=0
+#   ## get a stem number, per m2, * cell area * edge canopy fraction 
+#   ed.area <- proc[p, ed]*(proc[p, aoi]/900)*900 ## area of cell that is edge canopy
+#   int.area <- proc[p, int]*(proc[p, aoi]/900)*900 ## area of cell that is interior canopy
+#   while(x<100){
+#     while(j<1){
+#       n.edge <- round(ed.area*sample(ndist.edge, 1), 0) # select a stem density, figure out how many stems that is for the edge area you're dealing with
+#       grasp.ed <- andy.dbh[Tree.ID %in% sample(andy.dbh[,Tree.ID], n.edge),] # pick your tree sample
+#       ba.edge <- grasp.ed[,sum(ba)]/ed.area*1E4 # get BA for this sample WITHIN THE EDGE AREA
+#       if(ba.edge>min(badist.edge) & ba.edge<max(badist.edge) | ed.area<5){j=1} ## flag this sample as within parameter for density/BA
+#       q=q+1
+#       print(q)
+#     }
+#     ## do the same selection process for any interior area
+#     while(k<1){  
+#       n.int <- round(int.area*sample(ndist.int, 1), 0) # select a stem density, figure out how many stems that is for the edge area you're dealing with
+#       grasp.int <- andy.dbh[Tree.ID %in% sample(andy.dbh[,Tree.ID], n.int),] # pick your tree sample
+#       ba.int <- grasp.int[,sum(ba)]/int.area*1E4 # get BA for this sample WITHIN THE INTERIOR AREA
+#       if(ba.int>min(badist.int) & ba.int<max(badist.int) | int.area<5){k=1} ## flag this sample as within parameter for density/BA
+#       q=q+1
+#       print(q)
+#     }
+#     biom.sum <- grasp.ed[,sum(biom)]+grasp.int[,sum(biom)]
+#     
+#     if(grasp[,sum(biom)]<1.1*proc[p,biom] & grasp[,sum(biom)]>0.90*proc[p,biom]){ ## make sure the BA is within bounds
+#       print(paste("got it", p))
+#       x=x+1
+#     } else{
+#       q <- q+1
+#       print(q)
+#     }
+#   }
+# }
+
+### the above has a hard time reconciling the target biomass and target BA distribution in edge vs. interior
+## Ver 2: Get generalized biomass gowth per forest area and apply to forested fraction (edge, interior)
+andy.dbh
+mod.int.edge
+b0 <- mod.int.edge$coefficients[1]
+b1 <- mod.int.edge$coefficients[2]
+b2 <- mod.int.edge$coefficients[3]
+andy.dbh[seg==10, growth:=biom*exp(b0+(b1*log(dbh)))]
+andy.dbh[seg%in%c(20,30), growth:=biom*exp(b0+(b1*log(dbh))+b2)]
+g <- andy.dbh[, .(sum(growth), sum(biom)), by=.(seg, Plot.ID)] ## total biomass gain and total biomass for each plot
+g[,rel.gain:=V1/V2]
+plot(g$V2, g$rel.gain, col=as.numeric(g$seg))
+g[, mean(rel.gain), by=seg]
+g[seg==10, seg.F:="E"]
+g[seg!=10, seg.F:="I"]
+g[,mean(rel.gain), by=seg.F]
+
+## prep 1m rasters that identify biomass that is edge vs. interior
+forest <- raster("processed/boston/bos.forest.tif")
+ed <- raster("processed/boston/bos.ed10.tif")
+biom <- raster("data/dataverse_files/bostonbiomass_1m.tif")
+biom <- crop(biom, ed)
+biom <- projectRaster(biom, ed)
+### identify biomass that is edge or not
+edges.biom <- function(x, y, z, filename) { # x is edge class, y is biomass, z is forest extent
+  out <- raster(y)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    e <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## edge class
+    b <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## biomass
+    f <- getValues(z, row=bs$row[i], nrows=bs$nrows[i]) ## forest map
+    b[e==0] <- 0 ## cancel non-edges
+    b[f==0] <- 0 ## cancel non-forest
+    out <- writeValues(out, b, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out <- writeStop(out)
+  return(out)
 }
+ed.biom <- edges.biom(ed, biom, forest, filename="processed/boston/bos.biomass.ed10only.tif")
+
+### get total forest biomass
+forest.biom <- function(y, z, filename) { # y is biomass, z is forest extent
+  out <- raster(y)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    b <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## biomass
+    f <- getValues(z, row=bs$row[i], nrows=bs$nrows[i]) ## forest map
+    b[f==0] <- 0 ## cancel non-forest
+    out <- writeValues(out, b, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+f.biom <- forest.biom(biom, forest, filename="processed/boston/bos.biomass.forestonly.tif")
+### aggregated to EVI 30m grid separately
+
+### OK let's try this again shall we?
+library(raster)
+library(data.table)
+biom <- raster("processed/boston/bos.biom30m.tif")
+biom <- crop(biom, aoi)
+forest <- raster("processed/boston/bos.forest30m.tif")
+aoi <- raster("processed/boston/bos.aoi30m.tif")
+ed.can <- raster("processed/boston/bos.ed1030m.tif")### get the 30m ed 10?
+can <- raster("processed/boston/bos.can30m.tif")
+ed.biom <- raster("processed/boston/bos.biomass.ed10only30m.tif")
+forest.biom <- raster("processed/boston/bos.biomass.forestonly30m.tif")
+
+biom.dat <- as.data.table(as.data.frame(biom))
+aoi.dat <- as.data.table(as.data.frame(aoi))
+forest.dat <- as.data.table(as.data.frame(forest))
+ed.can.dat <- as.data.table(as.data.frame(ed.can))
+can.dat <- as.data.table(as.data.frame(can))
+ed.biom.dat <- as.data.table(as.data.frame(ed.biom))
+forest.biom.dat <- as.data.table(as.data.frame(forest.biom))
+biom.dat <- cbind(biom.dat, aoi.dat, forest.dat, ed.can.dat, can.dat, ed.biom.dat, forest.biom.dat)
+biom.dat[,pix.ID:=seq(1:dim(biom.dat)[1])]
+names(biom.dat) <- c("biom", "aoi", "forest.area", "ed.can", "can", "ed.biom", "forest.biom", "pix.ID")
+
+## figure out the relative area of interior canopy in each cell
+biom.dat[,int.can:=can-ed.can]
+biom.dat[,range(int.can, na.rm=T)]
+# hist(biom.dat$int.can)
+# View(biom.dat[int.can<0,]) ## random weird fuckups, some are rounding errors
+biom.dat[biom==0, int.can:=0]
+biom.dat[int.can<0 & int.can>(-0.01), int.can:=0]
+# View(biom.dat[int.can<0,]) ## one partial pixel that is still fucked up
+
+## fraction of biomass that is in interior forest and street trees
+biom.dat[,int.biom:=forest.biom-ed.biom]
+biom.dat[int.biom==0, int.can:=0]
+biom.dat[, range(int.biom, na.rm=T)]
+# plot(biom.dat$biom, biom.dat$int.biom) ## seems alright
+# plot(biom.dat$biom, biom.dat$ed.biom) ## seems alright, evntually can't track (can only have so much biomass packed into edges)
+
+## street tree biomass as residual of total-forest
+biom.dat[,street.biom:=biom-forest.biom]
+# plot(biom.dat$biom, biom.dat$street.biom) ## alright but some minor hairiness
+biom.dat[, range(street.biom, na.rm=T)] ## some fuck ups
+# View(biom.dat[street.biom<0,]) ## not v many
+biom.dat[biom==0, street.biom:=0]
+biom.dat[street.biom<0 & street.biom>(-1), street.biom:=0]## kill tiny rounding errors
+# View(biom.dat[aoi>750 & street.biom<0,]) ### about 70 where the 30m biomass and 30m FOREST biomass miss by a fair amount
+# View(biom.dat[aoi>750 & forest.area<0.01,]) ## 120k records show little forest area, looks clean
+# plot(biom.dat[aoi>750 & forest.area<0.01, forest.biom], biom.dat[aoi>750 & forest.area<0.01, ed.biom]) ## a handful of oddballs
+
+biom.dat[biom==0, ed.biom:=0]
+
+biom.dat[,range(street.biom, na.rm=T)] ## so this is still a little hinky
+biom.dat[,range(forest.area, na.rm=T)]
+biom.dat[,range(forest.biom, na.rm=T)]
+biom.dat[,range(ed.biom, na.rm=T)]
+
+npp.forest.edge <- biom.dat[,ed.biom]*0.0418 ## apply growth of edge trees to edge biomass
+npp.forest.int <- biom.dat[,int.biom]*0.0154 ## apply growth of interior trees to interior biomass
+npp.forest.tot <- npp.forest.edge+npp.forest.int ### OK now we have a basic empirical idea of forest NPP in each pixel, need to combine this with street tree biomass
+range(npp.forest.tot, na.rm=T) ### 0-1093 kg biomass/cell/yr estimate for forest trees based on andy data
+
+
+street.npp <- raster("processed/boston/ann.npp.street.sim.v1.tif")
+street.npp.dat <- as.data.table(as.data.frame(street.npp))
+street.npp.dat[,pix.ID:=seq(1:dim(street.npp.dat)[1])] 
+hist(street.npp.dat$ann.npp.street.sim.v1)
+range(street.npp.dat$ann.npp.street.sim.v1, na.rm=T) ## 5-783 kg biomass/cell/yr npp estimate for street trees
+## this equates to ~12 Mgbiomass/ha/yr max, in line with ~10 Mg/ha/yr temperate forest NPP
+
+
+## collate in the street tree npp estimatess
+biom.dat <- merge(x=biom.dat, y=street.npp.dat, by="pix.ID")
+names(biom.dat)[12] <- c("npp.street.sim")
+plot(biom.dat$npp.street.sim, npp.forest.tot)
+biom.dat <- cbind(biom.dat, npp.forest.edge, npp.forest.int, npp.forest.tot)
+plot(biom.dat[npp.forest.tot>800, forest.area], biom.dat[npp.forest.tot>800,npp.forest.tot,])
+
+### specially re-process the mixed forest/street pixels to re-estimate the npp in the street tree portion
+hist(biom.dat[forest.area>0.05 & forest.area<0.95, street.biom])
+mix <- biom.dat[forest.area>0.05 & forest.area<0.95,] ## 8783 pix are mixed, should reestimate street tree contribution here
+range(mix[, street.biom], na.rm=T) #- to 33k
+# ## still need to figure out where the hell the bad pixels are coming from
+# biom.dat[,bad.street.biom:=0]
+# biom.dat[street.biom<0, bad.street.biom:=1]
+# r <- raster(biom)
+# r <- setValues(r, biom.dat$bad.street.biom)
+# writeRaster(r, "processed/boston/bos.test.badstreet.tif", format="GTiff")
+# View(biom.dat[bad.street.biom==1,]) ## these are all partial pixels on the AOI edge, nothing significant about them
+
+mix <- mix[street.biom>0,]
+mix[,range(street.biom, na.rm=T)] #0-33k
+hist(mix$street.biom)
+plot(mix$forest.biom, mix$street.biom)
+## ok ok, so this looks like the street tree biomass portion of each pixel, re=simulate
+
+### loop the mixed pixels back through to get street tree npp
+library(raster)
+library(rgdal)
+library(rgeos)
+
+### biomass equation biom~dbh
+b0 <- -2.48
+b1 <- 2.4835 ## these are eastern hardwood defaults
+biom.pred <- function(x){exp(b0+(b1*log(x)))}
+
+## get the street tree record prepped
+street <- read.csv("docs/ian/Boston_Street_Trees.csv") ## Street tree resurvey, biomass 2006/2014, species
+street$ann.npp <- (street$biomass.2014-street$biomass.2006)/8
+street <- as.data.table(street)
+street[is.na(Species), Species:="Unknown unknown"]
+street[Species=="Unknown", Species:="Unknown unknown"]
+street[Species=="unknown", Species:="Unknown unknown"]
+street[Species=="Purpleleaf plum", Species:="Prunus cerasifera"]
+street[Species=="Bradford pear", Species:="Pyrus calleryana"]
+street[Species=="Liriondendron tulipifera", Species:="Liriodendron tulipifera"]
+street[Species=="Thornless hawthorn", Species:="Crataegus crus-galli"]
+genspec <- strsplit(as.character(street$Species), " ")
+gen <- unlist(lapply(genspec, "[[", 1))
+street[,genus:=gen] ## 40 genera
+# a <- street[,length(ann.npp)/dim(street)[1], by=genus]
+# a <- a[order(a$V1, decreasing = T),]
+# # sum(a$V1[1:12]) ### top 12 is 94% of trees present
+# focus <- a$genus[1:12]
+street[, delta.dbh:=dbh.2014-dbh.2006]
+street[, record.good:=0]
+street[is.finite(dbh.2014) & is.finite(dbh.2006) & dead.by.2014==0 & delta.dbh>=0, record.good:=1] # exclude fishy looking records
+street[record.good==1, at.biom.2014:=biom.pred(dbh.2014)]
+street[record.good==1, at.biom.2006:=biom.pred(dbh.2006)]
+street[record.good==1, at.delta.biom:=at.biom.2014-at.biom.2006]
+street[record.good==1, at.npp.ann:=at.delta.biom/8]
+street[record.good==1, at.npp.ann.rel:=at.npp.ann/at.biom.2006]
+street[record.good==1,range(dbh.2006, na.rm=T)]
+street[dbh.2006<5, record.good:=0] ## filter for tiny trees, full record is now 2455
+
+### biomass increment model based on dbh (exponential function)
+mod.biom.rel <- summary(lm(log(at.npp.ann.rel)~log(dbh.2006), data=street[record.good==1 & ann.npp!=0])) #r2=0.54! so relative %change biomass per year is the most predictive so far
+# plot(street[record.good==1, log(at.biom.2006)], street[record.good==1, log(at.npp.ann.rel)])
+
+## prep street tree data and biomass data for processing (small biomass first)
+clean <- street[record.good==1 & dbh.2006>=5,] # get a good street tree set ready
+clean <- street[record.good==1,] # get a good street tree set ready
+setkey(clean, at.biom.2006)
+
+# 
+# ## parallel process: check to see if any containers have been written to disk, if not queue up the next chunk
+# check <- list.files("processed/boston/biom_street")
+# check <- check[grep(check, pattern="ann.npp.street.small")]
+# already <- substr(check, start = 22, stop=26)
+# if(length(check)!=0){ ## ie if you detect that results have already been written to disk, take the next chunk
+#   y <- as.numeric(max(already)) ## figure out what's been written to disk already
+#   runme.x <- runme[(y+1):(y+10000),] ## reset the next chunk
+#   if((y+10000)>(dim(runme)[1])){ ## if you're at the end of the file, only grab up to the last row
+#     runme.x <- runme[(y+1):dim(runme)[1],]
+#   }
+# }
+
+## set up containers
+cage.num.trees <- list()
+cage.ann.npp <- list()
+cage.dbh <- list()
+cage.genus <- list()
+index.track <- rep(9999, dim(mix)[1])
+biom.track <- rep(9999, dim(mix)[1])
+
+# ## create an empty save file to warn the script next time that this chunk is being worked on
+# if(length(check)!=0){
+#   stor <- (y+10000) ## will name the end files up to its max, but it might not be that long
+#   save(cage.ann.npp, file=paste("processed/boston/biom_street/ann.npp.street.small", stor, sep="."))
+# } else{
+#   stor <- 10000
+#   save(cage.ann.npp, file=paste("processed/boston/biom_street/ann.npp.street.small", stor, sep="."))
+# }
+
+## loop each row (pixel) of the chunk
+for(t in 1:dim(mix)[1]){
+  ann.npp <- numeric()
+  num.trees <- numeric()
+  cage.genus[[t]] <- list()
+  cage.dbh[[t]] <- list()
+  x <- 0
+  q <- 0
+  while(x<100 & q<2000){ ## select x workable samples, or quit after q attempts
+    ## grab a random number of randomly selected trees out of the street tree database
+    grasp <- clean[at.biom.2006<(1.10*mix[t, street.biom]), .(dbh.2006, at.biom.2006, genus)] # don't select any trees that are bigger biomass than the pixel total
+    n <- min(c(80, dim(grasp)[1])) ## if pixel biomass is tiny, don't try to sample too many rows
+    grasp <- grasp[sample(dim(grasp)[1], size=n),]
+    w=grasp[1, at.biom.2006] ## cummulative tally of biomass
+    d=1 # track of the number of trees
+    while(w<(0.9*mix[t, street.biom])){ ## keep adding trees until you just get over the target biomass
+      w=w+grasp[d+1, at.biom.2006]
+      d=d+1
+    }
+    ### check if you've got too much biomass or if you've packed them in too tight
+    ## this checks if the total BA (m2/ha) of the street trees is lower than 40 inside the non-forest area
+    if(grasp[1:d, sum((((dbh.2006/2)^2)*pi)/1E4)]/(mix[t, 1-forest.area]*900)*1E4<40 & w<(1.10*mix[t, street.biom])){ ## if the BA density is low enough & didn't overshoot biomass too much
+      ann.npp <- c(ann.npp, sum(grasp[1:d, at.biom.2006]*exp((mod.biom.rel$coefficients[2]*log(grasp[1:d, dbh.2006]))+mod.biom.rel$coefficients[1])))
+      num.trees <- c(num.trees, d)
+      x <- x+1
+      cage.dbh[[t]][[x]] <- grasp[1:d, dbh.2006] ## which dbhs did you select
+      cage.genus[[t]][[x]] <- grasp[1:d, genus] # running list of which genera you select
+      #       print(paste("recorded", x))
+    }
+    q=q+1 ## record this as an attempt
+#     print(paste("attempted", q))
+  }
+  if(q<2000){
+    cage.ann.npp[[t]] <- ann.npp
+    cage.num.trees[[t]] <- num.trees
+    biom.track[t] <- mix[t, street.biom]
+    index.track[t] <- mix[t, pix.ID]
+    print(paste("finished pixel", t))
+  } else{
+    cage.ann.npp[[t]] <- 9999 ## could not find a solution
+    cage.num.trees[[t]] <- 9999
+    biom.track[t] <- mix[t, street.biom]
+    index.track[t] <- mix[t, pix.ID]
+    print(paste("pixel", t, "error"))
+  }
+}
+
+## when complete dump everything back into the save file
+save(cage.ann.npp, file=paste("processed/boston/biom_street/ann.npp.street.mix"))
+save(cage.num.trees, file=paste("processed/boston/biom_street/num.trees.street.mix"))
+save(cage.dbh, file=paste("processed/boston/biom_street/dbh.street.mix"))
+save(cage.genus, file=paste("processed/boston/biom_street/genus.street.mix"))
+save(biom.track, file=paste("processed/boston/biom_street/biom.track.street.mix"))
+save(index.track, file=paste("processed/boston/biom_street/index.track.street.mix"))
+
