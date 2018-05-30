@@ -2019,7 +2019,7 @@ ba.dist <- andy.dbh[,sum(ba)/(20*10)*1E4, by=.(Plot.ID, seg)]
 # }
 
 ### the above has a hard time reconciling the target biomass and target BA distribution in edge vs. interior
-## Ver 2: Get generalized biomass gowth per forest area and apply to forested fraction (edge, interior)
+## Ver 2: Get generalized biomass growth per forest area and apply to forested fraction (edge, interior)
 andy.dbh
 mod.int.edge
 b0 <- mod.int.edge$coefficients[1]
@@ -2059,6 +2059,7 @@ edges.biom <- function(x, y, z, filename) { # x is edge class, y is biomass, z i
   return(out)
 }
 ed.biom <- edges.biom(ed, biom, forest, filename="processed/boston/bos.biomass.ed10only.tif")
+r <- raster("processed/boston/bos.biomass.ed10only.tif")
 
 ### get total forest biomass
 forest.biom <- function(y, z, filename) { # y is biomass, z is forest extent
@@ -2174,6 +2175,14 @@ hist(mix$street.biom)
 plot(mix$forest.biom, mix$street.biom)
 ## ok ok, so this looks like the street tree biomass portion of each pixel, re=simulate
 
+### having trouble as usual fitting answers for >20k kg
+mix[street.biom<20000,] ## less than a hundred truly massive street.biom pixels
+mix[street.biom<5,] ## 21 have itty bitty biomass that can't be fitted with the smallest street trees
+
+mix <- mix[street.biom<20000,] ###  restrict this shit to just the fittable street fractions (we will tree v. large street.biom as "forest")
+mix <- mix[street.biom>5,] ## eliminate street biomasses too small to fit with street trees
+## 8094 total mixed pixels now
+
 ### loop the mixed pixels back through to get street tree npp
 library(raster)
 library(rgdal)
@@ -2219,7 +2228,6 @@ mod.biom.rel <- summary(lm(log(at.npp.ann.rel)~log(dbh.2006), data=street[record
 
 ## prep street tree data and biomass data for processing (small biomass first)
 clean <- street[record.good==1 & dbh.2006>=5,] # get a good street tree set ready
-clean <- street[record.good==1,] # get a good street tree set ready
 setkey(clean, at.biom.2006)
 
 # 
@@ -2273,7 +2281,7 @@ for(t in 1:dim(mix)[1]){
     }
     ### check if you've got too much biomass or if you've packed them in too tight
     ## this checks if the total BA (m2/ha) of the street trees is lower than 40 inside the non-forest area
-    if(grasp[1:d, sum((((dbh.2006/2)^2)*pi)/1E4)]/(mix[t, 1-forest.area]*900)*1E4<40 & w<(1.10*mix[t, street.biom])){ ## if the BA density is low enough & didn't overshoot biomass too much
+    if((grasp[1:d, sum((((dbh.2006/2)^2)*pi)/1E4)]/(mix[t, 1-forest.area]*900)*1E4)<40 & w<(1.10*mix[t, street.biom])){ ## if the BA density is low enough & didn't overshoot biomass too much
       ann.npp <- c(ann.npp, sum(grasp[1:d, at.biom.2006]*exp((mod.biom.rel$coefficients[2]*log(grasp[1:d, dbh.2006]))+mod.biom.rel$coefficients[1])))
       num.trees <- c(num.trees, d)
       x <- x+1
@@ -2306,4 +2314,7 @@ save(cage.dbh, file=paste("processed/boston/biom_street/dbh.street.mix"))
 save(cage.genus, file=paste("processed/boston/biom_street/genus.street.mix"))
 save(biom.track, file=paste("processed/boston/biom_street/biom.track.street.mix"))
 save(index.track, file=paste("processed/boston/biom_street/index.track.street.mix"))
+
+
+
 
