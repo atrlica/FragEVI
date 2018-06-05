@@ -196,7 +196,8 @@ a=123.67
 b=0.04
 AGE=40
 y = a*(1-exp(-b*AGE))^3
-y
+AGE=seq(0,150)
+plot(AGE, y)
 ### standing live wood C storage in local forest that resemble (?) what we'd have in Boston:
 ### i.e. N.red oak; red maple/oak; mixed upland hwoods; red maple uplands: Range is  94.7-105.1 MgC/ha
 ## read in summaries of C stock change in Q.alba/Q.rubra/Carya and Q.rubra forest

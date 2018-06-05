@@ -713,7 +713,34 @@ gorgor[forest.area>0.8 & aoi.x>800, mean(bos.biom30m, na.rm=T)] ## 21k kg biomas
 gorgor[forest.area<0.2 & aoi.x>800, mean(bos.biom30m, na.rm=T)] ## 4k kg biomass avg in non-forest
 gorgor[forest.area>0.8 & aoi.x>800, mean(ed.biom, na.rm=T)] ## 21k kg biomass avg in forest
 
+### another big question: What rate do we predict andy plots growing at, what is their biomass density compared to forest and compared to our forest fragments?
 
+plot(gorgor$bos.biom30m, gorgor$total.npp, col=gorgor$growth.type) ## well that's fucking weird and unnatural
+### some up to 20000 don't grow at all, wtf. Some grow on a high line, some grow on a low line
+plot(gorgor[growth.type==1, bos.biom30m], gorgor[growth.type==1, total.npp], col=gorgor$growth.type) ## street trees, two clouds (<20k, >20k), and a much higher line
+View(gorgor[growth.type==1 & total.npp>1000]) ## these all have interior canopy (but NOT biomass), and no forest area
+hist(gorgor[growth.type==1 & total.npp>1000, int.can]) ## pretty even, fair amount of low
+hist(gorgor[growth.type==1 & total.npp>1000, can]) ## most totally canopied
+hist(gorgor[growth.type==1 & total.npp>1000, bos.biom30m]) ## all high, most 30-35k 
+## so this population is pixels that are getting classed as street trees but are really more like forests that are getting missed
+r <- raster(biom)
+gorgor[, bad.street:=0]
+gorgor[growth.type==1 & total.npp>1000, bad.street:=1]
+r <- setValues(r, gorgor$bad.street)
+writeRaster(r, "processed/boston/bos.badstreet.tif", format="GTiff") ## welp no, these are just very dense patches of non-forest canopy
+View(gorgor[growth.type==1 & total.npp>1000,])
+### on a hunch
+gorgor[growth.type==1 & total.npp>1000, total.npp/bos.biom30m] ## YEP these are the high-biomass pixels that I couldn't properly sim so I plugged in the median street tree values for them and bounced
 
+## the forest pixels
+plot(gorgor[growth.type==2, bos.biom30m], gorgor[growth.type==2, total.npp]) ## forest, two clouds (<20k, >20k), and a much higher line
+View(gorgor[growth.type==2,]) #ok...
+## why are some pixels 0 npp?
+View(gorgor[growth.type==2 & total.npp<10 & bos.biom30m>10,]) ## these are all either low-biomass forest pixels or have large street biomass that is not represented in the npp calc for unknown reason
+## why are some pixels insanely high?
+View(gorgor[growth.type==2 & total.npp>1500,]) ## these are mostly non-forest ## something got fucked, a bunch of <2% forest is being called forest
+gorgor[growth.type==2 & total.npp>1500, total.npp/street.biom] ## Looks like these are street trees with the "standard tree" plugged in
+
+plot(gorgor[growth.type==3, bos.biom30m], gorgor[growth.type==3, total.npp]) # a spay with a weird population with higher npp per unit biomass
 
 
