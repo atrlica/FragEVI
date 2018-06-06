@@ -5,7 +5,7 @@ arcpy.CheckOutExtension("Spatial")
 from arcpy.sa import *
 
 # Set environment settings
-arcpy.env.workspace = "C:/Users/atrlica/Documents/ArcGIS/Default.gdb/"
+arcpy.env.workspace = "E:/FragEVI/FragEVIworking.gdb"
 arcpy.env.overwriteOutput = True
 try:
     snapR = arcpy.Raster("E:/FragEVI/data/dataverse_files/bostoncanopy_1m.tif")

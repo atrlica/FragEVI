@@ -444,7 +444,7 @@ ed30 <- extend(ed30, bos.cov)
 ### some improvement was made in reregistration, but not perfect in W part of Boston
 ### this layer lives as processed/boston/bos.isa.rereg.tif
 ### this layer was manually resampled to 30m landsat EVI grid as bos.isa.rereg30m.tif
-bos.isa <- raster("processed/boston/bos.isa.rereg.tif")
+# bos.isa <- raster("processed/boston/bos.isa.rereg.tif")
 bos.isa <- extend(bos.isa, bos.cov)
 bos.isa <- setExtent(bos.isa, extent(bos.cov), keepres=T)
 bos.stack <- stack(bos.can, bos.ndvi, bos.cov, bos.isa, ed10, ed20, ed30)
@@ -492,6 +492,8 @@ grass.find <- function(x){
 }
 grass.only <- calc(bos.stack[["cov"]], fun=grass.find, filename="processed/boston/bos.grass.tif", format="GTiff", overwrite=T)
 
+
+
 barr.find <- function(x){
   x[x==0] <- 10
   x[x!=10] <- 0
@@ -526,7 +528,7 @@ grass.fix <- function(x,y){
 bos.grass <- overlay(c, fun=grass.fix, filename="processed/boston/bos.grass.tif", format="GTiff", overwrite=T)
 
 
-## identify non-impervious fraction of barren 
+# # identify non-impervious fraction of barren
 # nonimp.only <- overlay(barr.only, bos.stack[["isa"]], fun=function(x,y){return(x-y)}, filename="processed/boston/bos.nonimp_only.tif", overwrite=T, format="GTiff")
 # nonimp.only <- raster("processed/boston/bos.nonimp.tif")
 # nonimp.find <- function(x, filename.nonimpbarr, filename.vegisa) { # x is first-pass nonimp
@@ -581,6 +583,71 @@ nonimpbarr <- overlay(b, fun=nib.calc, filename="processed/boston/bos.nonimpbarr
 ### both of these, like grass, vulnerable to getting screwed up by misregistration between ISA and barren layers
 ### March 17 used the manually reregistered 1m isa to recalculate, hopefully reduce some of these artifacts
 
+## new attempt to produce a grass map 
+## previous work to reregister the isa vs. the canopy looks like it did basically jack shit.
+bos.can <- raster("data/dataverse_files/bostoncanopy_1m.tif")
+bos.ndvi <- raster("data/NDVI/NDVI_1m_res_cangrid.tif")
+bos.isa <- raster("processed/boston/bos.isa.tif")
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+bos.can <- crop(bos.can, bos.aoi)
+bos.ndvi <- crop(bos.ndvi, bos.aoi)
+
+grass.find <- function(c, isa, green, a, filename.out) { #canopy, impervious, greeness, aoi, output file
+  out1 <- raster(c)
+  bs <- blockSize(out1)
+  out1 <- writeStart(out1, filename.out, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    v <- getValues(c, row=bs$row[i], nrows=bs$nrows[i]) ## canopy
+    w <- getValues(isa, row=bs$row[i], nrows=bs$nrows[i]) ## ISA
+    x <- getValues(green, row=bs$row[i], nrows=bs$nrows[i]) ## greenness (NDVI)
+    y <- getValues(a, row=bs$row[i], nrows=bs$nrows[i]) # aoi
+    rr <- rep(9999, length(v))
+    rr[w==1] <- 0 ## if paved, 0
+    rr[is.na(y)] <- NA ## if out of bounds, NA
+    rr[v==0 & x>0.15] <- 1 ## not canopy but green --> grass
+    rr[v==1] <- 0 ## if marked canopy
+    rr[x<0.15] <- 0 ## if not green enough
+    out1 <- writeValues(out1, rr, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out1 <- writeStop(out1)
+  return(out1)
+}
+grass.find(bos.can, bos.isa, bos.ndvi, bos.aoi, "processed/boston/bos.grass.tif")
+
+
+bos.can <- raster("data/dataverse_files/bostoncanopy_1m.tif")
+bos.ndvi <- raster("data/NDVI/NDVI_1m_res_cangrid.tif")
+bos.isa <- raster("processed/boston/bos.isa.tif")
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+bos.can <- crop(bos.can, bos.aoi)
+bos.ndvi <- crop(bos.ndvi, bos.aoi)
+
+nonveg.find <- function(c, isa, grass, a, filename.out) { #canopy, impervious, grass, aoi, output file
+  out1 <- raster(c)
+  bs <- blockSize(out1)
+  out1 <- writeStart(out1, filename.out, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    v <- getValues(c, row=bs$row[i], nrows=bs$nrows[i]) ## canopy
+    w <- getValues(isa, row=bs$row[i], nrows=bs$nrows[i]) ## ISA
+    x <- getValues(grass, row=bs$row[i], nrows=bs$nrows[i]) ## grass
+    y <- getValues(a, row=bs$row[i], nrows=bs$nrows[i]) # aoi
+    rr <- rep(9999, length(v))
+    rr[w==1] <- 0 ## if paved
+    rr[is.na(y)] <- NA ## if out of bounds, NA
+    rr[x==1] <- 0 ## if marked grass
+    rr[v==1] <- 0 ## if marked canopy
+    rr[rr!=0 & !is.na(rr)] <- 1
+    out1 <- writeValues(out1, rr, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out1 <- writeStop(out1)
+  return(out1)
+}
+bos.grass <- raster("processed/boston/bos.grass.tif")
+
+nonveg.find(bos.can, bos.isa, bos.grass, bos.aoi, "processed/boston/bos.nonveg.tif")
+bos.nonveg <- raster("processed/boston/bos.nonveg.tif")
 
 # ### make map of individual buffer rings
 # bos.stack <- stack("processed/boston/bos.stack.1m.tif")
@@ -617,76 +684,83 @@ nonimpbarr <- overlay(b, fun=nib.calc, filename="processed/boston/bos.nonimpbarr
 # 
 # buffs.only <- stack(buff.20only, buff.30only, buff.Intonly)
 # writeRaster(buffs.only, filename="processed/boston/bos.buffs_only.tif", format="GTiff", overwrite=T)
-# 
-####
-### add LULC 1m raster info
-# ### call python script for rasterize LULC in Boston to 1m canopy grid
+
+###
+## add LULC 1m raster info
+### call python script for rasterize LULC in Boston to 1m canopy grid
 # pyth.path = './Rscripts/LULC_bos_rast.py'
 # output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
 # print(output)
 
-# bos.lulc <- raster("processed/boston/LU_bos_r1m.tif")
-# bos.aoi <- raster("processed/boston/bos.aoi_only.tif")
-# bos.lulc <- crop(bos.lulc, bos.aoi)
-# bos.lulc <- mask(bos.lulc, bos.aoi)
-# writeRaster(bos.lulc, filename="processed/boston/bos.lulc_only.tif", format="GTiff", overwrite=T)
-# 
-# ## decide on a collapsed LULC scheme to flag for area fraction
-# lu.classnames <- c("forest", "dev", "hd.res", "med.res", "low.res", "lowveg", "other", "water")
-# lu.forest <- c(3,37) # Forest, FWet
-# lu.dev <- c(15,16,7,8,18,39,24,31,19,9,29) # Comm, Ind, PartRec, SpectRec, Transp., Junk, Util, PubInst, Waste, WBRec, Marina
-# lu.hdres <- c(11,10) # HDResid., MFResid., 
-# lu.medres <- c(12) # MDResid.
-# lu.lowres <- c(13, 38) #LDResid., VLDResid.
-# lu.lowveg <- c(4,1,2,6,5,26,14,25,34,23) # NFwet, PubInst, Crop, Past, Open, Mining, Golf, SWwet, SWBeach, Cem, CBog
-# lu.other <- c(17,35,40,36) #Tran, Orch, Brush, Nurs
-# lu.water <- c(20)
-# lulc.tot <- list(lu.for, lu.dev, lu.hdres, lu.medres, lu.lowres, lu.lowveg, lu.other, lu.water)
-# 
-# ## flexible blockwise function for flagging different class groups of LULC
-# lulc.flag <- function(x, lu.spot, filename) { # x is 1m lulc, lu.spot is list of LULC targeted
-#   out <- raster(x)
-#   bs <- blockSize(out)
-#   out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
-#   for (i in 1:bs$n) {
-#     v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## edge class
-#     o <- rep(0, length(v))
-#     o[v%in%lu.spot] <- 1
-#     out <- writeValues(out, o, bs$row[i])
-#     print(paste("finished block", i, "of", bs$n, "in", lu.classnames[l]))
-#   }
-#   out <- writeStop(out)
-#   return(out)
-# }
-# 
-# ### loop through LULC class groups and create separately flagged LULC rasters
-# bos.aoi <- raster("processed/boston/bos.aoi_only.tif")
-# for(l in 1:length(lulc.tot)){
-#   tmp <- do.call(lulc.flag, 
-#           args = list(bos.lulc, 
-#                       lulc.tot[[l]], 
-#                       paste("processed/boston/bos.", lu.classnames[l], "_only.tif", sep="")))
-#   print(paste("masking to Boston AOI"))
-#   tmp <- mask(tmp, bos.aoi) 
-#   writeRaster(tmp, filename=paste("processed/boston/bos.", lu.classnames[l], "_only.tif", sep=""), format="GTiff", overwrite=T)
-# }
-# 
-# bos.forest <- raster("processed/boston/bos.forest.tif")
-# bos.dev <- raster("processed/boston/bos.dev.tif")
-# bos.hd.res <- raster("processed/boston/bos.hd.res.tif")
-# bos.med.res <- raster("processed/boston/bos.med.res.tif")
-# bos.low.res <- raster("processed/boston/bos.low.res.tif")
-# bos.lowveg <- raster("processed/boston/bos.lowveg.tif")
-# bos.other <- raster("processed/boston/bos.other.tif")
-# bos.water <- raster("processed/boston/bos.water.tif")
-# plot(bos.forest, main="forest")
-# plot(bos.hd.res, main="HDres")
-# plot(bos.med.res, main="MDres")
-# plot(bos.low.res, main="LDRes")
-# plot(bos.lowveg, main="LowVeg")
-# plot(bos.other, main="other")
-# plot(bos.water, main="water")
-# 
+bos.lulc <- raster("processed/boston/LU_bos_r1m.tif")
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+bos.lulc <- crop(bos.lulc, bos.aoi)
+bos.lulc <- mask(bos.lulc, bos.aoi)
+writeRaster(bos.lulc, filename="processed/boston/bos.lulc_only.tif", format="GTiff", overwrite=T)
+bos.lulc <- raster("processed/boston/bos.lulc_only.tif")
+
+## decide on a collapsed LULC scheme to flag for area fraction
+lu.classnames <- c("forest", "dev", "hdres", "ldres", "lowveg", "water")
+lu.forest <- c(3,37) # Forest, FWet
+lu.dev <- c(5,8,15,16,17,18,19,29,31,36,39) #Mining, Spect-rec, Comm, Ind, Transitional, Transp, Waste Disp, Marina, Urb Pub/Inst., Nursery, Junkyard
+lu.hdres <- c(10,11) # HDResid., MFResid.,
+lu.ldres <- c(12,13,38) # MDResid., LDResid, VLDResid
+lu.lowveg <- c(1,2,4,6,7,9,14,25,26,34,40) # Crop, pasture, open, part-rec, water-rec, SWwet, SWbeach, Golf, Cemetery, Brushland
+lu.water <- c(20)
+lulc.tot <- list(lu.forest, lu.dev, lu.hdres, lu.ldres, lu.lowveg, lu.water)
+
+## flexible blockwise function for flagging different class groups of LULC
+lulc.flag <- function(x, lu.spot, aoi, filename) { # x is 1m lulc, lu.spot is list of LULC targeted, aoi is aoi 1m raster
+  out <- raster(x)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## 1m LULC raster
+    a <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) # AOI mask
+    o <- rep(0, length(v))
+    o[v%in%lu.spot] <- 1 ## flag the in-category with 1
+    o[is.na(a)] <- NA ## cancel values outside of AOI
+    out <- writeValues(out, o, bs$row[i])
+    print(paste("finished block", i, "of", bs$n, "in", lu.classnames[l]))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+
+### loop through LULC class groups and create separately flagged LULC rasters
+for(l in 1:length(lulc.tot)){
+  tmp <- do.call(lulc.flag,
+          args = list(bos.lulc,
+                      lulc.tot[[l]],
+                      bos.aoi,
+                      paste("processed/boston/bos.", lu.classnames[l], "_only.tif", sep="")))
+  # print(paste("masking to Boston AOI"))
+  # tmp <- mask(tmp, bos.aoi)
+  # writeRaster(tmp, filename=paste("processed/boston/bos.", lu.classnames[l], "_only.tif", sep=""), format="GTiff", overwrite=T)
+}
+# bos.lulc <- raster("processed/boston/bos.lulc_only.tif")
+# bos.aoi <- raster("processed/boston/bos.aoi.tif")
+# lulc.flag(bos.lulc, lulc.tot[[1]], bos.aoi, "processed/boston/bos.forest.tif")
+
+bos.forest <- raster("processed/boston/bos.forest_only.tif")
+bos.dev <- raster("processed/boston/bos.dev_only.tif")
+bos.hdres <- raster("processed/boston/bos.hdres_only.tif")
+bos.ldres <- raster("processed/boston/bos.ldres_only.tif")
+bos.lowveg <- raster("processed/boston/bos.lowveg_only.tif")
+bos.water <- raster("processed/boston/bos.water_only.tif")
+plot(bos.forest, main="forest")
+plot(bos.dev, main="Developed")
+plot(bos.hdres, main="HDres")
+plot(bos.ldres, main="LDRes")
+plot(bos.lowveg, main="LowVeg")
+plot(bos.water, main="water")
+
+### package these collapsed categories back up into a common coded raster
+bos.lulc <- raster("processed/boston/bos.lulc_only.tif")
+plot(bos.lulc)
+
+
+
 
 ### prep all individual raster layers (0/1) for aggregation all at once in arc
 bos.aoi <- raster("processed/boston/bos.aoi.tif")
