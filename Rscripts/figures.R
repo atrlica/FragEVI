@@ -209,30 +209,25 @@ can.buffs <- can.buffs[!grepl(pattern = ".ovr", x=can.buffs)]
 buff.dist <- as.integer(unlist(rm_between(can.buffs, "nocan_", "mbuff", extract=TRUE)))
 
 
-
+can.master <- raster("processed/boston/bos_can01_filt.tif")
+can.tot <- sum(getValues(can.master), na.rm=T) ### 31.7% of boston raster is canopy
+aoi.master <- raster("processed/boston/bos.aoi.tif")
+aoi.tot <- sum(getValues(aoi.master), na.rm=T)
 ## cumulative canopy area by edge distance, for each lulc class
 lu.classes <- c("dev", "hdres", "ldres", "lowveg", "forest")
 for(l in 1:length(lu.classes)){
   print(paste("initializing", lu.classes[l]))
-  rm(results)
+  if(exists("results")){rm(results)} ## clean up previous store file
   tot <- integer()
   dist <- 0
   ma <- raster(paste("processed/boston/bos.", lu.classes[l], "_only.tif", sep=""))
-  area.tot <- sum(getValues(ma), na.rm=T) ## total size of the AOI, forest =3% of whole canopy raster
-  r <- raster("processed/boston/bos_can01_filt.tif")
-  can.tot <- sum(getValues(r), na.rm=T) ### 12% of boston raster is canopy
-  # r <- crop(r, ma)
-  # r <- mask(r, ma, maskvalue=0)
-  # dog <- can.sum(r)
-  dog <- can.sum.ma(r, ma)
+  area.tot <- sum(getValues(ma), na.rm=T) ## total size of the lulc target
+  dog <- can.sum.ma(can.master, ma)
   tot <- c(tot, sum(dog, na.rm=T))
   
   for(g in 1:length(can.buffs)){
     print(paste("working on", can.buffs[g], "in", lu.classes[l]))
     r <- raster(paste("processed/boston/", can.buffs[g], sep=""))
-    # r <- crop(r, ma)
-    # r <- mask(r, ma)
-    # dog <- can.sum(r)
     dog <- can.sum.ma(r, ma)
     tot <- c(tot, sum(dog, na.rm=T))
     dist <- c(dist, buff.dist[g])
