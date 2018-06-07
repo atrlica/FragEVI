@@ -8,6 +8,16 @@ AGE=40
 AGE=seq(0,150)
 y = a*(1-exp(-b*AGE))^3
 plot(AGE, y)
+z = diff(y)
+z.rel <- z/y[2:151]
+length(y)
+length(z) ## this is growth after 1 year, 2 years, etc
+plot(y[2:151], z)
+points(y[2:151], z.rel, pch=14, cex=0.5, col="red") #hyperbolic
+abline(v=1)
+abline(v=0)
+plot(AGE[2:151], z) ## this is the gain curve over site age
+
 ### standing live wood C storage in local forest that resemble (?) what we'd have in Boston:
 ### i.e. N.red oak; red maple/oak; mixed upland hwoods; red maple uplands: Range is  94.7-105.1 MgC/ha
 ## read in summaries of C stock change in Q.alba/Q.rubra/Carya and Q.rubra forest
@@ -35,10 +45,17 @@ points(fia.summ$Age, fia.summ$red.oak.aff, pch=17, col="pink")
 points(fia.summ$Age, fia.summ$red.oak.ref, pch=17, col="red")
 ### the only thing that changes between reforestation and afforestation are values for forest floor and soil C
 
+## what is relationship between standing live biomass-C and C increment
+plot(ne.summ$mean.vol.m3, ne.summ$live.tree.c.inc)
+plot(ne.summ$live.tree.tCha, ne.summ$live.tree.c.inc)
+plot(ne.summ$Age.yrs, ne.summ$live.tree.tCha)
+plot(ne.summ$Age.yrs, ne.summ$mean.vol.m3) ## basic sigmoid 0 to max at 100
+
+
 #### OK with that out of the way: Let's try to figure out the tree distribution per 30m cell and uptake
 biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m 
 street <- read.csv("docs/ian/Boston_Street_Trees.csv") ## Street tree resurvey, biomass 2006/2014, species
-length(unique(street$Species)) ## 77 species!
+# length(unique(street$Species)) ## 77 species!
 street$ann.npp <- (street$biomass.2014-street$biomass.2006)/8
 street <- as.data.table(street)
 street[is.na(Species), Species:="Unknown unknown"]
@@ -55,14 +72,7 @@ a <- street[,length(ann.npp)/dim(street)[1], by=genus]
 a <- a[order(a$V1, decreasing = T),]
 sum(a$V1[1:12])
 focus <- a$genus[1:12]
-focus
-
-## what is relationship between standing live biomass-C and C increment
-plot(ne.summ$mean.vol.m3, ne.summ$live.tree.c.inc)
-plot(ne.summ$live.tree.tCha, ne.summ$live.tree.c.inc)
-plot(ne.summ$Age.yrs, ne.summ$live.tree.tCha)
-plot(ne.summ$Age.yrs, ne.summ$mean.vol.m3) ## basic sigmoid 0 to max at 100
-
+# focus
 
 ##########
 ### prototype process for using FIA aggregate data to figure npp from Raciti biomass
