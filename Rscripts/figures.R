@@ -337,3 +337,205 @@ contain <- as.data.table(contain)
 ggplot(contain[distance!=0,], aes(x=distance, y=pix.num, fill=LULC)) + 
   geom_area(aes(color=LULC, fill=LULC))+
   xlim(1,50)
+
+
+
+#### FIA density plots
+library(raster)
+library(data.table)
+a=123.67
+b=0.04
+AGE=seq(0,150)
+y = a*(1-exp(-b*AGE))^3
+plot(AGE, y)
+z = diff(y)
+z.rel <- z/y[2:151]
+length(y)
+length(z) ## this is growth after 1 year, 2 years, etc
+plot(y[2:151], z)
+points(y[2:151], z.rel, pch=14, cex=0.5, col="red") #hyperbolic
+plot(AGE[2:151], z) ## this is the gain curve over site age
+
+biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel
+aoi <- raster("processed/boston/bos.aoi30m.tif")
+can <- raster("processed/boston/bos.can30m.tif")
+isa <- raster("processed/boston/bos.isa.rereg30m.tif")
+biom <- crop(biom, isa)
+aoi <- crop(aoi, isa)
+can <- crop(can, isa)
+biom.dat <- as.data.table(as.data.frame(biom))
+biom.dat[,aoi:=as.vector(getValues(aoi))]
+can.dat <- as.data.table(as.data.frame(can))
+biom.dat[, can.frac:=can.dat$bos.can30m]
+isa.dat <- as.data.table(as.data.frame(isa))
+biom.dat[, isa.frac:=isa.dat$bos.isa.rereg30m]
+
+### live MgC by area of GROUND in each pixel
+biom.dat[, live.MgC.ha.ground:=(bos.biom30m/aoi)*(1/2)*(1/1000)*(10^4)] ## convert kg-biomass/pixel based on size of pixel (summed by 1m2 in "aoi"), kgC:kgbiomass, Mg:kg, m2:ha
+biom.dat[aoi>800, range(live.MgC.ha.ground, na.rm=T)] ## up to 284 MgC/ha, as we'd expect from what we saw in Raciti
+hist(biom.dat[aoi>800,live.MgC.ha.ground]) ## correcting for canopy cover, more mid-rage values
+### live MgC/ha for "forest" fraction in each pixel
+biom.dat[,live.MgC.ha.forest:=(bos.biom30m/(aoi*can.frac))*(1/2)*(1/1000)*(10^4)]
+biom.dat[can.frac<=0.01, live.MgC.ha.forest:=0]
+range(biom.dat[aoi>800,live.MgC.ha.forest],  na.rm=T) ## 0 - 284
+hist(biom.dat[aoi>800,live.MgC.ha.forest]) ## correcting for canopy cover, more mid-rage values
+## live MgC/ha in the pixel pervious cover
+biom.dat[,live.MgC.ha.perv:=(bos.biom30m/(aoi*(1-isa.frac)))*(1/2)*(1/1000)*(10^4)]
+biom.dat[isa.frac>0.99, live.MgC.ha.perv:=0]
+range(biom.dat[aoi>800 & isa.frac<0.90,live.MgC.ha.perv],  na.rm=T) ## 0 - 6786
+# hist(biom.dat[aoi>800 & isa.frac<0.98,live.MgC.ha.perv]) ## a small number of very extreme values
+hist(biom.dat[aoi>800 & live.MgC.ha.perv<284, live.MgC.ha.perv])
+
+### figure out forest "age" for the cells (using coefficients for NE total)
+## age based on ground area
+biom.dat[,age.ground:=log(1-(live.MgC.ha.ground/a)^(1/3))/(-b)] ## some of these will produce infinities with too dense biomass
+biom.dat[age.ground>120, age.ground:=120] ## fix the divergent ones to just "old, not growing"
+biom.dat[!is.finite(age.ground), age.ground:=120] ## again, fix the ones that got fucked to "old, not growing"
+biom.dat[is.na(aoi), age.ground:=NA] # cancel places out of bounds
+biom.dat[bos.biom30m<=10, age.ground:=NA] ## cancel places with no biomass
+biom.dat[is.na(bos.biom30m), age.ground:=NA]
+
+## age based on canopy area
+biom.dat[,age.forest:=log(1-(live.MgC.ha.forest/a)^(1/3))/(-b)] ## some of these will produce infinities with too dense biomass
+biom.dat[age.forest>120, age.forest:=120] ## fix the divergent ones to just "old, not growing"
+biom.dat[!is.finite(age.forest), age.forest:=120] ## again, fix the ones that got fucked to "old, not growing"
+biom.dat[is.na(aoi), age.forest:=NA] # cancel places out of bounds
+biom.dat[bos.biom30m<=10, age.forest:=NA] ## cancel places with no biomass
+biom.dat[is.na(bos.biom30m), age.forest:=NA]
+
+## age based on pervious area
+biom.dat[,age.perv:=log(1-(live.MgC.ha.perv/a)^(1/3))/(-b)] ## some of these will produce infinities with too dense biomass
+biom.dat[age.perv>120, age.perv:=120] ## fix the divergent ones to just "old, not growing"
+biom.dat[!is.finite(age.perv), age.perv:=120] ## again, fix the ones that got fucked to "old, not growing"
+biom.dat[is.na(aoi), age.perv:=NA] # cancel places out of bounds
+biom.dat[bos.biom30m<=10, age.perv:=NA] ## cancel places with no biomass
+biom.dat[is.na(bos.biom30m), age.perv:=NA]
+
+## frequency distributions of different methods
+par(mfrow=c(3,1), mar=c(4,4,2,1))
+hist(biom.dat$age.ground,  main="Forest age, unadjusted", xlab="Age, yrs")
+hist(biom.dat$age.forest,  main="Forest age, canopy area adj.", xlab="Age, yrs")
+hist(biom.dat$age.perv,  main="Forest age, pervious area adj.", xlab="Age, yrs")
+
+### frequency dist for biomass/ha
+hist(biom.dat[aoi>800 & live.MgC.ha.ground<284, live.MgC.ha.ground])
+hist(biom.dat[aoi>800 & live.MgC.ha.forest<284, live.MgC.ha.forest])
+hist(biom.dat[aoi>800 & live.MgC.ha.perv<284, live.MgC.ha.perv])
+
+a=123.67
+b=0.04
+
+## figure out next annual increment possible for the "forest" average present in each cell, based on projected "age" and corrected for area
+biom.dat[,npp.ann.ground:=((a*(1-(exp(-b*(age.ground+1))))^3)-(a*(1-(exp(-b*(age.ground))))^3))*(1E-4)*aoi] ## by ground area
+biom.dat[,npp.ann.forest:=((a*(1-(exp(-b*(age.forest+1))))^3)-(a*(1-(exp(-b*(age.forest))))^3))*(1E-4)*(aoi*can.frac)] ## by canopy area
+biom.dat[,npp.ann.perv:=((a*(1-(exp(-b*(age.perv+1))))^3)-(a*(1-(exp(-b*(age.perv))))^3))*(1E-4)*(aoi*(1-isa.frac))] ## by pervious area
+biom.dat[bos.biom30m<10, npp.ann.ground:=0] ## manually set negligible biomass cells to 0
+biom.dat[bos.biom30m<10, npp.ann.forest:=0]
+biom.dat[bos.biom30m<10, npp.ann.perv:=0]
+biom.dat[isa.frac>0.99, npp.ann.perv:=0]
+biom.dat[can.frac<0.01, npp.ann.forest:=0]
+
+### look at some plots 
+plot(biom.dat$npp.ann.ground, biom.dat$npp.ann.forest)
+plot(biom.dat$npp.ann.ground, biom.dat$npp.ann.perv) ## hard to say, up to 0.2 MgC/pix
+par(mfrow=c(3,1))
+hist(biom.dat$npp.ann.ground, main="NPP, raw area", xlab="MgC/pix/yr")
+hist(biom.dat$npp.ann.forest, main="NPP, canopy area", xlab="MgC/pix/yr")
+hist(biom.dat$npp.ann.perv, main="NPP, pervious area", xlab="MgC/pix/yr")
+
+## correct to MgC/ha/yr rather than MgC/pix/yr
+biom.dat[,npp.ann.ground.ha:=(npp.ann.ground/aoi)*1E4]
+biom.dat[,npp.ann.forest.ha:=(npp.ann.forest/aoi)*1E4]
+biom.dat[,npp.ann.perv.ha:=(npp.ann.perv/aoi)*1E4]
+
+hist(biom.dat[aoi>800, npp.ann.ground.ha])
+hist(biom.dat[aoi>800, npp.ann.forest.ha])
+hist(biom.dat[aoi>800, npp.ann.perv.ha])
+
+## now need these as kernel density plots
+par(mfrow=c(1,3))
+plot(density(biom.dat[aoi>800, npp.ann.ground.ha], na.rm=T, adjust=2, bw=0.05), ylim=c(0,3.4))
+plot(density(biom.dat[aoi>800, npp.ann.forest.ha], na.rm=T, adjust=2, bw=0.05), ylim=c(0,3.4))
+plot(density(biom.dat[aoi>800, npp.ann.perv.ha], na.rm=T, adjust=2, bw=0.05), ylim=c(0,3.4))
+
+plot(density(biom.dat[aoi>800 & live.MgC.ha.ground<284, live.MgC.ha.ground], na.rm=T, adjust=2, bw=3.5), ylim=c(0, 0.06))
+plot(density(biom.dat[aoi>800 & live.MgC.ha.forest<284, live.MgC.ha.forest], na.rm=T, adjust=2, bw=3.5), ylim=c(0, 0.06))
+plot(density(biom.dat[aoi>800 & live.MgC.ha.perv<284, live.MgC.ha.perv], na.rm=T, adjust=2, bw=3.5), ylim=c(0, 0.06))
+## should these be groomed to remove data with no forest biomass?
+
+par(mfrow=c(1,3))
+plot(density(biom.dat[aoi>800 & bos.biom30m>10, npp.ann.ground.ha], na.rm=T, adjust=2, bw=0.05), ylim=c(0,2.2))
+plot(density(biom.dat[aoi>800 & bos.biom30m>10, npp.ann.forest.ha], na.rm=T, adjust=2, bw=0.05), ylim=c(0,2.2))
+plot(density(biom.dat[aoi>800 & bos.biom30m>10, npp.ann.perv.ha], na.rm=T, adjust=2, bw=0.05), ylim=c(0,2.2))
+
+plot(density(biom.dat[aoi>800 & live.MgC.ha.ground<284 & bos.biom30m>10, live.MgC.ha.ground], na.rm=T, adjust=2, bw=3.5), ylim=c(0, 0.032))
+plot(density(biom.dat[aoi>800 & live.MgC.ha.forest<284 & bos.biom30m>10, live.MgC.ha.forest], na.rm=T, adjust=2, bw=3.5), ylim=c(0, 0.032))
+plot(density(biom.dat[aoi>800 & live.MgC.ha.perv<284 & bos.biom30m>10, live.MgC.ha.perv], na.rm=T, adjust=2, bw=3.5), ylim=c(0, 0.032))
+
+
+## ok work on some pretty density overlays in ggplot
+library(ggplot2)
+x <- data.frame(v1=rnorm(100),v2=rnorm(100,1,1),v3=rnorm(100,0,2))
+library(ggplot2);library(reshape2)
+data<- melt(x)
+ggplot(data,aes(x=value, fill=variable)) + geom_density(alpha=0.7)
+ggplot(data,aes(x=value, fill=variable)) + geom_histogram(alpha=0.25)
+
+groom.mgc <- as.data.frame(biom.dat[aoi>800 & live.MgC.ha.perv<=300 & bos.biom30m>10, 5:7, with=F])
+mgc.melt <- melt(groom.mgc)
+groom.npp <- as.data.frame(biom.dat[aoi>800 & live.MgC.ha.perv<=300 & bos.biom30m>10, 14:16, with=F])
+npp.melt <- melt(groom.npp)
+dim(mgc.melt)
+ggplot(mgc.melt, aes(x=value)) + 
+  geom_density(aes(group=variable, colour=variable))
+ggplot(npp.melt, aes(x=value)) + 
+  geom_density(aes(group=variable, colour=variable))
+
+## let's add the growth curve over the density plot for biomass density
+a=123.67
+b=0.04
+AGE=seq(0,300)
+y = a*(1-exp(-b*AGE))^3
+plot(AGE, y)
+z = diff(y)
+z.rel <- z/y[2:301]
+length(y)
+length(z) ## this is growth after 1 year, 2 years, etc
+plot(y[2:301], z)
+points(y[2:151], z.rel, pch=14, cex=0.5, col="red") #hyperbolic
+plot(AGE[2:151], z) ## this is the gain curve over site age
+growth.curve <- as.data.frame(cbind(y[2:301],z))
+
+ggplot(mgc.melt, aes(x=value)) + 
+  geom_density(aes(group=variable, colour=variable), alpha=0.12) +
+  geom_line(data=growth.curve, aes(x=V1, y=z*0.01))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())+
+  scale_colour_discrete(name="Area basis",
+                        breaks=c("live.MgC.ha.ground", "live.MgC.ha.forest", "live.MgC.ha.perv"),
+                        labels=c("ground", "forest", "pervious"))+
+  labs(x = "Biomass MgC/ha")
+
+  
+  ggplot(npp.melt, aes(x=value, fill=variable)) + 
+  geom_density(aes(group=variable, colour=variable), alpha=0.12) +
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+    scale_colour_discrete(name="Area basis",
+                          breaks=c("npp.ann.ground.ha", "npp.ann.forest.ha", "npp.ann.perv.ha"),
+                          labels=c("ground", "forest", "pervious"))+
+    labs(x = "NPP MgC/ha/yr")+
+    guides(fill=FALSE)
+  
+
+
+
+

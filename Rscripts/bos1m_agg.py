@@ -66,8 +66,10 @@ print("cellsizex="+str(cs))
 # print("finished biomass 30m")
 # arcpy.gp.Aggregate_sa("E:/FragEVI/processed/boston/bos.biomass.ed10only.tif", "E:/FragEVI/processed/boston/bos.biomass.ed10only30m.tif", "30", "SUM", "EXPAND", "DATA")
 # print("finished biomass.edgeonly 30m")
-arcpy.gp.Aggregate_sa("E:/FragEVI/processed/boston/bos.biomass.forestonly.tif", "E:/FragEVI/processed/boston/bos.biomass.forestonly30m.tif", "30", "SUM", "EXPAND", "DATA")
-print("finished biomass.forestonly 30m")
+# arcpy.gp.Aggregate_sa("E:/FragEVI/processed/boston/bos.biomass.forestonly.tif", "E:/FragEVI/processed/boston/bos.biomass.forestonly30m.tif", "30", "SUM", "EXPAND", "DATA")
+# print("finished biomass.forestonly 30m")
+arcpy.gp.Aggregate_sa("E:/FragEVI/processed/boston/bos.biomass.ed10only_allLULC.tif", "E:/FragEVI/processed/boston/bos.biomass.ed10only_allLULC30m.tif", "30", "SUM", "EXPAND", "DATA")
+print("finished biomass.ed10only_allLULC 30m")
 
 
 
