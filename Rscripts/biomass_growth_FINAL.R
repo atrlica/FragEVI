@@ -1097,11 +1097,11 @@ street[record.good==1 & npp.ann<0, record.good:=0] ## 2401
 # street[dbh.2006<5, record.good:=0] ## filter for tiny trees
 
 ### biomass increment model based on dbh (exponential function)
-mod.biom.rel <- summary(lm(log(npp.ann.rel)~log(dbh.2006), data=street[record.good==1 & npp.ann!=0])) ## exclude 4 no-growth records
-plot(street[record.good==1, log(biom.2006)], street[record.good==1, log(npp.ann.rel)]) # r2 = 0.54, slope significant
+# mod.biom.rel <- summary(lm(log(npp.ann.rel)~log(dbh.2006), data=street[record.good==1 & npp.ann!=0])) ## exclude 4 no-growth records
+# plot(street[record.good==1, log(biom.2006)], street[record.good==1, log(npp.ann.rel)]) # r2 = 0.54, slope significant
 ## there's <10 records below 5cm with a lot of leverage, cut them
 mod.biom.rel <- summary(lm(log(npp.ann.rel)~log(dbh.2006), data=street[record.good==1 & npp.ann!=0 & dbh.2006>=5,])) ## exclude 4 no-growth records
-plot(street[record.good==1 & dbh.2006>=5, log(biom.2006)], street[record.good==1 & dbh.2006>=5, log(npp.ann.rel)]) # r2 = 0.55, looks nicer
+# plot(street[record.good==1 & dbh.2006>=5, log(biom.2006)], street[record.good==1 & dbh.2006>=5, log(npp.ann.rel)]) # r2 = 0.55, looks nicer
 street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny trees
 
 
@@ -1130,16 +1130,16 @@ clean[,rank:=seq(from=1, to=dim(clean)[1])] ## all the trees have a fixed size r
 # hist(biom.dat[bos.biom30m>0, bos.biom30m])
 runme <- biom.dat[!is.na(bos.biom30m) & bos.biom30m>10,] ## ignore extremely low biomass cells, 108k
 
-## do some thinking about how to focus the sampling along the distribution
-ba.pred.cell <- function(x, A, C){(((x/2)^2)*pi)/(A*C)} ## x is dbh (cm), A is AOI (cell size m2), C is canopy fraction (0-1)
-quantile(biom.dat[!is.na(bos.biom30m) & bos.biom30m>10,bos.biom30m], probs=c(.10,.50,.90)) ## for the cells we are running, 235, 3740, 17537 kg
-20000/clean[, median(biom.2006, na.rm=T)] ## this could be 77 median trees in a 20k cell
-ba.pred.cell(clean[,median(dbh.2006, na.rm=T)], 900, 0.6) ## 25cm median dbh, 60% Can, BA is 0.9
-(20000/clean[, median(biom.2006, na.rm=T)])*ba.pred.cell(clean[,median(dbh.2006, na.rm=T)], 900, 0.6) ## 72.7 m2/ha, proposed BA
+## some thoughts about how to focus the sampling along the distribution
+# ba.pred.cell <- function(x, A, C){(((x/2)^2)*pi)/(A*C)} ## x is dbh (cm), A is AOI (cell size m2), C is canopy fraction (0-1)
+# quantile(biom.dat[!is.na(bos.biom30m) & bos.biom30m>10,bos.biom30m], probs=c(.10,.50,.90)) ## for the cells we are running, 235, 3740, 17537 kg
+# 20000/clean[, median(biom.2006, na.rm=T)] ## this could be 77 median trees in a 20k cell
+# ba.pred.cell(clean[,median(dbh.2006, na.rm=T)], 900, 0.6) ## 25cm median dbh, 60% Can, BA is 0.9
+# (20000/clean[, median(biom.2006, na.rm=T)])*ba.pred.cell(clean[,median(dbh.2006, na.rm=T)], 900, 0.6) ## 72.7 m2/ha, proposed BA
 ## so in upper reaches a BA restriction of ~40 m2/ha will help to keep bitty trees down
 ## maybe start the selection function around what sample will give you a median dbh that will let you get in under the BA cap
 # ### what about numerical density (stems/ha)
-ba.pred <- function(x){(x/2)^2*pi*0.0001} ## get BA per stump from dbh
+# ba.pred <- function(x){(x/2)^2*pi*0.0001} ## get BA per stump from dbh
 # andy.dbh <- read.csv("docs/ian/Reinmann_Hutyra_2016_DBH.csv")
 # andy.dbh <- as.data.table(andy.dbh)
 # names(andy.dbh) <- c("Tree.ID", "Plot.ID", "Spp", "X", "Y", "dbh", "Can.class")
@@ -1159,7 +1159,7 @@ ba.pred <- function(x){(x/2)^2*pi*0.0001} ## get BA per stump from dbh
 runme <- biom.dat[!is.na(bos.biom30m) & bos.biom30m>10 & !is.na(aoi) & !is.na(bos.can30m) & bos.can30m>0,] ## 108k
 setkey(runme, index)
 # runme <- runme[bos.biom30m>30000,]
-runme <- runme[sample(1:dim(runme)[1], size=100),]
+runme <- runme[sample(1:dim(runme)[1], size=1000),]
 
 ## set up containers
 cage.num.trees <- list()
@@ -1191,6 +1191,7 @@ for(t in 1:dim(runme)[1]){
   q <- 0 ## count attempts since last successful sample
   g <- 0 ## weight adjustment start
   z <- 0 ## total number of sample iterations
+  jeez <- 0 ## if it's grinding through a slow one
   
   ### this approach uses a moving/shrinking window on the street tree records as biomass starts to get bigger
   ## has the disadvantage of supressing the number of trees at higher biomass (start to oversample very large trees), would need some tuning to get the right sampling window
@@ -1239,7 +1240,7 @@ for(t in 1:dim(runme)[1]){
       w=w+samp[d+1, biom.2006]
       d=d+1
     }
-    ### if this is too many trees too tightly packed (over 40m2/ha BA) or not enough biomass in the sample
+    ### if this is too many trees too tightly packed (over 40m2/ha BA) or not enough biomass in the sample, readjust weights
     if(((samp[1:d, sum(ba)]/runme[t, aoi*bos.can30m])*1E4)>40 | w<(0.90*runme[t, bos.biom30m])){
       if(g<incr){
         g=g+1 ## readjust the sample weights
@@ -1251,13 +1252,14 @@ for(t in 1:dim(runme)[1]){
       x <- x+1 ## record successful sample
       ann.npp <- c(ann.npp, sum(samp[1:d, biom.2006]*exp((mod.biom.rel$coefficients[2]*log(samp[1:d, dbh.2006]))+mod.biom.rel$coefficients[1])))
       num.trees <- c(num.trees, d)
-      biom.sim.track <- c(biom.sim.track, w)
+      biom.sim.track <- c(biom.sim.track, w) ## simulated biomass in this sample
       cage.dbh[[t]][[x]] <- samp[1:d, dbh.2006] ## which dbhs did you select
       cage.genus[[t]][[x]] <- samp[1:d, genus] # running list of which genera you select
-      wts.track <- c(wts.track, g)
-      if(q>300){print(paste("finally got sample", x, "after", q, "tries"))}
+      wts.track <- c(wts.track, g) ## weights used to get this sample
+      if(q>300){print(paste("finally got sample", x, "after", q, "tries")); jeez <- 1} ## to give status reports for difficult/long-process samples
       q=0 ## reset counter if you've found some solution
-      if(x>30){q <- (-500)} ## give more room if you've managed by chance to get a pretty good sample going
+      if(jeez==1 & x%%10==0){print(paste("patience, just got sample", x))}
+      if(x>30 & g>250){q <- (-500)} ## give more room if this is a hard one and you've managed by chance to get a pretty good sample going
     }
     q=q+1 ## record number of attempts since last succesful simulation
     if(q>600 & q%%100==0){print(paste("attempt clock out in", (1000-q)/100))}
@@ -1275,7 +1277,7 @@ for(t in 1:dim(runme)[1]){
     print(paste("finished pixel", runme[t, index]))
   } else{
     proc.track <- c(proc.track, 0) ## record as incomplete processing
-    print(paste("pixel", runme[t, index], "error"))
+    print(paste("pixel", runme[t, index], "failed"))
   }
 }
 
@@ -1296,74 +1298,24 @@ hist(sapply(cage.ann.npp[[66]], FUN=median))
 hist(sapply(cage.num.trees[[66]], FUN=median))
 biom.track[66]
 cage.genus[[66]]
+cage.dbh[[66]]
 
 ### which ones fail
-length(biom.track[an==9999])/length(biom.track) ## 2.5% failure, all over ~30k
-biom.dat[bos.biom30m>30000, length(bos.biom30m)]/biom.dat[bos.biom30m>10, length(bos.biom30m)] ## 1.8% are over 30k
-length(biom.track[biom.track>29000])/1000 ## 2.5% of sample was over 29k
-diag <- (cbind(biom.track, index.track, an, n, w))
-View(diag[an==9999,])
-View(diag[biom.track>28000,])
+biom.track[proc.track==0]
+cage.ann.npp[c(which(proc.track==0))] ## are you finding partial retreivals?
+cage.dbh[which(proc.track==0)]
+cage.ann.npp[which(proc.track==0)]
 
 ## save the objects to disk for later reconstituting
-save(cage.ann.npp, file=paste("processed/boston/ann.npp.street.small"))
-save(cage.num.trees, file=paste("processed/boston/num.trees.street.small"))
-save(cage.dbh, file=paste("processed/boston/dbh.street.small"))
-save(biom.track, file=paste("processed/boston/biom.track.street.small"))
-save(cage.ann.npp, file=paste("processed/boston/index.track.street.small"))
+save(cage.ann.npp, file=paste("processed/boston/ann.npp.street.v3.weighted"))
+save(cage.num.trees, file=paste("processed/boston/num.trees.street.v3.weighted"))
+save(cage.dbh, file=paste("processed/boston/dbh.street.v3.weighted"))
+save(biom.track, file=paste("processed/boston/biom.track.street.v3.weighted"))
+save(cage.ann.npp, file=paste("processed/boston/index.track.street.v3.weighted"))
 
 ### this is predicting low numbers of trees even in high biomass cells -- it's too good at finding rare large trees
 o=rgamma(n = 1000, shape = 1, scale = 20)
 hist(o)
-
-## the trouble now is that I don't know at what point to start helping it find larger trees
-## what if you iteratively bend the weights towards the higher end if it fails to find enough biomass within the constraints?
-k=1
-ff <- seq(1:10000)
-hist(sample(ff, size=1000, prob = rep(k, 10000)), breaks=50, ylim=c(0,25))
-hist(sample(ff, size=1000, prob = ff*0.001), breaks=50) ## this bends the sampling frequency upwards, prob weight doesn't have to sum=1
-for(i in 0:2000){
-  wts <- (((1*i)/ff)*ff)-(1*i)
-  j <- sample(ff, size=1000, prob=)
-}
-k <- rep(4, length(ff))
-plot(ff, k, pch=14)
-i=1
-D=0.5
-k=4-(i*D)+(((i*D)/length(ff))*ff)
-points(ff, k,col="blue")
-i=2
-D=0.5
-k=4-(i*D)+(((i*D)/length(ff))*ff)
-points(ff, k,col="red")
-## formula for sampling probability weights adjusted iteratively
-## i = number of times sampling has failed due to too low sum(biomass) or too high BA
-## k = a constant
-## D = incremement to drop the low end of the weights for each failure
-## Weight = k-(iD)+((iD/#records)*record.rank)
-## example
-ff <- seq(1:10000) ## rank ordered values
-k=5
-D=2
-i=0 ## base case
-wts <- (k-(i*D))+((i*D)/(length(ff)))*ff
-hist(sample(ff, size=1000, prob = wts), breaks=50, ylim=c(0,45))
-i=1 ## first increment
-wts <- (k-(i*D))+((i*D)/(length(ff)))*ff
-hist(sample(ff, size=1000, prob = wts), breaks=50, ylim=c(0,45))
-i=2 ## 2nd
-wts <- (k-(i*D))+((i*D)/(length(ff)))*ff
-hist(sample(ff, size=1000, prob = wts), breaks=50, ylim=c(0,45))
-i=4
-wts <- (k-(i*D))+((i*D)/(length(ff)))*ff
-hist(sample(ff, size=1000, prob = wts), breaks=50, ylim=c(0,45)) ## cannot into space, negative probabilities, keep D small relative to K
-
-clean <- clean[order(clean$dbh.2006),]
-clean[,rank:=seq(from=dim(clean)[1], to=1)] ## all the trees have a fixed size rank now
-
-hist(biom.dat[bos.biom30m>10, bos.biom30m], breaks=100) ### smallest bin is about 2000x more common than the largest bins
-hist(clean[,biom.2006], breaks=100) ### smallest tree bin biomass is ~700x more frequent than largest tree bin
-hist(clean[,dbh.2006], breaks=50) ### smallest tree bin dbh is ~150x more frequent than largest tree bin
 
 #### import results objects pulled from parallel processing on the cluster (chunks of 10k pixels)
 obj.dump <- list.files("processed/boston/biom_street/")
