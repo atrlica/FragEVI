@@ -480,3 +480,62 @@ library(ggplot2);library(reshape2)
 data<- melt(x)
 ggplot(data,aes(x=value, fill=variable)) + geom_density(alpha=0.7)
 ggplot(data,aes(x=value, fill=variable)) + geom_histogram(alpha=0.25)
+
+groom.mgc <- as.data.frame(biom.dat[aoi>800 & live.MgC.ha.perv<=300 & bos.biom30m>10, 5:7, with=F])
+mgc.melt <- melt(groom.mgc)
+groom.npp <- as.data.frame(biom.dat[aoi>800 & live.MgC.ha.perv<=300 & bos.biom30m>10, 14:16, with=F])
+npp.melt <- melt(groom.npp)
+dim(mgc.melt)
+ggplot(mgc.melt, aes(x=value)) + 
+  geom_density(aes(group=variable, colour=variable))
+ggplot(npp.melt, aes(x=value)) + 
+  geom_density(aes(group=variable, colour=variable))
+
+## let's add the growth curve over the density plot for biomass density
+a=123.67
+b=0.04
+AGE=seq(0,300)
+y = a*(1-exp(-b*AGE))^3
+plot(AGE, y)
+z = diff(y)
+z.rel <- z/y[2:301]
+length(y)
+length(z) ## this is growth after 1 year, 2 years, etc
+plot(y[2:301], z)
+points(y[2:151], z.rel, pch=14, cex=0.5, col="red") #hyperbolic
+plot(AGE[2:151], z) ## this is the gain curve over site age
+growth.curve <- as.data.frame(cbind(y[2:301],z))
+
+ggplot(mgc.melt, aes(x=value)) + 
+  geom_density(aes(group=variable, colour=variable), alpha=0.12) +
+  geom_line(data=growth.curve, aes(x=V1, y=z*0.01))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())+
+  scale_colour_discrete(name="Area basis",
+                        breaks=c("live.MgC.ha.ground", "live.MgC.ha.forest", "live.MgC.ha.perv"),
+                        labels=c("ground", "forest", "pervious"))+
+  labs(x = "Biomass MgC/ha")
+
+  
+  ggplot(npp.melt, aes(x=value, fill=variable)) + 
+  geom_density(aes(group=variable, colour=variable), alpha=0.12) +
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+    scale_colour_discrete(name="Area basis",
+                          breaks=c("npp.ann.ground.ha", "npp.ann.forest.ha", "npp.ann.perv.ha"),
+                          labels=c("ground", "forest", "pervious"))+
+    labs(x = "NPP MgC/ha/yr")+
+    guides(fill=FALSE)
+  
+
+
+
+
