@@ -74,14 +74,12 @@ clean[,rank:=seq(from=1, to=dim(clean)[1])] ## all the trees have a fixed size r
 ### set up data
 runme <- biom.dat[!is.na(bos.biom30m) & bos.biom30m>10 & !is.na(aoi) & !is.na(bos.can30m) & bos.can30m>0,] ## 108k
 
-## test chunks
-# runme <- runme[bos.biom30m>30000,]
-# runme <- runme[sample(1:dim(runme)[1], size=1000),]
-
-### NOTE To parallelize this process (for the lower biomass pixels), the script checks for already-written chunks of results, and then tries to produce the next chunk
+### To parallelize this process (for the lower biomass pixels), the script checks for already-written chunks of results, and then tries to produce the next chunk
 ### calling the script multiple times will result in multiple successive chunks of pixels being run at the same time
 
 runme.x <- runme[1:10000,] ## initialize first chunk
+# runme.x <- runme[bos.biom30m>20000,]
+# runme.x <- runme.x[sample(1:dim(runme.x)[1], size=100),] ## test, high biomass
 
 ## parallel process: check to see if any containers have been written to disk, if not queue up the next chunk
 check <- list.files("processed/boston/biom_street")
@@ -96,16 +94,16 @@ if(length(check)!=0){ ## ie if you detect that results have already been written
 }
 
 ## set up containers
-cage.num.trees <- list()
-cage.ann.npp <- list()
-cage.dbh <- list()
-cage.genus <- list()
-index.track <- rep(9999, dim(runme.x)[1])
-biom.track <- rep(9999, dim(runme.x)[1])
-cage.wts <- list()
-cage.biom.sim <- list()
-attempts.track <- rep(9999, dim(runme.x)[1])
-proc.track <- rep(9999, dim(runme.x)[1])
+cage.num.trees <- list() ## number of trees per cell, record every successful simulation (vector of 100 per cell)
+cage.ann.npp <- list() ## aggregated npp per cell, record every successful simulation (vector of 100 per cell)
+cage.dbh <- list() ## the dbh of individual trees chosen in each successful simulation (a vector for each simulation, 100 vectors per cell)
+cage.genus <- list() ## the genus of individual trees chosen in each successful simulation (a vector for each simulation, 100 vectors per cell)
+index.track <- rep(999999, dim(runme.x)[1]) ## track of order of unique pixel IDs simulated
+biom.track <- rep(999999, dim(runme.x)[1]) ## track of biomass in each pixel
+cage.wts <- list() ## the sampling weight used in each successful simulation (vector of 100 per cell)
+cage.biom.sim <- list() ## the aggregate biomass estimated in each successful simulation (vector of 100 per cell)
+attempts.track <- rep(999999, dim(runme.x)[1]) ## the total number of simulations made (success+fail) for each cell
+proc.track <- rep(999999, dim(runme.x)[1]) ## the exit status of each cell (1=success, 0 = fail)
 
 ## create an empty save file to warn the script next time that this chunk is being worked on
 if(length(check)!=0){
@@ -124,7 +122,7 @@ D=k/incr ## drop increment, sensitive to number of tries to make while adjusting
 ## loop each row
 for(t in 1:dim(runme.x)[1]){
   ann.npp <- numeric()
-  num.trees <- numeric()
+  num.trees <- integer()
   biom.sim.track <- numeric()
   wts.track <- integer()
   cage.genus[[t]] <- list()
@@ -136,10 +134,9 @@ for(t in 1:dim(runme.x)[1]){
   z <- 0 ## total number of sample iterations
   jeez <- 0 ## if it's grinding through a slow one
   
-  ### this approach uses a moving/shrinking window on the street tree records as biomass starts to get bigger
+  ### approach below uses moving/shrinking window on the street tree records as biomass starts to get bigger
   ## has the disadvantage of supressing the number of trees at higher biomass (start to oversample very large trees), would need some tuning to get the right sampling window
-  # ## 0 figure where and how much to sample
-  # cell.q <- p(runme[t, bos.biom30m]) ## this is the percentile of the cell biomass
+  # cell.q <- p(runme[t, bos.biom30m]) ## this is the percentile of the cell biomass viz. rest of data
   # spread <- min((1-cell.q), 0.5) ## interval to sample in dbh records, cap it off if the spread gets bigger than 50%
   # window.l <- max(0, (cell.q-spread))
   # window.h <- cell.q+spread
@@ -149,12 +146,12 @@ for(t in 1:dim(runme.x)[1]){
   
   dens.lim <- ceiling(0.106*runme.x[t,aoi*bos.can30m]) ## maximum number to select, probably only restrictive in low-canopy cells
   
-  ### this approach takes the full street trees record and samples it with differing weights if the algorithm fails
-  grasp <- clean[biom.2006<(1.1*runme.x[t, bos.biom30m]), .(dbh.2006, biom.2006, ba, rank, genus)] ## excluding single trees too big to fit cell biomass
+  ### or take a "groomed" record and sample it with adjusting weights if the algorithm fails on density
+  grasp <- clean[biom.2006<(1.1*runme.x[t, bos.biom30m]), .(dbh.2006, biom.2006, ba, rank, genus)] ## exclude sampling in this simulation any single trees too big to fit cell biomass
   
-  ### attempt to sample street trees to fill the cells
+  ### sample street trees and try to fill the cells
   while(x<100 & q<1000){ ## select 100 workable samples, or quit after q attempts with no success
-    # ## grab a sample of grasp (no weighting)
+    # ## grab a sample of grasp (moving/shrinking, no weighting)
     # samp <- grasp[sample(dim(grasp)[1], size=dens.lim, replace=T),] ## sample grasp with replacement only up to density limit
     
     ## OR: figure out the dynamic weighting to use based on previous failures
@@ -168,10 +165,10 @@ for(t in 1:dim(runme.x)[1]){
       d=d+1
     }
     ### if this is too many trees too tightly packed (over 40m2/ha BA) or not enough biomass in the sample, readjust weights
-    if(((samp[1:d, sum(ba)]/runme.x[t, aoi*bos.can30m])*1E4)>40 | w<(0.90*runme.x[t, bos.biom30m])){
+    if(((samp[1:d, sum(ba)]/runme.x[t, aoi*bos.can30m])*1E4)>40 | w<(0.90*runme.x[t, bos.biom30m])){ ## we are counting area of "forest" as the area covered in canopy (NOT pervious, NOT raw ground area)
       if(g<incr){
         g=g+1 ## readjust the sample weights
-        if(g==300){print(paste("pixel", runme[t, index], "weights at maximum"))}
+        if(g==300){print(paste("pixel", runme.x[t, index], "weights at maximum"))}
         q=0 ## reset attempt timeout clock
       }
     }
@@ -192,19 +189,22 @@ for(t in 1:dim(runme.x)[1]){
     if(q>600 & q%%100==0){print(paste("attempt clock out in", (1000-q)/100))}
     z=z+1 ## record total number of sample iterations
   }
+  if(x==0){ann.npp <- NA; num.trees <- NA; biom.sim.track <- NA, wts.track <- NA}
+  ## store results, record exit status
   cage.ann.npp[[t]] <- ann.npp
   cage.num.trees[[t]] <- num.trees
   cage.wts[[t]] <- wts.track
-  biom.track <- c(biom.track, runme[t, bos.biom30m])
-  index.track <- c(index.track, runme[t, index])
+  biom.track[t] <- runme.x[t, bos.biom30m]
+  index.track[t] <- runme.x[t, index]
   cage.biom.sim[[t]] <- biom.sim.track
-  attempts.track <- c(attempts.track, z)
+  attempts.track[t] <- z
+  ## exit status
   if(q<1000){
-    proc.track <- c(proc.track, 1)
-    print(paste("finished pixel", runme[t, index], "=", t))
+    proc.track[t] <- 1
+    print(paste("finished pixel", runme.x[t, index], "=", t))
   } else{
-    proc.track <- c(proc.track, 0) ## record as incomplete processing
-    print(paste("pixel", runme[t, index], "failed"))
+    proc.track[t] <- 0 ## record as incomplete processing
+    print(paste("pixel", runme.x[t, index], "failed =", t))
   }
 }
 
@@ -215,8 +215,8 @@ save(cage.dbh, file=paste("processed/boston/biom_street/dbh.street.v3.weighted",
 save(cage.genus, file=paste("processed/boston/biom_street/genus.street.v3.weighted", stor, sep="."))
 save(biom.track, file=paste("processed/boston/biom_street/biom.track.street.v3.weighted", stor, sep="."))
 save(index.track, file=paste("processed/boston/biom_street/index.track.street.v3.weighted", stor, sep="."))
-save(proc.track, file=paste("processed/boston/biom_street/index.track.street.v3.weighted", stor, sep="."))
-save(cage.biom.sim, file=paste("processed/boston/biom_street/cage.biom.sim.street.v3.weighted", stor, sep="."))
+save(proc.track, file=paste("processed/boston/biom_street/proc.track.street.v3.weighted", stor, sep="."))
+save(cage.biom.sim, file=paste("processed/boston/biom_street/biom.sim.street.v3.weighted", stor, sep="."))
 save(attempts.track, file=paste("processed/boston/biom_street/attempts.track.street.v3.weighted", stor, sep="."))
 
 
