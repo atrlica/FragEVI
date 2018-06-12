@@ -1313,9 +1313,6 @@ save(cage.dbh, file=paste("processed/boston/dbh.street.v3.weighted"))
 save(biom.track, file=paste("processed/boston/biom.track.street.v3.weighted"))
 save(cage.ann.npp, file=paste("processed/boston/index.track.street.v3.weighted"))
 
-### this is predicting low numbers of trees even in high biomass cells -- it's too good at finding rare large trees
-o=rgamma(n = 1000, shape = 1, scale = 20)
-hist(o)
 
 #### import results objects pulled from parallel processing on the cluster (chunks of 10k pixels)
 obj.dump <- list.files("processed/boston/biom_street/")
