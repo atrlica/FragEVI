@@ -16,7 +16,10 @@ ba <- function(x){(((x/2)^2)*pi)/1E4} ### to find JUST the BA of a tree based on
 
 ### for each pixel, get median estimated npp, median # trees
 container <- data.frame()
+med.dbh.rec <- numeric() ## keep a running tally of the dbh of every tree in the nearest-to-median-npp sample in each pixel
+dbh.dump <- list() ## a place to put actual dbh samples from targeted retrievals for deeper analysis (e.g. what do the median retrievals look like?)
 for(c in 1:length(npp.dump)){
+  dbh.dump.tmp <- list() ## 
   load(paste("processed/boston/biom_street/", npp.dump[c], sep=""))
   tmp.npp <- sapply(cage.ann.npp, FUN=median)
 #   tmp.npp[tmp.npp==9999] <- NA ## filter the NA flags
@@ -38,127 +41,62 @@ for(c in 1:length(npp.dump)){
   tmp.biom.sim <- sapply(cage.biom.sim, FUN=median)
   load(paste("processed/boston/biom_street/attempts.track.street.v3.weighted.", npp.dump.chunks[c], sep="")) ## comes in as "proc.track" object
   tmp.attempts <- attempts.track
- 
+#   load(paste("processed/boston/biom_street/wts.street.v3.weighted.", npp.dump.chunks[c], sep="")) ## comes in as "cage.wts" object
+
   ### figure median dbh and median basal area for each pixel
   load(paste("processed/boston/biom_street/dbh.street.v3.weighted.", npp.dump.chunks[c], sep="")) ## comes in as "dbh.stret.small" object
-  ba.track <- rep(9999, length(cage.dbh))
-  dbh.track <- rep(9999, length(cage.dbh))
+  ba.grand <- rep(9999, length(cage.dbh)) ## BA values for every retreival per cell
+  dbh.grand <- rep(9999, length(cage.dbh)) ## dbh values for every retreival per cell
   print(paste("patience! Doing BA calculations on chunk", npp.dump.chunks[c]))
   for(b in 1:length(cage.dbh)){
-    if(is.na(tmp.npp[b])){  ## if a valid NPP was retrieved only
-      ba.track[b] <- NA
-      dbh.track[b] <- NA
+    if(length(cage.ann.npp[[b]])<5){  ## if too few NPP retreivals were made
+      ba.grand[b] <- NA
+      dbh.grand[b] <- NA
+      dbh.dump.tmp[[b]] <- NA
     } else{
-      ba.track[b] <- median(sapply(sapply(cage.dbh[[b]], FUN=ba), FUN=sum)) ## median of the summed dbh-->ba (=m2) values for each sample, need to convert based on (canopy) area of pixel
-      dbh.track[b] <- median(unlist(cage.dbh[[b]])) ## grand median dbh of all trees selected for all samples
+      ba.grand[b] <- median(sapply(sapply(cage.dbh[[b]], FUN=ba), FUN=sum)) ## median of the total ba (=m2) for each sample, need to convert based on (canopy) area of pixel
+      dbh.grand[b] <- median(unlist(cage.dbh[[b]])) ## grand median dbh of all trees selected for all samples
+      ### these look at the summary stats for a particular retreival in each cell (ex. the retrieval nearest the median npp)
+      dev <- abs(cage.ann.npp[[b]]-tmp.npp[b]) ## deviance of individual NPP retreivals from the median NPP for this cell
+      rrr <- which(dev==min(dev)) ## which retreival is the closest to the median
+      dbh.dump.tmp[[b]] <- cage.dbh[[b]][[rrr[1]]] ## track the tree sample nearest to every npp median in every pixel (just take the first instance, fuck it)
     }
     if(b%%1000==0){print(b)}
   }
-  
+  dbh.dump <- rbind(dbh.dump, dbh.dump.tmp) ## append the collection of dbh records
+
+  ## figure out median dbh, ba, and count for the tree sample in each pixel closest to median npp
+  pixM.tree.num <- sapply(dbh.dump, FUN=length) ## tree number in median npp retreival per pixel
+  pixM.dbh <- sapply(dbh.dump, FUN=median) ## the median dbh for the selection of trees nearest the median npp in each cell
+  pixM.ba <- sapply(sapply(dbh.dump, FUN=ba), FUN=sum) ## summed BA for the selection of trees in the sample nearest median npp 
+#   hist(pixM.tree.num) ## so this is the distribution in tree density per pixel in the most common retreival in each cell
+#   hist(pixM.dbh) ## this is the distribution of MEDIAN dbh for the most common retreival in each cell
+#   hist(pixM.ba) ## this is the distribution of total BA (m2) in each cell (not corrected for canopy) according to the tree sample nearest the median npp
+  med.dbh.rec <- c(med.dbh.rec, unlist(dbh.dump)) ## append the median dbh record
+#   hist(all.dbh) ## this is the distribution of dbh if you actually went out and counted every simulated tree in the pixels
+#   median(all.dbh, na.rm=T) ### YESSS BITCHESSSSS median is same as street tree records
+#   ## could also look at these distributions in e.g. the 25h and 75th percentile retreivals of NPP for each pixel
+
   ## bind to container
-  g <- cbind(index.track, biom.track, tmp.npp, tmp.num, ba.track, dbh.track)
+  g <- cbind(index.track, biom.track, ## basic cell tracking here. each row is 1 pixel
+             tmp.npp, tmp.num, dbh.grand, ba.grand, tmp.biom.sim, ## median npp and tree number for all retrievals
+             pixM.tree.num, pixM.dbh, pixM.ba,  ## simulator estimates for median retrieval per pixel
+             tmp.num.sims, tmp.sim.incomp, tmp.attempts, tmp.proc) ### metrics for how well the simulator performed
   container <- rbind(container, g)
-  hist(tmp.npp, main=paste(npp.dump.chunks[c]))
-  hist(tmp.num, main=paste(npp.dump.chunks[c]))
-  hist(dbh.track, main=paste(npp.dump.chunks[c]))
-  hist(ba.track, main=paste(npp.dump.chunks[c]))
+#   hist(tmp.npp, main=paste(npp.dump.chunks[c]))
+#   hist(tmp.num, main=paste(npp.dump.chunks[c]))
+#   hist(dbh.grand, main=paste(npp.dump.chunks[c]))
+#   hist(ba.grand, main=paste(npp.dump.chunks[c]))
 }
 
 ## collect, export, make maps
-names(container) <- c("id.proc1", "biom.kg", "ann.npp.street.sim", "tree.num.street.sim", 
-                      "ba.street.sim", "med.dbh.street.sim")
+names(container) <- c("pix.ID", "biom.kg", 
+                      "med.ann.npp.all", "med.tree.num.all", "med.dbh.all", "med.ba.all", "med.biom.all",
+                      "pixM.tree.num", "pixM.dbh.med", "pixM.ba",
+                      "num.sims", "sim.incomp", "attempts", "proc.status")
 
-# write.csv(container, "processed/boston/bos.street.trees.small.npp.simulatorv1.results.csv")
-# dim(container) # 98974 -- small only -- compare to 108974 when big trees included
-# sum(container$tree.num.street.sim, na.rm=T) ##938k
-
-### tedious reconstruction of the raster comenses here
-### this is how the biomass raster was processed prior to the street tree simulator start
-biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel
-aoi <- raster("processed/boston/bos.aoi30m.tif")
-biom <- crop(biom, aoi) ## biomass was slightly buffered, need to clip to match canopy fraction raster
-biom.raw <- biom ### lucky fucker, the 
-biom.dat <- as.data.table(as.data.frame(biom))
-biom.dat[,aoi:=as.vector(getValues(aoi))]
-biom.dat[aoi<800, bos.biom30m:=NA] ### cancel values in cells that are not at least ~90% complete coverage in AOI
-can <- raster("processed/boston/bos.can30m.tif")
-can.dat <- as.data.table(as.data.frame(can))
-biom.dat <- cbind(biom.dat, can.dat)
-biom.dat[,id.proc1:=1:dim(biom.dat)[1]] # 1:354068 --> 
-#### !!! you jammy bastard, the groomed data contains the same number of rows as there are cells in the cropped biom raster so the ID's track fine
-biom.dat.proc <- biom.dat ## save a copy here
-
-map <- merge(x=biom.dat.proc, y=container, by="id.proc1", all.x=T, all.y=T)
-
-### big tree processing
-### repeat processing for the ~6k "big biomass" pixels
-obj.dump <- list.files("processed/boston/biom_street/")
-npp.dump <- obj.dump[grep(obj.dump, pattern = "ann.npp.street.big*")]
-
-container.big <- data.frame()
-### for each pixel, get median estimated npp, median # trees
-for(c in 1){
-  load(paste("processed/boston/biom_street/", npp.dump[c], sep=""))
-  tmp.npp <- sapply(cage.ann.npp, FUN=median)
-  tmp.npp[tmp.npp==9999] <- NA ## filter the NA flags
-  
-  ## grab the corresponding other dump files
-  load(paste("processed/boston/biom_street/num.trees.street.big"))
-  tmp.num <- sapply(cage.num.trees, FUN=median)
-  tmp.num[tmp.num==9999] <- NA ## filter the NA flags
-  load(paste("processed/boston/biom_street/index.track.street.big")) ## comes in as "index.track" object
-  tmp.index <- index.track
-  load(paste("processed/boston/biom_street/biom.track.street.big")) ## comes in as "biom.track" object
-  tmp.biom <- biom.track
-  
-  ### figure median dbh and median basal area for each pixel
-  load(paste("processed/boston/biom_street/dbh.street.big")) ## comes in as "index.track" object
-  ba.track <- rep(9999, length(cage.dbh))
-  dbh.track <- rep(9999, length(cage.dbh))
-  print(paste("patience! Doing BA calculations on chunk big"))
-  for(b in 1:length(cage.dbh)){
-    if(is.na(tmp.npp[b])){  ## if a valid NPP was retrieved only
-      ba.track[b] <- NA
-      dbh.track[b] <- NA
-    } else{
-      ba.track[b] <- median(sapply(sapply(cage.dbh[[b]], FUN=ba), FUN=sum)) ## median of the summed dbh-->ba values for each sample (in m2, need to compare to canopied area of pixel for proper ba estimation)
-      dbh.track[b] <- median(unlist(cage.dbh[[b]])) ## grand median dbh of all trees selected for all samples
-    }
-    if(b%%1000==0){print(b)}
-  }
-  
-  ## bind to container
-  g <- cbind(index.track, biom.track, tmp.npp, tmp.num, ba.track, dbh.track)
-  container.big <- rbind(container.big, g)
-  hist(tmp.npp, main=paste("big"))
-  hist(tmp.num, main=paste("big"))
-  hist(dbh.track, main=paste("big"))
-  hist(ba.track, main=paste("big"))
-}
-
-## collect, export, make maps
-names(container.big) <- c("id.proc1", "biom.kg", "ann.npp.street.sim", "tree.num.street.sim", 
-                          "ba.street.sim", "med.dbh.street.sim")
-
-## rebuild container file before final merge into map vectors
-container.f <- rbind(container, container.big)
-dim(container.f) # 105k cells
-map <- merge(x=biom.dat, y=container.f, by="id.proc1", all.x=T, all.y=T)
-# map[,ba.street.sim:=ba.street.sim/((aoi*bos.can30m)/1E4)] ## convert summed stump BAs to BA m2/ha per canopied area of pixel
-## don't convert BA by area -- still deciding what area to use
-
-names(map) <- c("id.proc1", "biom.kg", "aoi", "can", "biom.track", "ann.npp.street.sim", 
-                "tree.num.street.sim", "ba.street.sim", "med.dbh.street.sim")
-write.csv(map, "processed/boston/biom_street/streetsim.v1.results.csv")
-
-hist(map$ann.npp.street.sim)
-hist(map$tree.num.street.sim)
-hist(map$ba.street.sim) 
-hist(map$med.dbh.street.sim) # sharp peak mid 20's, then tiny numbers up to 50cm
-map[,sum(ann.npp.street.sim, na.rm=T)]/(2*(10^3)) ## 12k MgC/yr
-map[,sum(ann.npp.street.sim, na.rm=T)]/(2*(10^3))/(map[,sum(aoi, na.rm=T)]/(10^4)) ## 0.97 MgC/ha/yr, compare Hardiman 1.5 MgC/ha/yr for Boston region
-hist(map[bos.biom30m>0 & is.na(ann.npp.street.sim), bos.biom30m]) ## the ones that failed (3200 total, ~3%) are either very small or above 30k
-hist(map[bos.biom30m>20000, ann.npp.street.sim]) #450 kgbiomass/yr in dense cells
+write.csv(container, "processed/boston/bos.street.trees.npp.simulatorv3.results.csv")
+dim(container)
 
 # ### export the tifs
 # for(j in 1:4){

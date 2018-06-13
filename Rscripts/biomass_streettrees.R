@@ -247,6 +247,7 @@ save(index.track, file=paste("processed/boston/biom_street/index.track.street.v3
 save(proc.track, file=paste("processed/boston/biom_street/proc.track.street.v3.weighted", stor, sep="."))
 save(cage.biom.sim, file=paste("processed/boston/biom_street/biom.sim.street.v3.weighted", stor, sep="."))
 save(attempts.track, file=paste("processed/boston/biom_street/attempts.track.street.v3.weighted", stor, sep="."))
+save(cage.wts, file=paste("processed/boston/biom_street/wts.street.v3.weighted", stor, sep="."))
 
 ## update the at.work file to release this job
 atwork <- atwork[atwork!=y]
