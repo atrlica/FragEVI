@@ -91,18 +91,31 @@ pieces.list <- seq(chunk.size, by=chunk.size, length.out=file.num) ## how the su
 check <- list.files("processed/boston/biom_street")
 check <- check[grep(check, pattern="ann.npp.street.v3")]
 already <- as.numeric(sub(".*weighted\\.", "", check))
-missing <- pieces.list[!(pieces.list%in%already)]
+notyet <- pieces.list[!(pieces.list%in%already)]
 
-## if all chunks have been at least started, check to see if any have not reached completion, if not overwrite (could be a script race)
-if(length(missing)==0){
+## if all files have at least been started, check to see which haven't been finished
+if(length(notyet)==0){
   check2 <- list.files("processed/boston/biom_street")
   check2 <- check2[grep(check2, pattern="index.track.street.v3*")] ## look to see if process completed and wrote the final containers
   already <- as.numeric(sub(".*weighted\\.", "", check2))
-  missing <- pieces.list[!(pieces.list%in%already)] ## which files have not been completed
+  notyet <- pieces.list[!(pieces.list%in%already)] ## which files have not been completed
 }
- 
-if(length(missing)!=0){ ## ie if you detect that *completed* results don't exist for some chunks
-  y <- as.numeric(min(missing)) ## figure out what's been written to disk already
+
+if(length(notyet)!=0){ ## ie if you detect that *completed* results don't exist for some chunks
+  if(!file.exists("processed/boston/biom_street/atwork.csv")){ ## start a file of who is working now
+    l <- data.frame(at.work=integer())
+    write.csv(l, file="processed/boston/biom_street/atwork.csv")
+  }
+  ## first check to see what is currently being worked on
+  atwork <- read.csv("processed/boston/biom_street/atwork.csv")
+  atwork <- atwork$at.work
+  ## set target for what isn't completed and isn't being worked on
+  y <- as.numeric(min(notyet[!(notyet%in%atwork)])) 
+  if(length(y)==0){stop("all pixels currently in process")}
+  ## update the at.work file to warn other instances
+  atwork <- c(atwork, y)
+  write.csv(data.frame(at.work=atwork), "processed/boston/biom_street/atwork.csv")
+  
   runme.x <- runme[(y-9999):(y),] ## que up the next chunk
   if((y)>(dim(runme)[1])){ ## if you're at the end of the file, only grab up to the last row
     runme.x <- runme[(y-9999):dim(runme)[1],]
@@ -234,6 +247,10 @@ save(index.track, file=paste("processed/boston/biom_street/index.track.street.v3
 save(proc.track, file=paste("processed/boston/biom_street/proc.track.street.v3.weighted", stor, sep="."))
 save(cage.biom.sim, file=paste("processed/boston/biom_street/biom.sim.street.v3.weighted", stor, sep="."))
 save(attempts.track, file=paste("processed/boston/biom_street/attempts.track.street.v3.weighted", stor, sep="."))
+
+## update the at.work file to release this job
+atwork <- atwork[atwork!=y]
+write.csv(data.frame(at.work=atwork), "processed/boston/biom_street/atwork.csv")
 
 
 
