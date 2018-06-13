@@ -1,12 +1,12 @@
 #!/bin/sh -l
 
-#$ -l h_rt=24:00:00
+#$ -l h_rt=18:00:00
 #$ -N biom.proc
 #$ -V
 #$ -j y
 #$ -l mem_total=125G
-#$ -pe omp 8 -q "geo*"
-#$ -v OMP_NUM_THREADS=8
+#$ -pe omp 4 -q "geo*"
+#$ -v OMP_NUM_THREADS=4
 #$ -m e
 #$ -M atrlica@bu.edu
 #$ -o /projectnb/buultra/atrlica/FragEVI/logs

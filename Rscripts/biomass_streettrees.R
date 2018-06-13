@@ -81,17 +81,33 @@ runme.x <- runme[1:10000,] ## initialize first chunk
 # runme.x <- runme[bos.biom30m>20000,]
 # runme.x <- runme.x[sample(1:dim(runme.x)[1], size=100),] ## test, high biomass
 
-## parallel process: check to see if any containers have been written to disk, if not queue up the next chunk
+## parallel process: check to see if any containers have been written to disk, if not queue up the next chunk (or fill in gaps)
+## set parameters to divide the file up
+chunk.size=10000 ## how many pixel to handle per job
+file.num=ceiling(dim(runme)[1]/chunk.size)
+pieces.list <- seq(chunk.size, by=chunk.size, length.out=file.num) ## how the subfiles will be processed
+
+## check existing npp files, find next file to write
 check <- list.files("processed/boston/biom_street")
 check <- check[grep(check, pattern="ann.npp.street.v3")]
-already <- sub(".*weighted\\.", "", check)
-if(length(check)!=0){ ## ie if you detect that results have already been written to disk, take the next chunk
-  y <- as.numeric(max(already)) ## figure out what's been written to disk already
-  runme.x <- runme[(y+1):(y+10000),] ## reset the next chunk
-  if((y+10000)>(dim(runme)[1])){ ## if you're at the end of the file, only grab up to the last row
-    runme.x <- runme[(y+1):dim(runme)[1],]
-  }
+already <- as.numeric(sub(".*weighted\\.", "", check))
+missing <- pieces.list[!(pieces.list%in%already)]
+
+## if all chunks have been at least started, check to see if any have not reached completion, if not overwrite (could be a script race)
+if(length(missing)==0){
+  check2 <- list.files("processed/boston/biom_street")
+  check2 <- check2[grep(check2, pattern="index.track.street.v3*")] ## look to see if process completed and wrote the final containers
+  already <- as.numeric(sub(".*weighted\\.", "", check2))
+  missing <- pieces.list[!(pieces.list%in%already)] ## which files have not been completed
 }
+ 
+if(length(missing)!=0){ ## ie if you detect that *completed* results don't exist for some chunks
+  y <- as.numeric(min(missing)) ## figure out what's been written to disk already
+  runme.x <- runme[(y-9999):(y),] ## que up the next chunk
+  if((y)>(dim(runme)[1])){ ## if you're at the end of the file, only grab up to the last row
+    runme.x <- runme[(y-9999):dim(runme)[1],]
+  }
+}else{stop("all pixels already processed")}
 
 ## set up containers
 cage.num.trees <- list() ## number of trees per cell, record every successful simulation (vector of 100 per cell)
@@ -107,7 +123,7 @@ proc.track <- rep(999999, dim(runme.x)[1]) ## the exit status of each cell (1=su
 
 ## create an empty save file to warn the script next time that this chunk is being worked on
 if(length(check)!=0){
-  stor <- (y+10000) ## will name the end files up to its max, but it might not be that long
+  stor <- (y) ## will name the end files up to its max, but it might not be that long
   save(cage.ann.npp, file=paste("processed/boston/biom_street/ann.npp.street.v3.weighted", stor, sep=".")) 
 } else{
   stor <- 10000
@@ -115,7 +131,7 @@ if(length(check)!=0){
 }
 
 ## for dynamic weighting
-incr=300 ## incrememnt to change weighting
+incr=300 ## incrememnt to change weighting, how many failures before reaching  max weighting shift
 k=200 ## constant, arbitrary top of prob weights, higher-->steeper change in sampling weight
 D=k/incr ## drop increment, sensitive to number of tries to make while adjusting the sampling weights
 
@@ -189,7 +205,7 @@ for(t in 1:dim(runme.x)[1]){
     if(q>600 & q%%100==0){print(paste("attempt clock out in", (1000-q)/100))}
     z=z+1 ## record total number of sample iterations
   }
-  if(x==0){ann.npp <- NA; num.trees <- NA; biom.sim.track <- NA, wts.track <- NA}
+  if(x==0){ann.npp <- NA; num.trees <- NA; biom.sim.track <- NA; wts.track <- NA}
   ## store results, record exit status
   cage.ann.npp[[t]] <- ann.npp
   cage.num.trees[[t]] <- num.trees
