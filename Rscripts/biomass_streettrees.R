@@ -111,7 +111,7 @@ if(length(notyet)!=0){ ## ie if you detect that *completed* results don't exist 
   atwork <- atwork$at.work
   ## set target for what isn't completed and isn't being worked on
   y <- as.numeric(min(notyet[!(notyet%in%atwork)])) 
-  if(length(y)==0){stop("all pixels currently in process")}
+  if(length(y)==0 | !is.finite(y)){stop("all pixels currently finished or in process")}
   ## update the at.work file to warn other instances
   atwork <- c(atwork, y)
   write.csv(data.frame(at.work=atwork), "processed/boston/biom_street/atwork.csv")
