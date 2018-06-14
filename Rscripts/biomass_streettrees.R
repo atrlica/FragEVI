@@ -83,7 +83,7 @@ runme.x <- runme[1:10000,] ## initialize first chunk
 
 ## parallel process: check to see if any containers have been written to disk, if not queue up the next chunk (or fill in gaps)
 ## set parameters to divide the file up
-chunk.size=10000 ## how many pixel to handle per job
+chunk.size=10000 ## how many pixel to handle per job ## 10000 is probably too big, if you do this again go for smaller chunks
 file.num=ceiling(dim(runme)[1]/chunk.size)
 pieces.list <- seq(chunk.size, by=chunk.size, length.out=file.num) ## how the subfiles will be processed
 
@@ -93,20 +93,12 @@ check <- check[grep(check, pattern="ann.npp.street.v3")]
 already <- as.numeric(sub(".*weighted\\.", "", check))
 notyet <- pieces.list[!(pieces.list%in%already)]
 
-## if all files have at least been started, check to see which haven't been finished
-if(length(notyet)==0){
-  check2 <- list.files("processed/boston/biom_street")
-  check2 <- check2[grep(check2, pattern="index.track.street.v3*")] ## look to see if process completed and wrote the final containers
-  already <- as.numeric(sub(".*weighted\\.", "", check2))
-  notyet <- pieces.list[!(pieces.list%in%already)] ## which files have not been completed
-}
-
-if(length(notyet)!=0){ ## ie if you detect that *completed* results don't exist for some chunks
-  if(!file.exists("processed/boston/biom_street/atwork.csv")){ ## start a file of who is working now
+## if any chunks are not fully processed, next check to see if they're being worked on currently
+if(length(notyet)!=0){ 
+  if(!file.exists("processed/boston/biom_street/atwork.csv")){ ## if it isn't there start a file of who is working now
     l <- data.frame(at.work=integer())
     write.csv(l, file="processed/boston/biom_street/atwork.csv")
   }
-  ## first check to see what is currently being worked on
   atwork <- read.csv("processed/boston/biom_street/atwork.csv")
   atwork <- atwork$at.work
   ## set target for what isn't completed and isn't being worked on
@@ -135,16 +127,7 @@ cage.biom.sim <- list() ## the aggregate biomass estimated in each successful si
 attempts.track <- rep(999999, dim(runme.x)[1]) ## the total number of simulations made (success+fail) for each cell
 proc.track <- rep(999999, dim(runme.x)[1]) ## the exit status of each cell (1=success, 0 = fail)
 
-## create an empty save file to warn the script next time that this chunk is being worked on
-if(length(check)!=0){
-  stor <- (y) ## will name the end files up to its max, but it might not be that long
-  save(cage.ann.npp, file=paste("processed/boston/biom_street/ann.npp.street.v3.weighted", stor, sep=".")) 
-} else{
-  stor <- 10000
-  save(cage.ann.npp, file=paste("processed/boston/biom_street/ann.npp.street.v3.weighted", stor, sep="."))
-}
-
-## for dynamic weighting
+## for dynamic weighting of sampling of dbh records
 incr=300 ## incrememnt to change weighting, how many failures before reaching  max weighting shift
 k=200 ## constant, arbitrary top of prob weights, higher-->steeper change in sampling weight
 D=k/incr ## drop increment, sensitive to number of tries to make while adjusting the sampling weights
