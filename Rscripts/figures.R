@@ -183,70 +183,72 @@ bos.water <- raster("processed/boston/bos.water_only.tif")
 # lowveg.sum/aoi.sum # 10.7%
 # water.sum/aoi.sum # 2.1%
 
+### processing script to get cumulative area by edge distance within LULC
+# ## sum of canopy area, masked by lulc
+# can.sum.ma <- function(x,m) { # x is canopy 0/1 1m raster object, m is mask
+#   bs <- blockSize(x)
+#   y <- integer()
+#   for (i in 1:bs$n) {
+#     v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i])
+#     z <- getValues(m, row=bs$row[i], nrows=bs$nrows[i])
+#     v[v>1 | v<0] <- NA  # for some reason some of the NA's are getting labeled as 120
+#     v[z!=1] <- 0 ## cancel values outside mask area
+#     y <- c(y, sum(v, na.rm=T))
+#     print(paste("finished block", i, "of", bs$n))
+#   }
+#   return(y)
+# }
+# 
+# ### get the total area of canopy (excluding tiny canopy gaps that are filtered in buffer calculations)
+# can.buffs <- list.files("processed/boston/")
+# can.buffs <- can.buffs[grep(pattern = "bos.nocan_", x = can.buffs)]
+# can.buffs <- can.buffs[grep(pattern=".tif", x=can.buffs)]
+# can.buffs <- can.buffs[!grepl(pattern = ".vat", x=can.buffs)]
+# can.buffs <- can.buffs[!grepl(pattern = ".aux", x=can.buffs)]
+# can.buffs <- can.buffs[!grepl(pattern = ".ovr", x=can.buffs)]
+# buff.dist <- as.integer(unlist(rm_between(can.buffs, "nocan_", "mbuff", extract=TRUE)))
+# 
+# 
+# can.master <- raster("processed/boston/bos_can01_filt.tif")
+# can.tot <- sum(getValues(can.master), na.rm=T) ### 31.7% of boston raster is canopy
+# aoi.master <- raster("processed/boston/bos.aoi.tif")
+# aoi.tot <- sum(getValues(aoi.master), na.rm=T)
+# ## cumulative canopy area by edge distance, for each lulc class
+# lu.classes <- c("forest", "dev", "hdres", "ldres", "lowveg")
+# for(l in 1:length(lu.classes)){
+#   print(paste("initializing", lu.classes[l]))
+#   if(exists("results")){rm(results)} ## clean up previous store file
+#   tot <- integer()
+#   dist <- 0
+#   ma <- raster(paste("processed/boston/bos.", lu.classes[l], "_only.tif", sep=""))
+#   area.tot <- sum(getValues(ma), na.rm=T) ## total size of the lulc target
+#   dog <- can.sum.ma(can.master, ma)
+#   tot <- c(tot, sum(dog, na.rm=T))
+#   
+#   for(g in 1:length(can.buffs)){
+#     print(paste("working on", can.buffs[g], "in", lu.classes[l]))
+#     r <- raster(paste("processed/boston/", can.buffs[g], sep=""))
+#     dog <- can.sum.ma(r, ma)
+#     tot <- c(tot, sum(dog, na.rm=T))
+#     dist <- c(dist, buff.dist[g])
+#   }
+#   results <- cbind(dist, tot)
+#   results <- results[order(dist),]
+#   results <- as.data.frame(results)
+#   colnames(results) <- c("dist", "pix.more.than")
+#   results$pix.less.than <- results$pix.more.than[1]-results$pix.more.than ## recall that this method completely leaves out any gap areas that are <50m2 -- neither counted as canopy nor as gap area
+#   results$less.rel <- results$pix.less.than/results$pix.more.than[1]
+#   results$frac.tot.area <- results$pix.less.than/area.tot
+#   write.csv(results, paste("processed/bos.can.cummdist.", lu.classes[l], ".csv", sep=""))
+# }
 
-## sum of canopy area, masked by lulc
-can.sum.ma <- function(x,m) { # x is canopy 0/1 1m raster object, m is mask
-  bs <- blockSize(x)
-  y <- integer()
-  for (i in 1:bs$n) {
-    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i])
-    z <- getValues(m, row=bs$row[i], nrows=bs$nrows[i])
-    v[v>1 | v<0] <- NA  # for some reason some of the NA's are getting labeled as 120
-    v[z!=1] <- 0 ## cancel values outside mask area
-    y <- c(y, sum(v, na.rm=T))
-    print(paste("finished block", i, "of", bs$n))
-  }
-  return(y)
-}
 
-### get the total area of canopy (excluding tiny canopy gaps that are filtered in buffer calculations)
-can.buffs <- list.files("processed/boston/")
-can.buffs <- can.buffs[grep(pattern = "bos.nocan_", x = can.buffs)]
-can.buffs <- can.buffs[grep(pattern=".tif", x=can.buffs)]
-can.buffs <- can.buffs[!grepl(pattern = ".vat", x=can.buffs)]
-can.buffs <- can.buffs[!grepl(pattern = ".aux", x=can.buffs)]
-can.buffs <- can.buffs[!grepl(pattern = ".ovr", x=can.buffs)]
-buff.dist <- as.integer(unlist(rm_between(can.buffs, "nocan_", "mbuff", extract=TRUE)))
-
-
-can.master <- raster("processed/boston/bos_can01_filt.tif")
-can.tot <- sum(getValues(can.master), na.rm=T) ### 31.7% of boston raster is canopy
-aoi.master <- raster("processed/boston/bos.aoi.tif")
-aoi.tot <- sum(getValues(aoi.master), na.rm=T)
-## cumulative canopy area by edge distance, for each lulc class
-lu.classes <- c("dev", "hdres", "ldres", "lowveg", "forest")
-for(l in 1:length(lu.classes)){
-  print(paste("initializing", lu.classes[l]))
-  if(exists("results")){rm(results)} ## clean up previous store file
-  tot <- integer()
-  dist <- 0
-  ma <- raster(paste("processed/boston/bos.", lu.classes[l], "_only.tif", sep=""))
-  area.tot <- sum(getValues(ma), na.rm=T) ## total size of the lulc target
-  dog <- can.sum.ma(can.master, ma)
-  tot <- c(tot, sum(dog, na.rm=T))
-  
-  for(g in 1:length(can.buffs)){
-    print(paste("working on", can.buffs[g], "in", lu.classes[l]))
-    r <- raster(paste("processed/boston/", can.buffs[g], sep=""))
-    dog <- can.sum.ma(r, ma)
-    tot <- c(tot, sum(dog, na.rm=T))
-    dist <- c(dist, buff.dist[g])
-  }
-  results <- cbind(dist, tot)
-  results <- results[order(dist),]
-  results <- as.data.frame(results)
-  colnames(results) <- c("dist", "pix.more.than")
-  results$pix.less.than <- results$pix.more.than[1]-results$pix.more.than ## recall that this method completely leaves out any gap areas that are <50m2 -- neither counted as canopy nor as gap area
-  results$less.rel <- results$pix.less.than/results$pix.more.than[1]
-  results$frac.tot.area <- results$pix.less.than/area.tot
-  write.csv(results, paste("processed/bos.can.cummdist.", lu.classes[l], ".csv", sep=""))
-}
-
+################
 ### combined plot, canopy edge area as fraction of total area (by LULC class)
 results <- read.csv("processed/bos.can.cummdist.csv")
 lu.classes <- c("forest", "dev", "hdres", "ldres", "lowveg")
 cols=rainbow(length(lu.classes))
-cols=c("forestgreen", "blue", "red")
+cols=c("forestgreen", "gray55", "red", "yellow", "green")
 par(mar=c(4.5, 5.5, 1, 1), oma=c(0,0,0, 0), xpd=F)
 
 plot(results$dist, results$frac.tot.area, pch=1, col="black", type="l", lwd=7, bty="n", lty=1, 
@@ -257,64 +259,14 @@ for(d in 1:length(lu.classes)){
   dat <- read.csv(paste("processed/bos.can.cummdist.", lu.classes[d], ".csv", sep=""))
   lines(dat$dist, dat$frac.tot.area, col=cols[d], type="l", lwd=3)
 }
-legend("right", x=40, y=0.80, cex=2, legend=c("Boston", "Forest", "Developed", "Residential"), fill=c("black", cols), bty="n")
-
-### combined plot, canopy edge area as fraction of total area (by LULC class)
-results <- read.csv("processed/bos.can.cummdist.csv")
-lu.classes <- c("forest", "dev", "hd.res", "med.res", "low.res", "lowveg", "other")
-cols=rainbow(length(lu.classes))
-cols=c("forestgreen", "blue", "red")
-par(mar=c(4.5, 5.5, 1, 1), oma=c(0,0,0, 0), xpd=F)
-
-plot(results$dist, results$frac.tot.area, pch=1, col="black", type="l", lwd=7, bty="n", lty=1, 
-     xlab="Distance from edge (m)", ylab="Cummulative area fraction",
-     ylim=c(0, 0.9), xlim=c(0, 60), yaxt="n", font.lab=2, cex.lab=2, cex.axis=2)
-axis(2, at=c(0, 0.2, 0.4, 0.6, 0.8), labels=c("0", "20%", "40%", "60%", "80%"), cex.axis=2)
-for(d in 1:length(lu.classes)){
-  dat <- read.csv(paste("processed/bos.can.cummdist.", lu.classes[d], ".csv", sep=""))
-  lines(dat$dist, dat$frac.tot.area, col=cols[d], type="l", lwd=3)
-}
-legend("right", x=40, y=0.80, cex=2, legend=c("Boston", "Forest", "Developed", "Residential"), fill=c("black", cols), bty="n")
+legend("right", x=40, y=0.80, cex=1, legend=c("Boston", "Forest", "Developed", "HDRes", "LDRes", "LowVeg"), fill=c("black", cols), bty="n")
 
 
 
 
-lu.classes <- c("forest", "dev", "hd.res", "med.res", "low.res", "lowveg", "other")
-for.dat <- read.csv(paste("processed/bos.can.cummdist.", lu.classes[1], ".csv", sep=""))
-hd.dat <-  read.csv(paste("processed/bos.can.cummdist.", lu.classes[3], ".csv", sep=""))
-md.dat <-  read.csv(paste("processed/bos.can.cummdist.", lu.classes[2], ".csv", sep=""))
-dev.dat <-  read.csv(paste("processed/bos.can.cummdist.", lu.classes[4], ".csv", sep=""))
-aoi <- raster("processed/boston/bos.AOI.1m.tif")
-aoi.dat <- as.data.table(as.data.frame(aoi))
 
 
-## raw pixel count by LULC at each distance class
-bos.forest <- raster("processed/boston/bos.forest.tif")
-bos.dev <- raster("processed/boston/bos.dev.tif")
-bos.hd.res <- raster("processed/boston/bos.hd.res.tif")
-bos.med.res <- raster("processed/boston/bos.med.res.tif")
-bos.low.res <- raster("processed/boston/bos.low.res.tif")
-bos.lowveg <- raster("processed/boston/bos.lowveg.tif")
-bos.other <- raster("processed/boston/bos.other.tif")
-bos.water <- raster("processed/boston/bos.water.tif")
-bos.canF <- raster("processed/boston/bos_can01_filt.tif")
-
-## sum of canopy area, masked by lulc
-can.sum.ma <- function(x,m) { # x is canopy 0/1 1m raster object, m is mask
-  bs <- blockSize(x)
-  y <- integer()
-  for (i in 1:bs$n) {
-    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i])
-    z <- getValues(m, row=bs$row[i], nrows=bs$nrows[i])
-    v[v>1 | v<0] <- NA  # for some reason some of the NA's are getting labeled as 120
-    v[z!=1] <- 0 ## cancel values outside mask area
-    y <- c(y, sum(v, na.rm=T))
-    print(paste("finished block", i, "of", bs$n))
-  }
-  return(y)
-}
-
-
+###
 contain <- data.frame(distance=integer(), LULC=character(), pix.num=integer())
 for(g in 1:length(lu.classes)){
   dist.dat <- read.csv(paste("processed/bos.can.cummdist.", lu.classes[g], ".csv", sep=""))
@@ -332,12 +284,27 @@ colnames(contain) <- c("distance", "LULC", "pix.num")
 contain$distance <- as.integer(as.character(contain$distance))
 contain$pix.num <- as.integer(as.character(contain$pix.num))
 
+contain$ha <- contain$pix.num/(1E4)
+
+
 library(ggplot2)
 contain <- as.data.table(contain)
-ggplot(contain[distance!=0,], aes(x=distance, y=pix.num, fill=LULC)) + 
-  geom_area(aes(color=LULC, fill=LULC))+
-  xlim(1,50)
-
+contain <- contain[distance!=0,]
+ggplot(contain[distance!=0,], aes(x=distance, y=ha, fill=LULC)) + 
+  geom_area(aes(fill=LULC))+
+  xlim(1,50)+
+  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3"),
+                    name="Land Cover",
+                    breaks=c("forest", "dev", "hdres", "ldres", "lowveg"),
+                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg."))+
+  xlab("Canopy distance from edge (m)")+
+  ylab("Total area (ha)")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())+
+  theme(legend.position = c(0.8, 0.2))
 
 
 #### FIA density plots
@@ -521,7 +488,7 @@ ggplot(mgc.melt, aes(x=value)) +
   labs(x = "Biomass MgC/ha")
 
   
-  ggplot(npp.melt, aes(x=value, fill=variable)) + 
+ggplot(npp.melt, aes(x=value, fill=variable)) + 
   geom_density(aes(group=variable, colour=variable), alpha=0.12) +
   theme_bw() +
   theme(axis.line = element_line(colour = "black"),
@@ -534,8 +501,14 @@ ggplot(mgc.melt, aes(x=value)) +
                           labels=c("ground", "forest", "pervious"))+
     labs(x = "NPP MgC/ha/yr")+
     guides(fill=FALSE)
+
+
+
+
+### maps for Figure 1 (based on 1m raster -- LULC + veg cover)
   
 
-
+#### maps for Figure 1
+  
 
 

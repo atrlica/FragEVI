@@ -6,7 +6,13 @@ library(raster)
 library(rgdal)
 library(rgeos)
 
-setwd("/projectnb/buultra/atrlica/FragEVI/")
+# setwd("/projectnb/buultra/atrlica/FragEVI/")
+
+### version history
+## V1: Big trees processed separately from small trees (<20k kg), using a modified sampling distribution from street.dbh
+## V2: Sampling window on DBH was moving/shrinking as a function of cell biomass (never fully processed)
+## V3: Sample weighting of dbh distribution was adjusted towards large end if simulations failed
+## V4: tolerance on matching biomass distribution was adjusted to a static threshold (addresses consistent undershoot in large biomass cells)
 
 ######
 ###### Approach 5: Reconfigure street tree analysis for more effective search
@@ -50,7 +56,6 @@ mod.biom.rel <- summary(lm(log(npp.ann.rel)~log(dbh.2006), data=street[record.go
 # plot(street[record.good==1 & dbh.2006>=5, log(biom.2006)], street[record.good==1 & dbh.2006>=5, log(npp.ann.rel)]) # r2 = 0.55, looks nicer
 street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny trees
 
-
 ## read in biomass and canopy data
 biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel
 aoi <- raster("processed/boston/bos.aoi30m.tif")
@@ -77,41 +82,39 @@ runme <- biom.dat[!is.na(bos.biom30m) & bos.biom30m>10 & !is.na(aoi) & !is.na(bo
 ### To parallelize this process (for the lower biomass pixels), the script checks for already-written chunks of results, and then tries to produce the next chunk
 ### calling the script multiple times will result in multiple successive chunks of pixels being run at the same time
 
-runme.x <- runme[1:10000,] ## initialize first chunk
-# runme.x <- runme[bos.biom30m>20000,]
-# runme.x <- runme.x[sample(1:dim(runme.x)[1], size=100),] ## test, high biomass
-
-## parallel process: check to see if any containers have been written to disk, if not queue up the next chunk (or fill in gaps)
+## parallel process: check to see if any results have been written to disk, if not queue up the next chunk (or fill in gaps)
 ## set parameters to divide the file up
-chunk.size=10000 ## how many pixel to handle per job ## 10000 is probably too big, if you do this again go for smaller chunks
+chunk.size=2000 ## how many pixel to handle per job ## 10000 is probably too big, if you do this again go for smaller chunks
 file.num=ceiling(dim(runme)[1]/chunk.size)
 pieces.list <- seq(chunk.size, by=chunk.size, length.out=file.num) ## how the subfiles will be processed
+vers <- 4 ## set version for different model runs here
 
 ## check existing npp files, find next file to write
 check <- list.files("processed/boston/biom_street")
-check <- check[grep(check, pattern="ann.npp.street.v3")]
-already <- as.numeric(sub(".*weighted\\.", "", check))
+check <- check[grep(check, pattern=paste("ann.npp.street.v", vers, sep=""))] ### version label here
+already <- sub(".*weighted\\.", "", check)
+already <- as.numeric(sub("\\..*", "", already))
 notyet <- pieces.list[!(pieces.list%in%already)]
 
 ## if any chunks are not fully processed, next check to see if they're being worked on currently
 if(length(notyet)!=0){ 
-  if(!file.exists("processed/boston/biom_street/atwork.csv")){ ## if it isn't there start a file of who is working now
+  if(!file.exists(paste("processed/boston/biom_street/atwork", vers, "csv", sep="."))){ ## if it isn't there start a file of who is working now
     l <- data.frame(at.work=integer())
-    write.csv(l, file="processed/boston/biom_street/atwork.csv")
+    write.csv(l, file=paste("processed/boston/biom_street/atwork", vers, "csv", sep="."))
   }
-  atwork <- read.csv("processed/boston/biom_street/atwork.csv")
+  atwork <- read.csv(paste("processed/boston/biom_street/atwork", vers, "csv", sep="."))
   atwork <- atwork$at.work
   ## set target for what isn't completed and isn't being worked on
   y <- as.numeric(min(notyet[!(notyet%in%atwork)])) 
-  print(paste("going to work on chunk", y)) 
   if(length(y)==0 | !is.finite(y)){stop("all pixels currently finished or in process")}
+  print(paste("going to work on chunk", y)) 
   ## update the at.work file to warn other instances
   atwork <- c(atwork, y)
-  write.csv(data.frame(at.work=atwork), "processed/boston/biom_street/atwork.csv")
+  write.csv(data.frame(at.work=atwork), paste("processed/boston/biom_street/atwork", vers, "csv", sep="."))
   
-  runme.x <- runme[(y-9999):(y),] ## que up the next chunk
-  if((y)>(dim(runme)[1])){ ## if you're at the end of the file, only grab up to the last row
-    runme.x <- runme[(y-9999):dim(runme)[1],]
+  runme.x <- runme[(y-(chunk.size-1)):y,] ## que up the next chunk
+  if(y>(dim(runme)[1])){ ## if you're at the end of the file, only grab up to the last row
+    runme.x <- runme[(y-chunk.size-1):dim(runme)[1],]
   }
 }else{stop("all pixels already processed")}
 
@@ -158,9 +161,11 @@ for(t in 1:dim(runme.x)[1]){
   # grasp <- clean[biom.2006<runme[t, bos.biom30m] &dbh.2006<=dbh.lims[2] & dbh.2006>=dbh.lims[1], .(dbh.2006, biom.2006, ba)] ## this is a street tree record restricted based on cell biomass
   
   dens.lim <- ceiling(0.106*runme.x[t,aoi*bos.can30m]) ## maximum number to select, probably only restrictive in low-canopy cells
-  
+  tol <- 100 ## maximum tolerance for simulation deviation from cell biomass, in kg
+  tol.window <- c(max(c((runme.x[t, bos.biom30m]-tol), (0.9*runme.x[t, bos.biom30m]))), 
+                  min(c((runme.x[t, bos.biom30m]+tol), (1.1*runme.x[t, bos.biom30m]))))
   ### or take a "groomed" record and sample it with adjusting weights if the algorithm fails on density
-  grasp <- clean[biom.2006<(1.1*runme.x[t, bos.biom30m]), .(dbh.2006, biom.2006, ba, rank, genus)] ## exclude sampling in this simulation any single trees too big to fit cell biomass
+  grasp <- clean[biom.2006<(tol.window[2]), .(dbh.2006, biom.2006, ba, rank, genus)] ## exclude sampling in this simulation any single trees too big to fit cell biomass
   
   ### sample street trees and try to fill the cells
   while(x<100 & q<1000){ ## select 100 workable samples, or quit after q attempts with no success
@@ -173,19 +178,19 @@ for(t in 1:dim(runme.x)[1]){
     samp <- grasp[sample(dim(grasp)[1], size=dens.lim, replace=F, prob = wts),] 
     w=samp[1, biom.2006] ## keep cummulative tally of biomass
     d=1 # keep track of the number of trees
-    while(w<(0.9*runme.x[t, bos.biom30m]) & d<dens.lim){ ## keep adding trees until you just get over the target biomass or run out of records
+    while(w<tol.window[1] & d<dens.lim){ ## keep adding trees until you just get over the target biomass or run out of records
       w=w+samp[d+1, biom.2006]
       d=d+1
     }
     ### if this is too many trees too tightly packed (over 40m2/ha BA) or not enough biomass in the sample, readjust weights
-    if(((samp[1:d, sum(ba)]/runme.x[t, aoi*bos.can30m])*1E4)>40 | w<(0.90*runme.x[t, bos.biom30m])){ ## we are counting area of "forest" as the area covered in canopy (NOT pervious, NOT raw ground area)
+    if(((samp[1:d, sum(ba)]/runme.x[t, aoi*bos.can30m])*1E4)>40 | w<tol.window[1]){ ## we are counting area of "forest" as the area covered in canopy (NOT pervious, NOT raw ground area)
       if(g<incr){
         g=g+1 ## readjust the sample weights
         if(g==300){print(paste("pixel", runme.x[t, index], "weights at maximum"))}
         q=0 ## reset attempt timeout clock
       }
     }
-    if(((samp[1:d, sum(ba)]/runme.x[t, aoi*bos.can30m])*1E4)<40 & w<(1.10*runme.x[t, bos.biom30m])){ ## if the BA density is low enough & didn't overshoot biomass too much
+    if(((samp[1:d, sum(ba)]/runme.x[t, aoi*bos.can30m])*1E4)<40 & w<tol.window[2] & w>tol.window[1]){ ## if the BA density is low enough & got the biomass simulated properly
       x <- x+1 ## record successful sample
       ann.npp <- c(ann.npp, sum(samp[1:d, biom.2006]*exp((mod.biom.rel$coefficients[2]*log(samp[1:d, dbh.2006]))+mod.biom.rel$coefficients[1])))
       num.trees <- c(num.trees, d)
@@ -222,22 +227,20 @@ for(t in 1:dim(runme.x)[1]){
 }
 
 ## when complete dump everything back into the save file
-save(cage.ann.npp, file=paste("processed/boston/biom_street/ann.npp.street.v3.weighted", stor, sep="."))
-save(cage.num.trees, file=paste("processed/boston/biom_street/num.trees.street.v3.weighted", stor, sep="."))
-save(cage.dbh, file=paste("processed/boston/biom_street/dbh.street.v3.weighted", stor, sep="."))
-save(cage.genus, file=paste("processed/boston/biom_street/genus.street.v3.weighted", stor, sep="."))
-save(biom.track, file=paste("processed/boston/biom_street/biom.track.street.v3.weighted", stor, sep="."))
-save(index.track, file=paste("processed/boston/biom_street/index.track.street.v3.weighted", stor, sep="."))
-save(proc.track, file=paste("processed/boston/biom_street/proc.track.street.v3.weighted", stor, sep="."))
-save(cage.biom.sim, file=paste("processed/boston/biom_street/biom.sim.street.v3.weighted", stor, sep="."))
-save(attempts.track, file=paste("processed/boston/biom_street/attempts.track.street.v3.weighted", stor, sep="."))
-save(cage.wts, file=paste("processed/boston/biom_street/wts.street.v3.weighted", stor, sep="."))
+save(cage.ann.npp, file=paste("processed/boston/biom_street/ann.npp.street.v", vers, ".weighted.", y, ".sav", sep=""))
+save(cage.num.trees, file=paste("processed/boston/biom_street/num.trees.street.v", vers, ".weighted.", y, ".sav", sep=""))
+save(cage.dbh, file=paste("processed/boston/biom_street/dbh.street.v", vers, ".weighted.", y, ".sav", sep=""))
+save(cage.genus, file=paste("processed/boston/biom_street/genus.street.v", vers, ".weighted.", y, ".sav", sep=""))
+save(biom.track, file=paste("processed/boston/biom_street/biom.track.street.v", vers, ".weighted.", y, ".sav", sep=""))
+save(index.track, file=paste("processed/boston/biom_street/index.track.street.v", vers, ".weighted.", y, ".sav", sep=""))
+save(proc.track, file=paste("processed/boston/biom_street/proc.track.street.v", vers, ".weighted.", y, ".sav", sep=""))
+save(cage.biom.sim, file=paste("processed/boston/biom_street/biom.sim.street.v", vers, ".weighted.", y, ".sav", sep=""))
+save(attempts.track, file=paste("processed/boston/biom_street/attempts.track.street.v", vers, ".weighted.", y, ".sav", sep=""))
+save(cage.wts, file=paste("processed/boston/biom_street/wts.street.v", vers, ".weighted.", y, ".sav", sep=""))
 
 ## update the at.work file to release this job
 atwork <- atwork[atwork!=y]
-write.csv(data.frame(at.work=atwork), "processed/boston/biom_street/atwork.csv")
-
-
+write.csv(data.frame(at.work=atwork), paste("processed/boston/biom_street/atwork", vers, "csv", sep="."))
 
 
 
