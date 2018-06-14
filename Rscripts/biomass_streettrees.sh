@@ -1,6 +1,6 @@
 #!/bin/sh -l
 
-#$ -l h_rt=18:00:00
+#$ -l h_rt=24:00:00
 #$ -N biom.proc
 #$ -V
 #$ -j y
