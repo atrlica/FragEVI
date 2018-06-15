@@ -5,11 +5,14 @@ library(rgdal)
 
 # setwd("/projectnb/buultra/atrlica/FragEVI/")
 
-### street tree v3 reconstruction of results
+### street tree reconstruction of results
+
+vers <- 4 ## which model run are we picking at
 #### import results objects pulled from parallel processing on the cluster (chunks of 10k pixels)
 obj.dump <- list.files("processed/boston/biom_street/")
-npp.dump <- obj.dump[grep(obj.dump, pattern = "ann.npp.street.v3*")]
+npp.dump <- obj.dump[grep(obj.dump, pattern = paste("ann.npp.street.v", vers, ".weighted*", sep=""))]
 npp.dump.chunks <- sub('.*weighted.', '', npp.dump)
+npp.dump.chunks <- sub("\\.sav.*", "", npp.dump.chunks) ## later version get named .sav
 
 ## to get basal area
 # ba <- function(x){(((((x/2)^2)*pi)/900))} ## this is in m2/ha (correct for 900m2 pixel footprint)
@@ -19,34 +22,33 @@ ba <- function(x){(((x/2)^2)*pi)/1E4} ### to find JUST the BA of a tree based on
 container <- data.frame()
 med.dbh.rec <- numeric() ## keep a running tally of the dbh of every tree in the nearest-to-median-npp sample in each pixel
 dbh.dump <- list() ## a place to put actual dbh samples from targeted retrievals for deeper analysis (e.g. what do the median retrievals look like?)
+i=1
 for(c in 1:length(npp.dump)){
-  dbh.dump.tmp <- list() ## a container for the selected dbh records you're going to set aside
-  g <- data.frame() ## temporary dump for the collated results
   load(paste("processed/boston/biom_street/", npp.dump[c], sep=""))
   tmp.npp <- sapply(cage.ann.npp, FUN=median)
-#   tmp.npp[tmp.npp==9999] <- NA ## filter the NA flags
   tmp.num.sims <- sapply(cage.ann.npp, FUN=length) ## number of successful simulations recorded
   tmp.sim.incomp <- rep(0, length(tmp.num.sims))
   tmp.sim.incomp[tmp.num.sims<100] <- 1 ## vector tracking the incomplete simulations
   
   ## grab the corresponding other dump files
-  load(paste("processed/boston/biom_street/num.trees.street.v3.weighted.", npp.dump.chunks[c], sep="")) ## comes in as "num.trees" object
+  load(paste("processed/boston/biom_street/num.trees.street.v", vers, ".weighted.", npp.dump.chunks[c], ".sav", sep="")) ## comes in as "num.trees" object
   tmp.num <- sapply(cage.num.trees, FUN=median)
   tmp.num[tmp.num==9999] <- NA ## filter the NA flags
-  load(paste("processed/boston/biom_street/index.track.street.v3.weighted.", npp.dump.chunks[c], sep="")) ## comes in as "index.track" object
+  load(paste("processed/boston/biom_street/index.track.street.v", vers, ".weighted.", npp.dump.chunks[c], ".sav", sep="")) ## comes in as "index.track" object
   tmp.index <- index.track
-  load(paste("processed/boston/biom_street/biom.track.street.v3.weighted.", npp.dump.chunks[c], sep="")) ## comes in as "biom.track" object
+  load(paste("processed/boston/biom_street/biom.track.street.v", vers, ".weighted.", npp.dump.chunks[c], ".sav", sep="")) ## comes in as "biom.track" object
   tmp.biom <- biom.track
-  load(paste("processed/boston/biom_street/proc.track.street.v3.weighted.", npp.dump.chunks[c], sep="")) ## comes in as "proc.track" object
+  load(paste("processed/boston/biom_street/proc.track.street.v", vers, ".weighted.", npp.dump.chunks[c], ".sav", sep="")) ## comes in as "proc.track" object
   tmp.proc <- proc.track
-  load(paste("processed/boston/biom_street/biom.sim.street.v3.weighted.", npp.dump.chunks[c], sep="")) ## comes in as "proc.track" object
+  load(paste("processed/boston/biom_street/biom.sim.street.v", vers, ".weighted.", npp.dump.chunks[c], ".sav", sep="")) ## comes in as "proc.track" object
   tmp.biom.sim <- sapply(cage.biom.sim, FUN=median)
-  load(paste("processed/boston/biom_street/attempts.track.street.v3.weighted.", npp.dump.chunks[c], sep="")) ## comes in as "proc.track" object
+  load(paste("processed/boston/biom_street/attempts.track.street.v", vers, ".weighted.", npp.dump.chunks[c], ".sav", sep="")) ## comes in as "proc.track" object
   tmp.attempts <- attempts.track
-#   load(paste("processed/boston/biom_street/wts.street.v3.weighted.", npp.dump.chunks[c], sep="")) ## comes in as "cage.wts" object
+  load(paste("processed/boston/biom_street/wts.street.v", vers, ".weighted.", npp.dump.chunks[c], ".sav", sep="")) ## comes in as "cage.wts" object
+  tmp.wts <- sapply(cage.wts, FUN=max)
 
   ### figure median dbh and median basal area for each pixel
-  load(paste("processed/boston/biom_street/dbh.street.v3.weighted.", npp.dump.chunks[c], sep="")) ## comes in as "dbh.stret.small" object
+  load(paste("processed/boston/biom_street/dbh.street.v", vers, ".weighted.", npp.dump.chunks[c], ".sav", sep="")) ## comes in as "dbh.stret.small" object
   ba.grand <- rep(9999, length(cage.dbh)) ## BA values for every retreival per cell
   dbh.grand <- rep(9999, length(cage.dbh)) ## dbh values for every retreival per cell
   print(paste("patience! Doing BA calculations on chunk", npp.dump.chunks[c]))
@@ -54,53 +56,45 @@ for(c in 1:length(npp.dump)){
     if(length(cage.ann.npp[[b]])<5){  ## if too few NPP retreivals were made
       ba.grand[b] <- NA
       dbh.grand[b] <- NA
-      dbh.dump.tmp[[b]] <- NA
+      dbh.dump[[i]] <- NA
     } else{
       ba.grand[b] <- median(sapply(sapply(cage.dbh[[b]], FUN=ba), FUN=sum)) ## median of the total ba (=m2) for each sample, need to convert based on (canopy) area of pixel
       dbh.grand[b] <- median(unlist(cage.dbh[[b]])) ## grand median dbh of all trees selected for all samples
       ### these look at the summary stats for a particular retreival in each cell (ex. the retrieval nearest the median npp)
       dev <- abs(cage.ann.npp[[b]]-tmp.npp[b]) ## deviance of individual NPP retreivals from the median NPP for this cell
       rrr <- which(dev==min(dev)) ## which retreival is the closest to the median
-      dbh.dump.tmp[[b]] <- cage.dbh[[b]][[rrr[1]]] ## track the tree sample nearest to every npp median in every pixel (just take the first instance, fuck it)
+      dbh.dump[[i]] <- cage.dbh[[b]][[rrr[1]]] ## track the tree sample nearest to every npp median in every pixel (just take the first instance, fuck it)
     }
     if(b%%1000==0){print(b)}
+    i=i+1 ## keep track of number of pixels processed
   }
-  dbh.dump <- rbind(dbh.dump, dbh.dump.tmp) ## append the collection of dbh records
 
   ## bind results in container
   container <- rbind(container, 
                      cbind(tmp.index, tmp.biom, ## basic cell tracking here. each row is 1 pixel
                            tmp.npp, tmp.num, dbh.grand, ba.grand, tmp.biom.sim, ## median npp and tree number for all retrievals
-                           tmp.num.sims, tmp.sim.incomp, tmp.attempts, tmp.proc) ### metrics for how well the simulator performed
+                           tmp.wts, tmp.num.sims, tmp.sim.incomp, tmp.attempts, tmp.proc) ### metrics for how well the simulator performed
   )
-#   hist(tmp.npp, main=paste(npp.dump.chunks[c]))
-#   hist(tmp.num, main=paste(npp.dump.chunks[c]))
-#   hist(dbh.grand, main=paste(npp.dump.chunks[c]))
-#   hist(ba.grand, main=paste(npp.dump.chunks[c]))
 }
 
 ## collect, export, make maps
 names(container) <- c("pix.ID", "biom.kg", 
                       "med.ann.npp.all", "med.tree.num.all", "med.dbh.all", "med.ba.all", "med.biom.all",
-                      "num.sims", "sim.incomp", "attempts", "proc.status")
+                      "max.wts", "num.sims", "sim.incomp", "attempts", "proc.status")
 
 ## figure out median dbh, ba, and count for the tree sample in each pixel closest to median npp
 pixM.tree.num <- sapply(dbh.dump, FUN=length) ## tree number in median npp retreival per pixel
 pixM.dbh <- sapply(dbh.dump, FUN=median) ## the median dbh for the selection of trees nearest the median npp in each cell
 pixM.ba <- sapply(sapply(dbh.dump, FUN=ba), FUN=sum) ## summed BA for the selection of trees in the sample nearest median npp 
-#   hist(pixM.tree.num) ## so this is the distribution in tree density per pixel in the most common retreival in each cell
-#   hist(pixM.dbh) ## this is the distribution of MEDIAN dbh for the most common retreival in each cell
-#   hist(pixM.ba) ## this is the distribution of total BA (m2) in each cell (not corrected for canopy) according to the tree sample nearest the median npp
+  hist(pixM.tree.num) ## so this is the distribution in tree density per pixel in the most common retreival in each cell
+  hist(pixM.dbh) ## this is the distribution of MEDIAN dbh for the most common retreival in each cell
+  hist(pixM.ba) ## this is the distribution of total BA (m2) in each cell (not corrected for canopy) according to the tree sample nearest the median npp
 med.dbh.rec <- c(med.dbh.rec, unlist(dbh.dump)) ## append the median dbh record
-#   hist(all.dbh) ## this is the distribution of dbh if you actually went out and counted every simulated tree in the pixels
-#   median(all.dbh, na.rm=T) ### YESSS BITCHESSSSS median is same as street tree records
-#   ## could also look at these distributions in e.g. the 25h and 75th percentile retreivals of NPP for each pixel
+  hist(med.dbh.rec) ## this is the distribution of dbh if you actually went out and counted every simulated tree in the pixels
+  median(med.dbh.rec, na.rm=T) ### YESSS BITCHESSSSS median is same as street tree records
+  ## could also look at these distributions in e.g. the 25h and 75th percentile retreivals of NPP for each pixel
 
-
-# pixM.tree.num, pixM.dbh, pixM.ba,  ## simulator estimates for median retrieval per pixel
-# "pixM.tree.num", "pixM.dbh.med", "pixM.ba",
-
-write.csv(container, "processed/boston/bos.street.trees.npp.simulatorv3.results.csv")
+write.csv(container, paste("processed/boston/bos.street.trees.npp.simulator.v", vers", .results.csv", sep=""))
 dim(container)
 
 ## raster reconstruction
@@ -128,42 +122,53 @@ map <- merge(x=biom.dat, y=container, by="pix.ID", all.x=T, all.y=T)
 
 
 ## brief exploratory
+### do simulations track cell biomass well enough?
 container <- as.data.table(container)
 plot(container$biom.kg, container$med.biom.all) ## a few wonkeys but mostly in a tight range -- no successful sims over ~35k
-abline(a=0, b=1) ## it bends off the 1:1 over time
-container[biom.kg>20000 & biom.kg<22000, median(med.biom.all, na.rm=T)] #19.3k
-21000*0.9
-21999*1.1 ## well shit it systematically is aiming low as the masses get bigger -- get a fixed interval above 10k?
+abline(a=0, b=1)
+container[,biom.dev:=med.biom.all-biom.kg]
+plot(container$biom.kg, container$biom.dev) ## most within +/- 50kg till right at 30k, expands to 100kg
 
-sum(container$proc.status==0)/dim(container)[1] # 0.87% failure to simulate
-sum(container$biom.kg>30000)/dim(container)[1] # 1.15% are >30k -- so we are getting some but not all of the largest 1%
-hist(container$biom.kg[container$proc.status==0]) # most failures are pix above 30k
+### how prevalent are failures, where are they
+sum(container$proc.status==0)/dim(container)[1] # 2.97% failure to simulate
+sum(container$biom.kg>30000)/dim(container)[1] # 1.38% are >30k -- so we are getting some but not all of the largest 1%
+container[biom.kg>25000 & proc.status==0, length(biom.kg)]/container[biom.kg>25000, length(biom.kg)] ## 63% of pixels >25k failed
+container[biom.kg>25000 & proc.status==0, length(biom.kg)]/container[proc.status==0, length(biom.kg)] ## 68% of failures are over 25k
+map[proc.status==0, median(bos.can30m, na.rm=T)] ## median 98% canopy
+hist(map[proc.status==0, (bos.can30m)]) ## most heavily covered except for a small number that must be low biomass
+hist(map[proc.status==0, bos.biom30m]) ### bimodal, very low biomass or very high biomass
+### might need to just toss anything above ~20k kg -- call it "much more like a forest than a piece of city"
+
+### how is productivity organized in space
 plot(container$biom.kg, container$med.ann.npp.all) # tent shape, nearly linear increase up to ~25k then steep decline (sampling large old trees?)
+abline(v=22000) ## peaks right at 22k then steep decline
 plot(map$bos.can30m, map$med.ann.npp.all) ## everything increases but with inreasing variance up to full canopy where it can be all over
-plot(map$bos.biom30m, map$med.ann.npp.all)
 hist(map[bos.biom30m>10, med.ann.npp.all])
 hist(map[bos.biom30m>10 & bos.biom30m<22000, med.ann.npp.all]) ## how different are our results if we chuck the weird ass high biomass pixels?
 
-
 ## NPP rate, city wide
 map[bos.biom30m>10, npp.MgC.ha:=((med.ann.npp.all/1000*(1/2))/aoi)*1E4]
-map[aoi>800, range(npp.MgC.ha, na.rm=T)] ## 0.03-5.2 MgC/ha/yr
+map[aoi>800, range(npp.MgC.ha, na.rm=T)] ## 0.04-5.2 MgC/ha/yr
 hist(map[aoi>800, npp.MgC.ha])
 map[bos.biom30m>22000, length(bos.biom30m)]/map[bos.biom30m>10, length(bos.biom30m)] ##5.8% of pix are above 22k
-map[is.finite(med.ann.npp.all) & aoi>800 & bos.biom30m>22000, length(med.ann.npp.all)]/map[aoi>800 & bos.biom30m>22000, length(med.ann.npp.all)] ## we got a value for 40% of the large pixels
-
-### including the large pixels
-map[aoi>800, sum(med.ann.npp.all/(2*1000), na.rm=T)] #7981 MgC/yr
-map[aoi>800, sum(med.ann.npp.all/(2*1000), na.rm=T)]/(map[, sum(aoi, na.rm=T)]/1E4) ### 0.64 MgC/ha/yr
+map[is.finite(med.ann.npp.all) & aoi>800 & bos.biom30m>22000, length(med.ann.npp.all)]/map[aoi>800 & bos.biom30m>22000, length(med.ann.npp.all)] ## we got a value for 56% of the large pixels
+map[aoi>800, sum(med.ann.npp.all/(2*1000), na.rm=T)] #12232 MgC/yr
+map[aoi>800, sum(med.ann.npp.all/(2*1000), na.rm=T)]/(map[, sum(aoi, na.rm=T)]/1E4) ### 0.98 MgC/ha/yr
 
 ### excluding large pixels
-map[aoi>800 & bos.biom30m<22000, sum(med.ann.npp.all/(2*1000), na.rm=T)] #7099 MgC/yr
-map[aoi>800 & bos.biom30m<22000, sum(med.ann.npp.all/(2*1000), na.rm=T)]/(map[, sum(aoi, na.rm=T)]/1E4) ### 0.57 MgC/ha/yr
+map[aoi>800 & bos.biom30m<22000, sum(med.ann.npp.all/(2*1000), na.rm=T)] #11068 MgC/yr
+map[aoi>800 & bos.biom30m<22000, sum(med.ann.npp.all/(2*1000), na.rm=T)]/(map[, sum(aoi, na.rm=T)]/1E4) ### 0.89 MgC/ha/yr
 
 ## average small and large pixel productivity
 map[aoi>800 & bos.biom30m<22000, median(npp.MgC.ha, na.rm=T)] ## 0.86 MgC/ha/yr for small pixels
 map[aoi>800 & bos.biom30m>22000, median(npp.MgC.ha, na.rm=T)] ## ### 3.95 MgC/ha/yr
  ## contrast to Andy-forest-based estimate, #13.8k tC, 1.1 tC/ha/yr mean estimate (range was ~7k-22k)
+
+
+
+
+
+
 
 ##### OLD method for reconstituting street tree simulator results from stored object files
 # ### OK, to bring all this together at last:
@@ -914,7 +919,7 @@ plot(gorgor[growth.type==3, bos.biom30m], gorgor[growth.type==3, total.npp]) # a
 
 
 ######
-###### Approach 4: Treat all canopy as andy-like forest
+###### Approach 4: Treat all canopy as Andy-like forest
 library(raster)
 library(data.table)
 

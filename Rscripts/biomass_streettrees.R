@@ -6,7 +6,7 @@ library(raster)
 library(rgdal)
 library(rgeos)
 
-# setwd("/projectnb/buultra/atrlica/FragEVI/")
+setwd("/projectnb/buultra/atrlica/FragEVI/")
 
 ### version history
 ## V1: Big trees processed separately from small trees (<20k kg), using a modified sampling distribution from street.dbh
@@ -109,12 +109,14 @@ if(length(notyet)!=0){
   if(length(y)==0 | !is.finite(y)){stop("all pixels currently finished or in process")}
   print(paste("going to work on chunk", y)) 
   ## update the at.work file to warn other instances
+  
   atwork <- c(atwork, y)
-  write.csv(data.frame(at.work=atwork), paste("processed/boston/biom_street/atwork", vers, "csv", sep="."))
+  l <- data.frame(at.work=atwork)
+  write.csv(l, file=paste("processed/boston/biom_street/atwork", vers, "csv", sep="."))
   
   runme.x <- runme[(y-(chunk.size-1)):y,] ## que up the next chunk
   if(y>(dim(runme)[1])){ ## if you're at the end of the file, only grab up to the last row
-    runme.x <- runme[(y-chunk.size-1):dim(runme)[1],]
+    runme.x <- runme[(y-(chunk.size-1)):dim(runme)[1],]
   }
 }else{stop("all pixels already processed")}
 
@@ -239,8 +241,18 @@ save(attempts.track, file=paste("processed/boston/biom_street/attempts.track.str
 save(cage.wts, file=paste("processed/boston/biom_street/wts.street.v", vers, ".weighted.", y, ".sav", sep=""))
 
 ## update the at.work file to release this job
-atwork <- atwork[atwork!=y]
-write.csv(data.frame(at.work=atwork), paste("processed/boston/biom_street/atwork", vers, "csv", sep="."))
+check <- list.files("processed/boston/biom_street")
+check <- check[grep(check, pattern=paste("ann.npp.street.v", vers, sep=""))] ### version label here
+already <- sub(".*weighted\\.", "", check)
+already <- as.numeric(sub("\\..*", "", already))
+notyet <- pieces.list[!(pieces.list%in%already)]
+
+## update atwork to remove any in-progress files that now have finished files on disk
+atwork <- read.csv(paste("processed/boston/biom_street/atwork", vers, "csv", sep="."))
+atwork <- atwork$at.work
+atwork <- atwork[atwork%in%notyet] ## clear job records that have completed files on disk
+l <- data.frame(at.work=atwork)
+write.csv(l, file=paste("processed/boston/biom_street/atwork", vers, "csv", sep="."))
 
 
 
