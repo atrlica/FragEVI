@@ -430,6 +430,81 @@ ed10 <- extend(ed10, bos.cov)
 ed20 <- extend(ed20, bos.cov)
 ed30 <- extend(ed30, bos.cov)
 
+
+
+### Compare canopy map from 2006 to map from 2014
+bos.can06 <- raster("data/dataverse_files/bostoncanopy_1m.tif")
+bos.can14 <- raster("data/BosTrees2014/LC_boston2014_NAD83_1m.tif")
+bos.aoi <- raster("processed/boston/bos.AOI.1m.tif")
+bos.can06 <- crop(bos.can06, bos.aoi)
+bos.can06 <- mask(bos.can06, bos.aoi)
+bos.can14 <- crop(bos.can14, bos.aoi)
+bos.can14 <- mask(bos.can14, bos.aoi)
+
+## function to ID changes in canopy from 06-14
+can.comp <- function(can1, can2, aoi, filename) { # can1 is can at t=1, can2 is can at t=2
+  out <- raster(can1)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    a <- getValues(can1, row=bs$row[i], nrows=bs$nrows[i]) ## can1
+    b <- getValues(can2, row=bs$row[i], nrows=bs$nrows[i]) # can2
+    m <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) # aoi
+    
+    ## clean up data
+    b[b==0] <- NA
+    a[!a%in%c(0,1)] <- NA ## kill out of range values
+    b[!b%in%c(1,2,3,4,5,6,7,8,9,10,11)] <- NA
+    m[m!=1] <- NA
+    
+    ## make new vector that records differences
+    A <- rep(0, length(a))
+    # a[a==0 & b!=1] <- 0
+    # a[a==1 & b==1] <- 0 # stable
+    A[a==1 & b!=1] <- 2 # loss
+    A[a==0 & b==1] <- 1 # gain
+    A[is.na(m)] <- NA # mask the rest
+    out <- writeValues(out, A, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+can.comp(bos.can06, bos.can14, bos.aoi, "processed/boston/bos.canChange0614.tif")
+
+## plots for comparision
+par(mar=c(1,1,4,1))
+plot(bos.can06, main="Canopy 2006")
+plot(bos.can14, main="Canopy 2014")
+COMP <- raster("processed/boston/bos.canChange0614.tif")
+plot(COMP, main="1=gain, 2=loss")
+
+
+addme <- function(can1, value) { # can1 is can target, value is targeted value(s)
+  out <- raster(can1)
+  bs <- blockSize(out)
+  g=0
+  for (i in 1:bs$n) {
+    a <- getValues(can1, row=bs$row[i], nrows=bs$nrows[i]) ## can1
+    g=g+sum(a%in%value, na.rm=T)
+    print(paste("finished block", i, "of", bs$n))
+  }
+  return(g)
+}
+aoi.tot <- addme(bos.aoi, 1) ## total city area (06 study boundary)
+can06.tot <- addme(bos.can06, 1) ## total canopy area '06, 3941.64 ha
+aoi06.tot <- addme(bos.can06, c(0,1)) ##12455.09 ha
+can14.tot <- addme(bos.can14, 1) ## total canopy area '14, 3418.30 ha
+aoi14.tot <- addme(bos.can14, c(1,2,3,4,5,6,7,8,9,10,11)) #12228.03 ha ## tiny registration (?) error means some edge trimming with aoi mask
+gain <- addme(COMP, 1) ## area gained by 2014, 617.38 ha
+loss <- addme(COMP, 2) ## area lost by 2014, 1125.14 ha
+(gain-loss)/1E4 ## 507.75 ha loss
+(can14.tot-can06.tot)/1E4 ### not quite the same -523.33 ha
+can06.tot/aoi06.tot # 31.6% canopy in 06
+can14.tot/aoi14.tot # 30.0% canopy in 14
+sum(getValues(bos.can06), na.rm=T)/aoi.tot ## same 31.6% canopy
+
+
 # ### add in 1m ISA (go get it, crop it, then reproject)
 # isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
 # towns <- readOGR(dsn = "/projectnb/buultra/atrlica/BosAlbedo/data/towns/town_AOI.shp", layer = "town_AOI" )
@@ -708,6 +783,46 @@ lu.ldres <- c(12,13,38) # MDResid., LDResid, VLDResid
 lu.lowveg <- c(1,2,4,6,7,9,14,25,26,34,40) # Crop, pasture, open, part-rec, water-rec, SWwet, SWbeach, Golf, Cemetery, Brushland
 lu.water <- c(20)
 lulc.tot <- list(lu.forest, lu.dev, lu.hdres, lu.ldres, lu.lowveg, lu.water)
+
+## create single 30m raster with collapsed LULC classes
+## used arc for poly-->raster at 30m EVI grid
+bos.lulc30m <- raster("processed/boston/bos_lulc30m.tif")
+bos.aoi <- raster("processed/boston/bos.aoi30m.tif")
+bos.lulc30m <- extend(bos.lulc30m, bos.aoi)
+bos.lulc30m <- crop(bos.lulc30m, bos.aoi)
+bos.lulc30m <- mask(bos.lulc30m, bos.aoi)
+lu.classnames <- c("forest", "dev", "hdres", "ldres", "lowveg", "water")
+lu.forest <- c(3,37) # Forest, FWet
+lu.dev <- c(5,8,15,16,17,18,19,29,31,36,39) #Mining, Spect-rec, Comm, Ind, Transitional, Transp, Waste Disp, Marina, Urb Pub/Inst., Nursery, Junkyard
+lu.hdres <- c(10,11) # HDResid., MFResid.,
+lu.ldres <- c(12,13,38) # MDResid., LDResid, VLDResid
+lu.lowveg <- c(1,2,4,6,7,9,14,25,26,34,40) # Crop, pasture, open, part-rec, water-rec, SWwet, SWbeach, Golf, Cemetery, Brushland
+lu.water <- c(20)
+lulc.tot <- list(lu.forest, lu.dev, lu.hdres, lu.ldres, lu.lowveg, lu.water)
+# names(lulc.tot) <- lu.classnames
+
+lulc.lump <- function(x, lu.defs, filename) { # x is 30m lulc, lu.defs is the list of collapsed classes, filename=output
+  out <- raster(x)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## 30m LULC raster raw LUCODES
+    o <- v
+    o[v%in%lu.defs[[1]]] <- 1 ## forest
+    o[v%in%lu.defs[[2]]] <- 2 ## dev
+    o[v%in%lu.defs[[3]]] <- 3 ## hdres
+    o[v%in%lu.defs[[4]]] <- 4 ## ldres
+    o[v%in%lu.defs[[5]]] <- 5 ## loweveg
+    o[v%in%lu.defs[[6]]] <- 6 ## water
+    out <- writeValues(out, o, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+lulc.lump(bos.lulc30m, lulc.tot, "processed/boston/bos.lulc30m.lumped.tif")
+bos.lulc30m <- raster("processed/boston/bos.lulc30m.lumped.tif")
+plot(bos.lulc30m)
 
 ## flexible blockwise function for flagging different class groups of LULC
 lulc.flag <- function(x, lu.spot, aoi, filename) { # x is 1m lulc, lu.spot is list of LULC targeted, aoi is aoi 1m raster

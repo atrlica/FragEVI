@@ -5,6 +5,8 @@ library(rgdal)
 
 # setwd("/projectnb/buultra/atrlica/FragEVI/")
 
+
+##########
 ### street tree reconstruction of results
 
 vers <- 4 ## which model run are we picking at
@@ -86,16 +88,16 @@ names(container) <- c("pix.ID", "biom.kg",
 pixM.tree.num <- sapply(dbh.dump, FUN=length) ## tree number in median npp retreival per pixel
 pixM.dbh <- sapply(dbh.dump, FUN=median) ## the median dbh for the selection of trees nearest the median npp in each cell
 pixM.ba <- sapply(sapply(dbh.dump, FUN=ba), FUN=sum) ## summed BA for the selection of trees in the sample nearest median npp 
-  hist(pixM.tree.num) ## so this is the distribution in tree density per pixel in the most common retreival in each cell
-  hist(pixM.dbh) ## this is the distribution of MEDIAN dbh for the most common retreival in each cell
-  hist(pixM.ba) ## this is the distribution of total BA (m2) in each cell (not corrected for canopy) according to the tree sample nearest the median npp
+hist(pixM.tree.num) ## so this is the distribution in tree density per pixel in the most common retreival in each cell
+hist(pixM.dbh) ## this is the distribution of MEDIAN dbh for the most common retreival in each cell
+hist(pixM.ba) ## this is the distribution of total BA (m2) in each cell (not corrected for canopy) according to the tree sample nearest the median npp
 med.dbh.rec <- c(med.dbh.rec, unlist(dbh.dump)) ## append the median dbh record
-  hist(med.dbh.rec) ## this is the distribution of dbh if you actually went out and counted every simulated tree in the pixels
-  median(med.dbh.rec, na.rm=T) ### YESSS BITCHESSSSS median is same as street tree records
-  ## could also look at these distributions in e.g. the 25h and 75th percentile retreivals of NPP for each pixel
-
-write.csv(container, paste("processed/boston/bos.street.trees.npp.simulator.v", vers", .results.csv", sep=""))
-dim(container)
+hist(med.dbh.rec) ## this is the distribution of dbh if you actually went out and counted every simulated tree in the pixels
+median(med.dbh.rec, na.rm=T) ### YESSS BITCHESSSSS median is same as street tree records
+## could also look at these distributions in e.g. the 25h and 75th percentile retreivals of NPP for each pixel
+container <- cbind(container, pixM.ba, pixM.dbh, pixM.tree.num)
+sum(duplicated(container$pix.ID)) ## some duplicated pixels, remove
+container <- container[!(duplicated(container$pix.ID)),]
 
 ## raster reconstruction
 biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel
@@ -108,7 +110,10 @@ can.dat <- as.data.table(as.data.frame(can))
 biom.dat <- cbind(biom.dat, can.dat)
 biom.dat[,pix.ID:=1:dim(biom.dat)[1]]
 map <- merge(x=biom.dat, y=container, by="pix.ID", all.x=T, all.y=T)
-## need to make a 30m LULC map and include it in this analysis
+
+write.csv(map, paste("processed/streettrees.npp.simulator.v", vers, ".results.csv", sep=""))
+
+
 
 
 # ### export the tifs
@@ -130,11 +135,11 @@ container[,biom.dev:=med.biom.all-biom.kg]
 plot(container$biom.kg, container$biom.dev) ## most within +/- 50kg till right at 30k, expands to 100kg
 
 ### how prevalent are failures, where are they
-sum(container$proc.status==0)/dim(container)[1] # 2.97% failure to simulate
-sum(container$biom.kg>30000)/dim(container)[1] # 1.38% are >30k -- so we are getting some but not all of the largest 1%
-container[biom.kg>25000 & proc.status==0, length(biom.kg)]/container[biom.kg>25000, length(biom.kg)] ## 63% of pixels >25k failed
-container[biom.kg>25000 & proc.status==0, length(biom.kg)]/container[proc.status==0, length(biom.kg)] ## 68% of failures are over 25k
-map[proc.status==0, median(bos.can30m, na.rm=T)] ## median 98% canopy
+sum(container$proc.status==0)/dim(container)[1] # 3.46% failure to simulate
+sum(container$biom.kg>30000)/dim(container)[1] # 1.77% are >30k -- so we are getting some but not all of the largest 1%
+container[biom.kg>25000 & proc.status==0, length(biom.kg)]/container[biom.kg>25000, length(biom.kg)] ## 66% of pixels >25k failed
+container[biom.kg>25000 & proc.status==0, length(biom.kg)]/container[proc.status==0, length(biom.kg)] ## 73% of failures are over 25k
+map[proc.status==0, median(bos.can30m, na.rm=T)] ## median 99.8% canopy
 hist(map[proc.status==0, (bos.can30m)]) ## most heavily covered except for a small number that must be low biomass
 hist(map[proc.status==0, bos.biom30m]) ### bimodal, very low biomass or very high biomass
 ### might need to just toss anything above ~20k kg -- call it "much more like a forest than a piece of city"
@@ -151,17 +156,17 @@ map[bos.biom30m>10, npp.MgC.ha:=((med.ann.npp.all/1000*(1/2))/aoi)*1E4]
 map[aoi>800, range(npp.MgC.ha, na.rm=T)] ## 0.04-5.2 MgC/ha/yr
 hist(map[aoi>800, npp.MgC.ha])
 map[bos.biom30m>22000, length(bos.biom30m)]/map[bos.biom30m>10, length(bos.biom30m)] ##5.8% of pix are above 22k
-map[is.finite(med.ann.npp.all) & aoi>800 & bos.biom30m>22000, length(med.ann.npp.all)]/map[aoi>800 & bos.biom30m>22000, length(med.ann.npp.all)] ## we got a value for 56% of the large pixels
-map[aoi>800, sum(med.ann.npp.all/(2*1000), na.rm=T)] #12232 MgC/yr
-map[aoi>800, sum(med.ann.npp.all/(2*1000), na.rm=T)]/(map[, sum(aoi, na.rm=T)]/1E4) ### 0.98 MgC/ha/yr
+map[is.finite(med.ann.npp.all) & aoi>800 & bos.biom30m>22000, length(med.ann.npp.all)]/map[aoi>800 & bos.biom30m>22000, length(med.ann.npp.all)] ## we got a value for 66% of the large pixels
+map[aoi>800, sum(med.ann.npp.all/(2*1000), na.rm=T)] #13161 MgC/yr
+map[aoi>800, sum(med.ann.npp.all/(2*1000), na.rm=T)]/(map[, sum(aoi, na.rm=T)]/1E4) ### 1.06 MgC/ha/yr
 
 ### excluding large pixels
-map[aoi>800 & bos.biom30m<22000, sum(med.ann.npp.all/(2*1000), na.rm=T)] #11068 MgC/yr
-map[aoi>800 & bos.biom30m<22000, sum(med.ann.npp.all/(2*1000), na.rm=T)]/(map[, sum(aoi, na.rm=T)]/1E4) ### 0.89 MgC/ha/yr
+map[aoi>800 & bos.biom30m<22000, sum(med.ann.npp.all/(2*1000), na.rm=T)] #11789 MgC/yr
+map[aoi>800 & bos.biom30m<22000, sum(med.ann.npp.all/(2*1000), na.rm=T)]/(map[, sum(aoi, na.rm=T)]/1E4) ### 0.95 MgC/ha/yr
 
 ## average small and large pixel productivity
-map[aoi>800 & bos.biom30m<22000, median(npp.MgC.ha, na.rm=T)] ## 0.86 MgC/ha/yr for small pixels
-map[aoi>800 & bos.biom30m>22000, median(npp.MgC.ha, na.rm=T)] ## ### 3.95 MgC/ha/yr
+map[aoi>800 & bos.biom30m<22000, median(npp.MgC.ha, na.rm=T)] ## 0.94 MgC/ha/yr for small pixels
+map[aoi>800 & bos.biom30m>22000, median(npp.MgC.ha, na.rm=T)] ## ### 3.65 MgC/ha/yr
  ## contrast to Andy-forest-based estimate, #13.8k tC, 1.1 tC/ha/yr mean estimate (range was ~7k-22k)
 
 

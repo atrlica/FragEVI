@@ -298,7 +298,7 @@ ggplot(contain[distance!=0,], aes(x=distance, y=ha, fill=LULC)) +
                     breaks=c("forest", "dev", "hdres", "ldres", "lowveg"),
                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg."))+
   xlab("Canopy distance from edge (m)")+
-  ylab("Total area (ha)")+
+  ylab("Total canopy area (ha)")+
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),

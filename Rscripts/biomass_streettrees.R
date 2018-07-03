@@ -63,7 +63,7 @@ biom <- crop(biom, aoi) ## biomass was slightly buffered, need to clip to match 
 biom.dat <- as.data.table(as.data.frame(biom))
 biom.dat[,aoi:=as.vector(getValues(aoi))]
 can <- raster("processed/boston/bos.can30m.tif")
-can.dat <- as.data.table(as.data.frame(can))
+can.dat <- as.data.table(as.data.frame(can))N
 biom.dat <- cbind(biom.dat, can.dat)
 biom.dat[,index:=1:dim(biom.dat)[1]] ## master pixel index for stack of biom/aoi/can, 354068 pix
 # p <- ecdf(biom.dat[!is.na(bos.biom30m) & bos.biom30m>10,bos.biom30m]) ## cdf of cell biomass
