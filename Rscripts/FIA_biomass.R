@@ -219,15 +219,15 @@ plot(biom.dat$live.MgC.ha.perv, biom.dat$npp.ann.perv, xlim=c(0,200)) ## differe
 biom.dat[live.MgC.ha.ground>123.6, npp.ann.ground:=0]
 biom.dat[live.MgC.ha.forest>123.6, npp.ann.forest:=0]
 biom.dat[live.MgC.ha.perv>123.6, npp.ann.perv:=0]
-summary(biom.dat$npp.ann.ground)
-summary(biom.dat$npp.ann.forest)
-summary(biom.dat$npp.ann.perv) ## a handful of extra NAs in perv
+# summary(biom.dat$npp.ann.ground)
+# summary(biom.dat$npp.ann.forest)
+# summary(biom.dat$npp.ann.perv) ## a handful of extra NAs in perv
 
-View(biom.dat[is.finite(npp.ann.ground) & !is.finite(npp.ann.perv),]) ## all partial pix with NA isa, fine
-biom.dat[aoi>800 & is.na(npp.ann.ground),] #962 non retreivs, all missing biomass
-biom.dat[aoi>800 & is.na(npp.ann.forest),] #962 non retreivs, all missing biomass
-biom.dat[aoi>800 & is.na(npp.ann.perv),] #972 non retreivs, all missing biomass
-View(biom.dat[aoi>800 & is.na(npp.ann.perv) & !is.na(npp.ann.ground),]) #972 non retreivs, all missing biomass
+# View(biom.dat[is.finite(npp.ann.ground) & !is.finite(npp.ann.perv),]) ## all partial pix with NA isa, fine
+# biom.dat[aoi>800 & is.na(npp.ann.ground),] #962 non retreivs, all missing biomass
+# biom.dat[aoi>800 & is.na(npp.ann.forest),] #962 non retreivs, all missing biomass
+# biom.dat[aoi>800 & is.na(npp.ann.perv),] #972 non retreivs, all missing biomass
+# View(biom.dat[aoi>800 & is.na(npp.ann.perv) & !is.na(npp.ann.ground),]) #972 non retreivs, all missing biomass
 
 ## fix for all biomass==0
 biom.dat[bos.biom30m==0, npp.ann.ground:=0]
@@ -259,11 +259,10 @@ biom.dat[, median(age.ground, na.rm = T)] ##20.2
 biom.dat[, median(age.forest, na.rm = T)] ##39.7
 biom.dat[, median(age.perv, na.rm = T)] ##37.3
 
-
 write.csv(biom.dat, "processed/npp.FIA.v3.csv")
 
 # ######################
-# ### Different FIA factors for different forest types to estimate 30m annual NPP (MgC/yr)
+# ### Applying different FIA coefficients for different forest types to estimate 30m annual NPP (MgC/yr)
 # 
 # library(data.table)
 # library(raster)
@@ -299,54 +298,79 @@ write.csv(biom.dat, "processed/npp.FIA.v3.csv")
 #               format="GTiff", overwrite=T)
 # }
 
-### raw FIA data from LUCA (stripped of geographic ID
-x <- 3 ## side length
-
-e <- (4+(x-2)*4)/(x^2)
-x <- seq(0,100)
-e <- (4+(x-2)*4)/(x^2)
-plot(x, e)
-
-##ring 1,2,3,4,5, etc
-r <- c(1,2,3,4,5)
-
-4+((x-(2+(r-1)))*4)
-
-
-library(raster)
-library(data.table)
+####
+#### FIA V2: empirical NPP~biomass function
+### process and assessment of FIA individual dbh records provided by Moreale
 ### individual FIA tree data from sites near Boston
-dat <- read.csv("data/FIA/MA_Tree_Data.csv")
-plot(log(dat$DIAM_T0), dat$Adj.Biomass, ylim=c(0,100))
+dat <- read.csv("data/FIA/MA_Tree_Data_ID.csv")
+dat <- as.data.table(dat)
+names(dat)[1] <- c("TreeID")
+names(dat)[2] <- c("PlotID")
 spec <- read.csv("data/FIA/REF_SPECIES.csv")
 dat <- merge(x=dat, y=spec[,c("SPCD", "GENUS")], by.x="SPECIES_CD", by.y="SPCD", all.x=T, all.y=F)
 dat$GENUS <- as.character(dat$GENUS)
 dat$GENUS <- as.factor(dat$GENUS)
-table(dat$GENUS)
 dat$GENUS.num <- as.numeric(dat$GENUS)
-
+### using eastern hardwood defaults, but a lot of the record are Pinus or Tsuga. Might be good to go ahead and use the correct generic equation
 b0 <- -2.48
 b1 <- 2.4835 ## these are eastern hardwood defaults
 biom.pred <- function(x){exp(b0+(b1*log(x)))}
 dat$biom0 <- biom.pred(dat$DIAM_T0)
 dat$biom1 <- biom.pred(dat$DIAM_T1)
 dat$biom.delt <- dat$biom1-dat$biom0
-plot(dat$DIAM_T0, dat$biom.delt, ylim=c(0, 500), col=dat$GENUS) ## some are diving
-dat$biom.rel <- (dat$biom.delt/4.8)/dat$biom0
-summary(dat$biom.rel)
-plot(log(dat$DIAM_T0), log(dat$biom.rel), xlim=c(log(5), log(100)), col=dat$GENUS) ## some are diving
-dat <- as.data.table(dat)
-summary(lm(log(biom.rel)~log(DIAM_T0), data=dat)) ### can't work, negatives 
-summary(lm(log(biom.rel)~log(DIAM_T0), data=dat[biom.rel>0,])) ### removing morts and trees that lose biomass 
-plot(dat[biom.rel>0, log(DIAM_T0)], dat[biom.rel>0, log(biom.rel)], xlim=c(log(5), log(100)), col=dat$GENUS) ## some are diving
+dat$biom.rel <- (dat$biom.delt/4.8)/dat$biom0 ## annualized relative growth increment
+dat$dbh.delt <- dat$DIAM_T1-dat$DIAM_T0
 
-freq <- dat[,length(DIAM_T0), by=GENUS]
-dat.big <- dat[GENUS%in%as.character(freq[V1>100, GENUS]) & DIAM_T0>10,]
-dat.big[,range(DIAM_T0)]
-hist(dat.big$DIAM_T0)
-dat.big$GENUS.num <- as.numeric(dat.big$GENUS)
-dat.big$GENUS <- as.factor(as.character(dat.big$GENUS))
-plot(log(dat.big$DIAM_T0), log(dat.big$biom.rel), col=dat.big$GENUS, xlim=c(2.5, 4.5))
-legend(x = 4, y = -1, legend = unique(as.character(dat.big$GENUS)), fill=unique(dat.big$GENUS.num))
+### Model of biomass growth based on plot-level live biomass
+biom.plot <- dat[biom.delt>0,
+                 .(sum(biom.delt, na.rm=T), sum(biom0, na.rm=T)), by=PlotID]
+names(biom.plot)[2:3] <- c("biom.growth", "total.biom0.kg")
+biom.plot[,biom.growth.ann:=biom.growth/4.8] ## 4.8 yr between resamples
+biom.plot[,biom.growth.ann.rel:=biom.growth.ann/total.biom0.kg]
+hist(biom.plot$total.biom0.kg) ## peak 5-10k kg
+hist(biom.plot$biom.growth.ann.rel) ## most plots below 5%, a few are wildly productive, 25%
+biom.plot[,median(biom.growth.ann.rel, na.rm=T)] ## median 2.5% gain per plot (in line with basic productivity model)
+(biom.plot[,median(total.biom0.kg, na.rm=T)/2000]/675)*1E4 ## median 51 MgC/ha/yr
+plot(biom.plot$total.biom0.kg, biom.plot$biom.growth.ann.rel) ## exponential negative, the super productive ones were very low biomass to begin
+plot(biom.plot$total.biom0.kg, biom.plot$biom.growth.ann) ## linear-ish, more biomass --> more growth (no bottoming out)
+biom.plot[,biom0.kg.ha:=(total.biom0.kg/675)*1E4]
+hist(biom.plot$biom0.kg.ha/1000) ## some of these plots are very high biomass, well above the equation cut off for positive growth
+plot(biom.plot$biom0.kg.ha/1000, biom.plot$biom.growth.ann) 
+plot(biom.plot$biom0.kg.ha/1000, biom.plot$biom.growth.ann.rel) ##  contrast the equation version that says anything >120 Mg/ha doesn't gain live biomass
+abline(h=0, col="red")
+m <- lm(log(biom.growth.ann.rel)~log(biom0.kg.ha/1000), data=biom.plot) ### not great
+plot(log(biom.plot$biom0.kg.ha/1000), log(biom.plot$biom.growth.ann.rel))
+lines(log(biom.plot$biom0.kg.ha/1000), predict(m), col="red", lty=2)
+summary(m) ## really not amazing, R2=0.2, but fuck it, not a big range, can apply this model to basically any pixel, covers that range fine
+d <- summary(m)
+b0 <- d$coefficients[1]
+b1 <- d$coefficients[2]
+# ## Basic scatter plot of model growth~dbh against observations
+# par(mar=c(4,4,3,1))
+# plot(dat$DIAM_T0, dat$biom.rel, 
+#      col="gray45", cex=0.4, 
+#      xlab="DBH, cm", ylab="Biomass growth rate (kg/kg)", main="FIA growth rates")
+# abline(h=0, col="blue")
+# points(dat$DIAM_T0, exp(b0)*exp(b1*log(dat$DIAM_T0)), col="red", cex=0.3, pch=16) ## yeah, weak ass exponential 
+# median(exp(b0)*exp(b1*log(dat[DIAM_T0<20, DIAM_T0]))) ## 2.7% for <20cm
+# median(exp(b0)*exp(b1*log(dat[DIAM_T0>40 & DIAM_T0<60, DIAM_T0]))) ## 1.7% for 40-60cm
+# median(exp(b0)*exp(b1*log(dat[DIAM_T0>60, DIAM_T0]))) ## 1.4% for >60cm  ## OK these are all basically reasonable
+
+biom.dat[,biom.kg.ha:=(bos.biom30m/aoi)*1E4] ## need biomass *density* in each cell
+hist(biom.dat[aoi>800, biom.kg.ha]/1000) ## up to 600 Mg-biom/ha (that one 50k pixel!)
+biom.dat[,fia.emp.npp.kg.biom:=bos.biom30m*(exp(b0)*exp(b1*log(biom.kg.ha/1000)))]
+hist(biom.dat$fia.emp.npp.kg.biom) ## a lot more like the other estimates, up to 800kg/pix/yr
+hist(biom.dat[aoi>800,(exp(b0)*exp(b1*log(biom.kg.ha/1000)))]) ## vast majority growing <5%
+biom.dat[,sum(fia.emp.npp.kg.biom, na.rm=T)]/2000 ## 8.8 MgC/yr total city
+## export some results
+write.csv(biom.dat, "processed/npp.FIA.v4.csv")
+rr <- biom
+rr <- setValues(rr, biom.dat$fia.emp.npp.kg.biom)
+plot(rr)
+writeRaster(rr, filename="processed/boston/")
+### OK: now do we re-figure the biomass density to plug in here as by canopy area basis (which is what we did for Andy trees analysis)??
+### Also need to see in the new data if the dead tree exclusion gives us only positive growth records
+
+
 
 

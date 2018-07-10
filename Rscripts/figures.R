@@ -504,11 +504,159 @@ ggplot(npp.melt, aes(x=value, fill=variable)) +
 
 
 
+### combined biomass.growth~dbh for Street, Andy, FIA
+### individual FIA tree data from sites near Boston
+dat <- read.csv("data/FIA/MA_Tree_Data_ID.csv")
+dat <- as.data.table(dat)
+names(dat)[1] <- c("TreeID")
+names(dat)[2] <- c("PlotID")
+spec <- read.csv("data/FIA/REF_SPECIES.csv")
+dat <- merge(x=dat, y=spec[,c("SPCD", "GENUS")], by.x="SPECIES_CD", by.y="SPCD", all.x=T, all.y=F)
+dat$GENUS <- as.character(dat$GENUS)
+dat$GENUS <- as.factor(dat$GENUS)
+table(dat$GENUS)
+dat$GENUS.num <- as.numeric(dat$GENUS)
 
-### maps for Figure 1 (based on 1m raster -- LULC + veg cover)
-  
+b0 <- -2.48
+b1 <- 2.4835 ## these are eastern hardwood defaults
+biom.pred <- function(x){exp(b0+(b1*log(x)))}
+dat$biom0 <- biom.pred(dat$DIAM_T0)
+dat$biom1 <- biom.pred(dat$DIAM_T1)
+dat$biom.delt <- dat$biom1-dat$biom0
+dat$biom.rel <- (dat$biom.delt/4.8)/dat$biom0 ## annualized relative growth increment
 
-#### maps for Figure 1
-  
+### now the andy trees
+andy.bai <- read.csv("docs/ian/Reinmann_Hutyra_2016_BAI.csv") 
+andy.bai <- as.data.table(andy.bai)
+### the basic allometrics to get biomass
+## Jenkins, C.J., D.C. Chojnacky, L.S. Heath and R.A. Birdsey. 2003. Forest Sci 49(1):12-35.
+## Chojnacky, D.C., L.S. Heath and J.C. Jenkins. 2014. Forestry 87: 129-151.
+# Pinus rigida, Pinus strobus, both spg>0.45
+# Acer rubrum, Aceraceae <0.50 spg
+# Quercus alba, Quercus coccinea, Quercus rubra, Quercus velutina --> deciduous Fagaceae
+b0.l <- c(-3.0506, -2.0470, -2.0705)
+b1.l <- c(2.6465, 2.3852, 2.4410)
+biom.pred <- function(x, b0, b1){exp(b0+(b1*log(x)))} ## dbh in cm, biom. in kg
+## artifact: dbh's have hidden NA's that are marked as repeating numbers, basically when the dbh gets too small -- they are higher than the min dbh though
+cleanup <- as.matrix(andy.bai[,7:33])
+for(r in 1:nrow(cleanup)){
+  bust <- which(diff(cleanup[r,], lag = 1)>0) ## tells you where the NA's are located
+  if(length(bust)>0){
+    cleanup[r, bust:ncol(cleanup)] <- NA
+  }
+}
+cleanup <- as.data.table(cleanup)
+andy.bai <- cbind(andy.bai[,1:6], cleanup)
+names(andy.bai)[7:33] <- paste0("dbh", 2016:1990)
+andy.bai[,incr.ID:=seq(1:dim(andy.bai)[1])]
+names(andy.bai)[1:6] <- c("Plot.ID", "Tree.ID", "Spp", "X", "Y", "Can.class")
+
+### biomass change as a % of previous biomass per year from the increment data
+taxa <- list(c("PIRI", "PIST"),
+             c("ACRU"),
+             c("QUAL", "QUCO", "QURU", "QUVE"))
+biom.rel <- list()
+bop <- data.table()
+for(sp in 1:3){
+  tmp <- andy.bai[Spp %in% taxa[[sp]],]
+  a <- tmp[, lapply(tmp[,7:33], function(x){biom.pred(x, b0.l[sp], b1.l[sp])})]
+  a <- cbind(tmp[,.(Tree.ID, incr.ID, Spp, Y, dbh2016)], a)
+  bop <- rbind(bop, a)
+}
+bop$Spp <- as.character(bop$Spp) ### bop is the biomass time series for every core
+names(bop)[6:32] <- paste0("biom", 2016:1990)
+
+### lagged biomass gains, relative to previous year biomass
+biom.rel <- data.frame(c(2015:1990))
+for(i in 1:dim(bop)[1]){
+  te <- unlist(bop[i,6:32])
+  te.di <- (-1*diff(te, lag=1))
+  biom.rel[,i+1] <- te.di/te[-1]
+}
+names(biom.rel)[-1] <- paste0("Tree", bop[,incr.ID])
+names(biom.rel)[1] <- "Year" ## this has all the relative biomass gains by year (row) for each tree with increment (column)
+
+### figure the mean relative biomass gain per year across all years in each tree
+mean.na <- function(x){mean(x, na.rm=T)}
+m <- apply(biom.rel[,-1], FUN=mean.na, 2)
+growth.mean <- data.frame(cbind(c(sub("Tree", '', colnames(biom.rel[,-1]))), m))
+names(growth.mean) <- c("incr.ID", "growth.mean")
+growth.mean$incr.ID <- as.integer(as.character(growth.mean$incr.ID))
+andy.bai <- merge(andy.bai, growth.mean, by="incr.ID")
+andy.bai[Y<10, seg:=10]
+andy.bai[Y>=10 & Y<20, seg:=20]
+andy.bai[Y>=20, seg:=30]
+andy.bai[seg==10, seg.F:="A"]
+andy.bai[seg==20, seg.F:="B"]
+andy.bai[seg==30, seg.F:="C"]
+andy.bai$seg.F <- as.factor(andy.bai$seg.F)
+andy.bai$growth.mean <- as.numeric(as.character(andy.bai$growth.mean))
+andy.bai[,avg.dbh:=apply(as.matrix(andy.bai[,8:34]), FUN=mean.na, 1)]
+## note: final interaction model only applies correction coefficients for the interior segments
+andy.bai[seg.F=="A", seg.Edge:="E"]
+andy.bai[seg.F %in% c("B", "C"), seg.Edge:="I"]
+andy.bai[,seg.Edge:=as.factor(seg.Edge)]
+
+### now the street trees
+### biomass equation biom~dbh
+b0 <- -2.48
+b1 <- 2.4835 ## these are eastern hardwood defaults
+biom.pred <- function(x){exp(b0+(b1*log(x)))}
+
+## get the street tree record prepped
+street <- read.csv("docs/ian/Boston_Street_Trees.csv") ## Street tree resurvey, biomass 2006/2014, species
+street <- as.data.table(street)
+street[is.na(Species), Species:="Unknown unknown"]
+street[Species=="Unknown", Species:="Unknown unknown"]
+street[Species=="unknown", Species:="Unknown unknown"]
+street[Species=="Purpleleaf plum", Species:="Prunus cerasifera"]
+street[Species=="Bradford pear", Species:="Pyrus calleryana"]
+street[Species=="Liriondendron tulipifera", Species:="Liriodendron tulipifera"]
+street[Species=="Thornless hawthorn", Species:="Crataegus crus-galli"]
+genspec <- strsplit(as.character(street$Species), " ")
+gen <- unlist(lapply(genspec, "[[", 1))
+street[,genus:=gen] ## 40 genera
+street[, record.good:=0] ## ID records with good data quality
+street[is.finite(dbh.2014) & is.finite(dbh.2006) & dead.by.2014==0 & Health!="Poor", record.good:=1] #2603 records good
+street[record.good==1, biom.2014:=biom.pred(dbh.2014)]
+street[record.good==1, biom.2006:=biom.pred(dbh.2006)]
+street[record.good==1, npp.ann:=(biom.2014-biom.2006)/8]
+street[record.good==1, npp.ann.rel:=npp.ann/biom.2006]
+street[record.good==1,range(dbh.2006, na.rm=T)] 
+street[record.good==1, range(npp.ann, na.rm=T)] ## 202 records show negative growth -- questionable 2006 dbh record, cull
+street[record.good==1 & npp.ann<0, record.good:=0] ## 2401
+street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny trees
+
+par(mfrow=c(1,1))
+plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean), col=as.numeric(andy.bai$seg.Edge))
+plot(street[record.good==1, log(dbh.2006)], street[record.good==1, log(npp.ann.rel)]) # r2 = 0.54, slope significant
+plot(dat[,log(DIAM_T0)], dat[,log(biom.rel)])
+
+## just do a plot first
+plot(dat[,log(DIAM_T0)],  ### this is FIA data
+     dat[,log(biom.rel)], 
+     cex=0.2, col="gray64", pch=1, ylim=c(-9, 2), xlim=c(log(5), log(110)))
+points(street[record.good==1, log(dbh.2006)],  ### this is street trees
+       street[record.good==1, log(npp.ann.rel)], 
+       pch=15, cex=0.4, col="salmon")
+andy.cols <- c("royalblue", "skyblue")
+points(andy.bai[,log(avg.dbh)], andy.bai[,log(growth.mean)], 
+       col=andy.cols[as.numeric(andy.bai$seg.Edge)],
+       pch=15, cex=0.6)
+
+summary(street[record.good==1,npp.ann]) ## a tiny handful of street trees show zero growth
+
+### lets look untransformed
+plot(dat[,(DIAM_T0)], 
+     dat[,(biom.rel)], 
+     cex=0.2, col="gray64", pch=14)
+points(street[record.good==1, (dbh.2006)], 
+       street[record.good==1, (npp.ann.rel)], 
+       pch=15, cex=0.4, col="salmon")
+andy.cols <- c("royalblue", "skyblue")
+points(andy.bai[,(avg.dbh)], andy.bai[,(growth.mean)], 
+       col=andy.cols[as.numeric(andy.bai$seg.Edge)],
+       pch=15, cex=0.6)
+
 
 
