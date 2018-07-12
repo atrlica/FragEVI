@@ -197,6 +197,7 @@ setkey(andy.dbh, Tree.ID)
 andy.dbh[Spp=="FRAL", Spp:="FRAM"] # Fraxinus americana
 
 ### get biomass (kg) as function of dbh (cm) for all the trees in andy.dbh
+### the following coefficients are from Chojnacky et al. 2014
 biom.pred.key <- data.frame(unique(andy.dbh$Spp))
 # For HAVI (Witch hazel), CRSp ?? and TASp ?? we will use Jenkins generalized hardwood coefficients
 b0 <- c(-2.0705, -3.0506, -2.6177, -2.0705, -2.0705, -2.2118, -2.0470, -2.0705, -2.6327, -2.3480, -2.48, -2.2271, -1.8384, -2.48, -2.48, -1.8011, -2.2271)

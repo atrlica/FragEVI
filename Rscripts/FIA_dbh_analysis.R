@@ -463,6 +463,7 @@ w <- summary(mod.exp.hw) ### the b coefficient is barely worth including
 x=seq(0,30000)
 lines(x, exp(w$coefficients[1]+w$coefficients[2]*x), cex=0.3, col="red")
 lines(x, exp(v$coefficients[1]+v$coefficients[2]*x), cex=0.3, col="gray55")
+legend(fill=c("red", "gray55"), x = 20000, y = 0.1, legend = c("Hardwoods", "All trees"))
 ## it's barely a model at all, but basically there's a way to estiamte growth~biomass for total and for just the hardwoods
 ## moral of the story: everyone comes in about 3% growth per year
 

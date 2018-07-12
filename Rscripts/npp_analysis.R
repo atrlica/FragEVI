@@ -3,7 +3,6 @@ library(data.table)
 
 #### all NPP will be dealt with in MgC/ha/yr, all biomass in kg-biomass/ha
 
-
 ## maybe look at how this sorts re. lulc
 lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
 # aoi <- raster("processed/boston/bos.aoi30m.tif")
@@ -309,7 +308,34 @@ npp.dat[aoi>800, (sum(st.med.ann.npp.all, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*
 npp.dat[aoi>800, (sum(hyb.npp, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 1.13 MgC/ha
 
 ### only thing is to decide whether or not to swap the high-biomass non-forest sim results with the andy forest equivalents
+## I thiknk this is a yes: Anything >20000 kg/pix is a "forest" in the andy sense
 
+#########
+### question: what is the magnitude of effect of npp on ppCO2 in local column of atmosphere?
+## DOY range 135-258
+gseas <- 258-135
+hrs <- 8
+ghrs <- hrs*gseas ## total photosynthesizing hours to distribute npp across
+pix.npp <- 60 ## for instance, a typical is 200 kg-biomass/pix, 60 is median for FIA.forest.empir
+pix.CO2 <- (pix.npp/2)*44/12 ## kg-CO2/pix
+air.dens <- 1.293 ## kg/m3
+air.molwt <- 28.97 # g/mol mixed air
+vol.col <- 1000*30*30 ## volume of air column to 1km over 30m pixel footprint
+CO2.molwt <- 44.01 ## gCO2/mol
+CO2.ppm <- 400
+CO2.col <- vol.col*air.dens*1000*(1/air.molwt)*CO2.ppm/1E6 ## 16k moles CO2 in column
+CO2.col/400 ## 1 ppm CO2 in the column is ~40 moles of CO2
 
+CO2.drawdown.hr <- (pix.CO2/ghrs)*1000*(1/co2.molwt) ## avg mols-CO2/hr drawdown during growing periods
+
+(CO2.drawdown.hr*hrs)/(CO2.col/400) 
+## so a 200 kg-biomass/yr pix can draw about 1.7 ppm CO2/d out of the local column
+## ## an 800 kg-biomass/yr pix can draw about 6.7 pp CO2/d (this is a 4.4 MgC/ha/yr pixels)
+## max NPP is ~ 8 MgC/ha/yr 
+(8*2000)*(900/1E4) ## 1440 kg-biomass/pix
+## at 1440 kg-biomass/pix, local drawdown is 12.1 ppm CO2/d
+## at FIA npp.forest median (60 kg-biomass/pix), draw about 0.5 ppm CO2/d
+
+## what about for atmos. column over entire city in aggregate?
 
 
