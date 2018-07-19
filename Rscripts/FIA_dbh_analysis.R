@@ -144,17 +144,17 @@ dat[GENUS%in%c("Tsuga", "Abies", "Pinus", "Picea", "Chamaecyparis"), type:="S"]
 ## 5) Alternatively, we can recalculate the areal biomass growth rate as a sum of stem growth~dbh, and determine the growth~dbh relationship from individual stem records
 ## 5b) To be comparable to results based on the other data sets, the growth~dbh relationship should be estimated based on *the trees that lived* and not on a generalized resample of all trees (as the FIA measures everything, living or dead)
 
-# ### growth~dbh, individual stem records
-# hist(dat$DIAM_T0) ## ok, nothing gigantic, there's no old-growth monsters out there
-# dat[,median(DIAM_T0, na.rm=T)] ##22cm, perfectly comparable to the street trees or to the Andy trees
-# summary(dat$DIAM_T0) ## 9 to 91, pretty tight central range 17-31cm
-# summary(dat$biom.rel) ## median is 2.1% growth, range -16% to 52%, tight central range of 1 to 3.6% growth
-# 
-# plot(dat[,log(DIAM_T0)], dat[,log(biom.rel)]) ## generally lower growth with higher biomass
-# mod.fia.live <- lm(log(biom.rel)~log(DIAM_T0), data=dat[biom.delt>0]) ## basic log-log growth~dbh
-# summary(mod.fia.live) ## diam0 is significant, but miserable predictive power R2 0.04
-# mod.fia.live.spp <- lm(log(biom.rel)~log(DIAM_T0)*type, data=dat[biom.delt>0])
-# summary(mod.fia.live.spp) ## no significant effect of tree type (hard or soft)
+### growth~dbh, individual stem records
+hist(dat$DIAM_T0) ## ok, nothing gigantic, there's no old-growth monsters out there
+dat[,median(DIAM_T0, na.rm=T)] ##22cm, perfectly comparable to the street trees or to the Andy trees
+summary(dat$DIAM_T0) ## 9 to 91, pretty tight central range 17-31cm
+summary(dat$biom.rel) ## median is 2.1% growth, range -16% to 52%, tight central range of 1 to 3.6% growth
+
+plot(dat[,log(DIAM_T0)], dat[,log(biom.rel)]) ## generally lower growth with higher biomass
+mod.fia.live <- lm(log(biom.rel)~log(DIAM_T0), data=dat[biom.delt>0]) ## basic log-log growth~dbh
+summary(mod.fia.live) ## diam0 is significant, but miserable predictive power R2 0.04
+mod.fia.live.spp <- lm(log(biom.rel)~log(DIAM_T0)*type, data=dat[biom.delt>0])
+summary(mod.fia.live.spp) ## no significant effect of tree type (hard or soft)
 
 # ### what is mean growth rate at different intervals?
 # dat[biom.delt>0 & DIAM_T0<20, .(length(DIAM_T0), ## 2700, 2.76%, 4.1% +-8.7%
@@ -256,6 +256,7 @@ dat[GENUS%in%c("Tsuga", "Abies", "Pinus", "Picea", "Chamaecyparis"), type:="S"]
 ### It seems dodgy to try to get a growth~dbh relationship that's honest that includes the artifact that you have to toss out anything 0 or below
 
 ###########
+spp.allo <- read.csv("data/FIA/spp_allometrics.csv") 
 live <- read.csv("data/FIA/MA_Tree_Data_ID_NOMORT.csv")
 live <- as.data.table(live)
 names(live)[1] <- c("TreeID")
@@ -264,19 +265,58 @@ spec <- read.csv("data/FIA/REF_SPECIES.csv")
 live <- merge(x=live, y=spec[,c("SPCD", "GENUS", "SPECIES")], by.x="SPECIES_CD", by.y="SPCD", all.x=T, all.y=F)
 live$GENUS <- as.character(live$GENUS)
 live$GENUS <- as.factor(live$GENUS)
-table(live$GENUS)
 live$GENUS.num <- as.numeric(live$GENUS)
 
-### using eastern hardwood defaults, but a lot of the record are Pinus or Tsuga. Might be good to go ahead and use the correct generic equation
-b0 <- -2.48
-b1 <- 2.4835 ## these are eastern hardwood defaults
-biom.pred <- function(x){exp(b0+(b1*log(x)))}
-live$biom0 <- biom.pred(live$DIAM_T0)
-live$biom1 <- biom.pred(live$DIAM_T1)
-live$biom.delt <- live$biom1-live$biom0
-live$biom.rel <- (live$biom.delt/4.8)/live$biom0 ## annualized relative growth increment
-live$dbh.delt <- live$DIAM_T1-live$DIAM_T0
-summary(live$biom.delt) ## some living trees are losing a lot of biomass
+### calculate species specific allometrics
+live[,spp:=paste(substr(GENUS, 1,1), ".", SPECIES, sep="")]
+live <- merge(x=live, y=spp.allo[,c("spp", "b0", "b1")], by="spp", all.x=T)
+live[is.na(b0), b0:=(-2.48)]
+live[is.na(b1), b1:=2.4835]
+biom.pred2 <- function(b0, b1, x){exp(b0+(b1*log(x)))}
+live[,biom0.spp:=biom.pred2(b0, b1, DIAM_T0)]
+live[,biom1.spp:=biom.pred2(b0, b1, DIAM_T1)]
+## class as hard or soft wood
+live[,type:="H"]
+live[spp%in%c("P.strobus", "P.resinosa", "T.canadensis", "A.balsamea"), type:="S"]
+live[,type:=as.factor(type)]
+live[,biom.delt.spp:=biom1.spp-biom0.spp]
+live[,growth.ann.rel:=(biom.delt.spp/biom0.spp)/4.8]
+summary(live$growth.ann.rel)
+write.csv(live, "processed/fia.live.stem.dbh.growth.csv")
+
+# 
+# ### using eastern hardwood defaults, but a lot of the record are Pinus or Tsuga. Might be good to go ahead and use the correct generic equation
+# b0 <- -2.48
+# b1 <- 2.4835 ## these are eastern hardwood defaults
+# biom.pred <- function(x){exp(b0+(b1*log(x)))}
+# live$biom0 <- biom.pred(live$DIAM_T0)
+# live$biom1 <- biom.pred(live$DIAM_T1)
+# live$biom.delt <- live$biom1-live$biom0
+# live$biom.rel <- (live$biom.delt/4.8)/live$biom0 ## annualized relative growth increment
+# live$dbh.delt <- live$DIAM_T1-live$DIAM_T0
+# summary(live$biom.delt) ## some living trees are losing a lot of biomass
+
+### individual stem growth~dbh
+plot(log(live$DIAM_T0), log(live$growth.ann.rel))
+plot(live$DIAM_T0, live$growth.ann.rel)
+
+## log model, growth>0, no hard/soft designation
+mod.fia.stem.log <- lm(log(growth.ann.rel)~log(DIAM_T0), data=live[growth.ann.rel>0])
+m1 <- summary(mod.fia.stem.log) #R2 0.04, signficant
+mod.fia.stem.type.log <- lm(log(growth.ann.rel)~log(DIAM_T0)*type, data=live[growth.ann.rel>0])
+m2 <- summary(mod.fia.stem.type.log) # R2 0.05, type not significant
+plot(log(live$DIAM_T0), log(live$growth.ann.rel), col=as.numeric(live$type)+1) #S=2, H=1
+abline(a=m2$coefficients[1], b=m2$coefficients[2], lty=2, col="gray55")
+abline(a=m1$coefficients[1], b=m1$coefficients[2], lty=1, col="black")
+mod1.nls <- nls(growth.ann.rel ~ exp(a + b * log(DIAM_T0)), data=live, start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
+summary(mod1.nls)
+col.type <- c("green", "forestgreen")
+plot(live$DIAM_T0, live$growth.ann.rel, col=col.type[as.numeric(live$type)], pch=15, cex=0.3,
+     xlab="Stem diameter (cm)", ylab="Growth rate (kg/kg)", main="FIA stems")
+points(live$DIAM_T0, predict(mod1.nls),col="black", pch=13, cex=0.4)
+legend(x=60, y=0.4, bty="n", legend = c("Hardwood", "Softwood"), fill=c("green", "forestgreen"))
+
+
 
 ### equivalent plot-level assessment in live-only data
 live.plot <- live[,.(sum(biom.delt, na.rm=T), 
@@ -380,11 +420,8 @@ live[,biom1.spp:=biom.pred2(b0, b1, DIAM_T1)]
 # ## compare the models of areal biomass growth with raw data and using only hardwoods
 live.plot <- live[,.(sum(biom1.spp-biom0.spp, na.rm=T),
                      sum(biom0.spp, na.rm=T),
-                     sum(biom1-biom0, na.rm=T),
-                     sum(biom0, na.rm=T),
                      length(DIAM_T0)), by=PlotID] ## we are missing one plot -- all dead?
-names(live.plot)[2:6] <- c("biom.growth.spp", "total.biom0.spp.kg", ## species specific and default calcs
-                           "biom.growth.def", "total.biom0.def.kg",
+names(live.plot)[2:4] <- c("biom.growth.spp", "total.biom0.spp.kg", ## species specific and default calcs
                            "num.stems")
 # plot(live.plot$biom.growth.def, live.plot$biom.growth.spp) ## higher growth in spp
 # abline(a=0, b=1)

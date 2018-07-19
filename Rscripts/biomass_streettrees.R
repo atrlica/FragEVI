@@ -44,17 +44,36 @@ street[record.good==1, biom.2014:=biom.pred(dbh.2014)]
 street[record.good==1, biom.2006:=biom.pred(dbh.2006)]
 street[record.good==1, npp.ann:=(biom.2014-biom.2006)/8]
 street[record.good==1, npp.ann.rel:=npp.ann/biom.2006]
-street[record.good==1,range(dbh.2006, na.rm=T)] 
+street[record.good==1, range(dbh.2006, na.rm=T)] 
 street[record.good==1, range(npp.ann, na.rm=T)] ## 202 records show negative growth -- questionable 2006 dbh record, cull
-street[record.good==1 & npp.ann<0, record.good:=0] ## 2401
+# street[record.good==1 & npp.ann<0, record.good:=0] ## 2401 ## fuck this, keep the healthy mass losers in
 
 ### biomass increment model based on dbh (exponential function)
 # mod.biom.rel <- summary(lm(log(npp.ann.rel)~log(dbh.2006), data=street[record.good==1 & npp.ann!=0])) ## exclude 4 no-growth records
 # plot(street[record.good==1, log(biom.2006)], street[record.good==1, log(npp.ann.rel)]) # r2 = 0.54, slope significant
-## there's <10 records below 5cm with a lot of leverage, cut them
-mod.biom.rel <- summary(lm(log(npp.ann.rel)~log(dbh.2006), data=street[record.good==1 & npp.ann!=0 & dbh.2006>=5,])) ## exclude 4 no-growth records
+# # there's <10 records below 5cm with a lot of leverage, cut them
+# mod.biom.rel <- summary(lm(log(npp.ann.rel)~log(dbh.2006), data=street[record.good==1 & npp.ann!=0 & dbh.2006>=5,])) ## exclude 4 no-growth records
 # plot(street[record.good==1 & dbh.2006>=5, log(biom.2006)], street[record.good==1 & dbh.2006>=5, log(npp.ann.rel)]) # r2 = 0.55, looks nicer
 street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny trees
+write.csv(street, "processed/street.dbh.growth.results.csv")
+
+
+### non-transformed growth~dbh
+summary(street$dbh.2006) ## goes down to 2.54, contrast andy.bai min 5.5, FIA 9cm
+summary(street[record.good==1, npp.ann.rel]) ## some negative growth
+street[record.good==1,] ## 2603 records total
+plot(street[dbh.2006>5, dbh.2006],street[dbh.2006>5, npp.ann.rel])
+mod.street.nls <- nls(npp.ann.rel ~ exp(a + b * log(dbh.2006)), data=street, start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
+grub <- summary(mod.street.nls)
+
+plot(street[record.good==1, dbh.2006], street[record.good==1, npp.ann.rel],
+     ylim=c(-0.15, 1), xlim=c(0, 100), pch=15, col="red", cex=0.3,
+     xlab="Stem DBH (cm)", ylab="Growth rate (kg/kg)")
+points(street[record.good==1, dbh.2006], 
+       street[record.good==1, exp(grub$coefficients[1]+(grub$coefficients[2]*log(dbh.2006)))],
+       pch=8, col="black", cex=0.4)
+
+
 
 ## read in biomass and canopy data
 biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel

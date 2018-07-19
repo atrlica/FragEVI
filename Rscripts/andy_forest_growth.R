@@ -162,10 +162,11 @@ andy.bai[,avg.dbh:=apply(as.matrix(andy.bai[,8:34]), FUN=mean.na, 1)]
 andy.bai[seg.F=="A", seg.Edge:="E"]
 andy.bai[seg.F %in% c("B", "C"), seg.Edge:="I"]
 andy.bai[,seg.Edge:=as.factor(seg.Edge)]
+write.csv(andy.bai, "processed/andy.bai.dbh.results.csv")
 
 par(mfrow=c(1,1))
 plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean), col=as.numeric(andy.bai$seg.Edge))
-
+summary(andy.bai$growth.mean)
 ### initial edge vs. int growth model was full interactive, but slope modifier term was not significant
 # mod.int.edge <- summary(lm(log(growth.mean)~log(avg.dbh)*seg.Edge, data=andy.bai)) #r2=0.46, just edge vs. interior, no sig. dbh*edge interaction
 # b0 <- mod.int.edge$coefficients[1]
@@ -178,10 +179,24 @@ b0.bai <- mod.int.edge.fin$coefficients[1]
 b1.bai <- mod.int.edge.fin$coefficients[2]
 b2.bai <- mod.int.edge.fin$coefficients[3]
 ### generalized growth coefficients for edge/interior, based on andy.bai
-plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean), col=as.numeric(as.factor(andy.bai$seg.Edge)), ylim=c(-8,2), xlim=c(1,5))
+col.edge <- c("royalblue", "blue")
+plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean), col=col.edge[as.numeric(as.factor(andy.bai$seg.Edge))],
+     pch=15, cex=0.3)
 abline(b0.bai, b1.bai, col="black")
 abline(b0.bai+b2.bai, b1.bai, col="red")
 points(log(street$dbh.2006), log(street$npp.ann.rel), col="blue", pch=14)
+
+## non-transformed space
+mod.int.edge.fin.nls <- nls(growth.mean ~ exp(a + b * log(avg.dbh)), data=andy.bai, start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
+summary(mod.int.edge.fin.nls)
+col.edge <- c("royalblue", "purple")
+plot(andy.bai$avg.dbh, andy.bai$growth.mean, col=col.edge[as.numeric(as.factor(andy.bai$seg.Edge))],
+     pch=15, cex=0.3, ylab="Growth Rate (kg/kg)", xlab="Stem DBH (cm)", main="Urban Forest stems")
+points(andy.bai$avg.dbh, exp(b0.bai)*exp(b1.bai*log(andy.bai$avg.dbh)), 
+       col=col.edge[1], pch=13, cex=0.4)
+points(andy.bai$avg.dbh, exp(b0.bai+b2.bai)*exp(b1.bai*log(andy.bai$avg.dbh)), 
+       col=col.edge[2], pch=13, cex=0.4)
+legend(x=50, y=0.3, legend=c("Edge (<10m)", "Interior"), fill=col.edge, bty="n")
 
 ####
 ### bring in full andy.dbh data set, groom to determine growth rates on area/edge basis
@@ -211,8 +226,11 @@ for(b in 1:dim(biom.pred.key)[1]){
 hist(andy.dbh[, biom]) ## a couple of monsters
 
 ### where we get the generalized biomass gain per kg in edge vs. interior forest
-andy.dbh[seg==10, growth:=biom*exp(b0.bai+(b1.bai*log(dbh)))]
-andy.dbh[seg%in%c(20,30), growth:=biom*exp(b0.bai+(b1.bai*log(dbh))+b2.bai)]
+andy.dbh[seg==10, growth.kg:=biom*exp(b0.bai+(b1.bai*log(dbh)))]
+andy.dbh[seg%in%c(20,30), growth.kg:=biom*exp(b0.bai+(b1.bai*log(dbh))+b2.bai)]
+## export the processed andy.dbh figures to make life easier elsewhere
+write.csv(andy.dbh, "processed/andy.dbh.proc.results.csv")
+
 g <- andy.dbh[, .(sum(growth), sum(biom)), by=.(seg, Plot.ID)] ## total biomass gain and total biomass for each plot
 g[,rel.gain:=V1/V2] ## this deals in forest growth as a function of biomass, not of forest area
 plot(g$V2, g$rel.gain, col=as.numeric(g$seg), xlab="total plot biomass")

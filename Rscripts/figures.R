@@ -262,11 +262,7 @@ for(d in 1:length(lu.classes)){
 legend("right", x=40, y=0.80, cex=1, legend=c("Boston", "Forest", "Developed", "HDRes", "LDRes", "LowVeg"), fill=c("black", cols), bty="n")
 
 
-
-
-
-
-###
+### Edge distance cummulative by LULC stack
 contain <- data.frame(distance=integer(), LULC=character(), pix.num=integer())
 for(g in 1:length(lu.classes)){
   dist.dat <- read.csv(paste("processed/bos.can.cummdist.", lu.classes[g], ".csv", sep=""))
@@ -285,7 +281,6 @@ contain$distance <- as.integer(as.character(contain$distance))
 contain$pix.num <- as.integer(as.character(contain$pix.num))
 
 contain$ha <- contain$pix.num/(1E4)
-
 
 library(ggplot2)
 contain <- as.data.table(contain)
@@ -506,37 +501,74 @@ ggplot(npp.melt, aes(x=value, fill=variable)) +
 
 ### combined biomass.growth~dbh for Street, Andy, FIA
 ### individual FIA tree data from sites near Boston
-dat <- read.csv("data/FIA/MA_Tree_Data_ID.csv")
-dat <- as.data.table(dat)
-names(dat)[1] <- c("TreeID")
-names(dat)[2] <- c("PlotID")
+live <- read.csv("data/FIA/MA_Tree_Data_ID_NOMORT.csv")
+live <- as.data.table(live)
+names(live)[1] <- c("TreeID")
+names(live)[2] <- c("PlotID")
 spec <- read.csv("data/FIA/REF_SPECIES.csv")
-dat <- merge(x=dat, y=spec[,c("SPCD", "GENUS")], by.x="SPECIES_CD", by.y="SPCD", all.x=T, all.y=F)
-dat$GENUS <- as.character(dat$GENUS)
-dat$GENUS <- as.factor(dat$GENUS)
-table(dat$GENUS)
-dat$GENUS.num <- as.numeric(dat$GENUS)
+live <- merge(x=live, y=spec[,c("SPCD", "GENUS", "SPECIES")], by.x="SPECIES_CD", by.y="SPCD", all.x=T, all.y=F)
+live$GENUS <- as.character(live$GENUS)
+live$GENUS <- as.factor(live$GENUS)
+table(live$GENUS)
+live$GENUS.num <- as.numeric(live$GENUS)
+spp.allo <- read.csv("data/FIA/spp_allometrics.csv") ## manually entered selected map from spp to b0+b1
+live[,spp:=paste(substr(GENUS, 1,1), ".", SPECIES, sep="")]
+live <- merge(x=live, y=spp.allo[,c("spp", "b0", "b1")], by="spp", all.x=T)
+live[is.na(b0), b0:=(-2.48)]
+live[is.na(b1), b1:=2.4835]
+biom.pred2 <- function(b0, b1, x){exp(b0+(b1*log(x)))}
+## class as hard or soft wood
+live[,type:="H"]
+live[spp%in%c("P.strobus", "P.resinosa", "T.canadensis", "A.balsamea"), type:="S"]
+live[,type:=as.factor(type)]
+live[,biom0.spp:=biom.pred2(b0, b1, DIAM_T0)]
+live[,biom1.spp:=biom.pred2(b0, b1, DIAM_T1)]
+live[,npp.ann:=(biom1.spp-biom0.spp)/4.8]
+live[,npp.ann.rel:=npp.ann/biom0.spp]
+range(live$npp.ann.rel, na.rm=T) #-12% to 52%
 
-b0 <- -2.48
-b1 <- 2.4835 ## these are eastern hardwood defaults
-biom.pred <- function(x){exp(b0+(b1*log(x)))}
-dat$biom0 <- biom.pred(dat$DIAM_T0)
-dat$biom1 <- biom.pred(dat$DIAM_T1)
-dat$biom.delt <- dat$biom1-dat$biom0
-dat$biom.rel <- (dat$biom.delt/4.8)/dat$biom0 ## annualized relative growth increment
+# # ## compare the models of areal biomass growth with raw data and using only hardwoods
+# live.plot <- live[,.(sum(biom1.spp-biom0.spp, na.rm=T),
+#                      sum(biom0.spp, na.rm=T),
+#                      sum(biom1-biom0, na.rm=T),
+#                      sum(biom0, na.rm=T),
+#                      length(DIAM_T0)), by=PlotID] ## we are missing one plot -- all dead?
+# names(live.plot)[2:6] <- c("biom.growth.spp", "total.biom0.spp.kg", ## species specific and default calcs
+#                            "biom.growth.def", "total.biom0.def.kg",
+#                            "num.stems")
+# # plot(live.plot$biom.growth.def, live.plot$biom.growth.spp) ## higher growth in spp
+# # abline(a=0, b=1)
+# # plot(live.plot$total.biom0.def.kg, live.plot$total.biom0.spp.kg)
+# # abline(a=0, b=1) # corresponding to somewhat more biomass with spp
+# 
+# hwood <- live[type=="H", .(sum(biom1.spp-biom0.spp, na.rm=T), 
+#                            sum(biom0.spp, na.rm=T)), 
+#               by=PlotID]
+# names(hwood)[2:3] <- c("biom.growth.spp.hw", "total.biom0.spp.kg.hw")
+# swood <- live[type=="S", .(sum(biom1.spp-biom0.spp, na.rm=T), 
+#                            sum(biom0.spp, na.rm=T)),
+#               by=PlotID]
+# names(swood)[2:3] <- c("biom.growth.spp.sw", "total.biom0.spp.kg.sw")
+# 
+# ## plot-level growth
+# ### all hard+softwood
+# live.plot[,growth.ann.rel.spp:=(biom.growth.spp/4.8)/total.biom0.spp.kg]
+# live.plot[,growth.ann.rel.def:=(biom.growth.def/4.8)/total.biom0.def.kg]
+# # plot(live.plot$growth.ann.rel.def, live.plot$growth.ann.rel.spp)
+# # abline(a=0, b=1) ## minimal effect, greater growth but greater biomass to start
+# summary(live.plot$biom.growth.spp) ## a few that decline!
+# # summary(live.plot$biom.growth.def) ## both have some decliners!
+# 
+# #### areal growth~areal biomass
+# ## model comparisons
+# mod.def <- lm(log(growth.ann.rel.def)~log(((total.biom0.def.kg/675)*1E4)), data=live.plot)
+# summary(mod.def) ## R2 0.21
+# mod.spp <- lm(log(growth.ann.rel.spp)~log(((total.biom0.spp.kg/675)*1E4)), data=live.plot)
+# summary(mod.spp) ## slightly sloppier, R2 0.19, coefficients about the same
 
 ### now the andy trees
 andy.bai <- read.csv("docs/ian/Reinmann_Hutyra_2016_BAI.csv") 
 andy.bai <- as.data.table(andy.bai)
-### the basic allometrics to get biomass
-## Jenkins, C.J., D.C. Chojnacky, L.S. Heath and R.A. Birdsey. 2003. Forest Sci 49(1):12-35.
-## Chojnacky, D.C., L.S. Heath and J.C. Jenkins. 2014. Forestry 87: 129-151.
-# Pinus rigida, Pinus strobus, both spg>0.45
-# Acer rubrum, Aceraceae <0.50 spg
-# Quercus alba, Quercus coccinea, Quercus rubra, Quercus velutina --> deciduous Fagaceae
-b0.l <- c(-3.0506, -2.0470, -2.0705)
-b1.l <- c(2.6465, 2.3852, 2.4410)
-biom.pred <- function(x, b0, b1){exp(b0+(b1*log(x)))} ## dbh in cm, biom. in kg
 ## artifact: dbh's have hidden NA's that are marked as repeating numbers, basically when the dbh gets too small -- they are higher than the min dbh though
 cleanup <- as.matrix(andy.bai[,7:33])
 for(r in 1:nrow(cleanup)){
@@ -552,6 +584,15 @@ andy.bai[,incr.ID:=seq(1:dim(andy.bai)[1])]
 names(andy.bai)[1:6] <- c("Plot.ID", "Tree.ID", "Spp", "X", "Y", "Can.class")
 
 ### biomass change as a % of previous biomass per year from the increment data
+### the basic allometrics to get biomass
+## Jenkins, C.J., D.C. Chojnacky, L.S. Heath and R.A. Birdsey. 2003. Forest Sci 49(1):12-35.
+## Chojnacky, D.C., L.S. Heath and J.C. Jenkins. 2014. Forestry 87: 129-151.
+# Pinus rigida, Pinus strobus, both spg>0.45
+# Acer rubrum, Aceraceae <0.50 spg
+# Quercus alba, Quercus coccinea, Quercus rubra, Quercus velutina --> deciduous Fagaceae
+b0.l <- c(-3.0506, -2.0470, -2.0705)
+b1.l <- c(2.6465, 2.3852, 2.4410)
+biom.pred <- function(x, b0, b1){exp(b0+(b1*log(x)))} ## dbh in cm, biom. in kg
 taxa <- list(c("PIRI", "PIST"),
              c("ACRU"),
              c("QUAL", "QUCO", "QURU", "QUVE"))
@@ -624,13 +665,19 @@ street[record.good==1, npp.ann:=(biom.2014-biom.2006)/8]
 street[record.good==1, npp.ann.rel:=npp.ann/biom.2006]
 street[record.good==1,range(dbh.2006, na.rm=T)] 
 street[record.good==1, range(npp.ann, na.rm=T)] ## 202 records show negative growth -- questionable 2006 dbh record, cull
-street[record.good==1 & npp.ann<0, record.good:=0] ## 2401
+street[record.good==1, range(npp.ann.rel, na.rm=T)]
 street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny trees
 
 par(mfrow=c(1,1))
 plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean), col=as.numeric(andy.bai$seg.Edge))
-plot(street[record.good==1, log(dbh.2006)], street[record.good==1, log(npp.ann.rel)]) # r2 = 0.54, slope significant
-plot(dat[,log(DIAM_T0)], dat[,log(biom.rel)])
+plot(street[record.good==1, log(dbh.2006)], street[record.good==1, log(npp.ann.rel)])
+plot(live[,log(DIAM_T0)], live[,log(npp.ann.rel)])
+
+## try untransformed
+plot(live[,DIAM_T0], live[,npp.ann.rel], xlim=c(5, 100), ylim=c(-0.2, 1))
+points(street[record.good==1, (dbh.2006)], street[record.good==1, (npp.ann.rel)])
+points((andy.bai$avg.dbh), (andy.bai$growth.mean), col=as.numeric(andy.bai$seg.Edge))
+
 
 ## just do a plot first
 plot(dat[,log(DIAM_T0)],  ### this is FIA data
@@ -647,9 +694,10 @@ points(andy.bai[,log(avg.dbh)], andy.bai[,log(growth.mean)],
 summary(street[record.good==1,npp.ann]) ## a tiny handful of street trees show zero growth
 
 ### lets look untransformed
-plot(dat[,(DIAM_T0)], 
-     dat[,(biom.rel)], 
-     cex=0.2, col="gray64", pch=14)
+plot(live[,(DIAM_T0)], 
+     live[,(npp.ann.rel)], 
+     cex=0.2, col="gray64", pch=14, xlim=c(5, 100), ylim=c(-0.1, 1.1),
+     xlab="Diameter (cm)", ylab="Growth rate (kg/kg)")
 points(street[record.good==1, (dbh.2006)], 
        street[record.good==1, (npp.ann.rel)], 
        pch=15, cex=0.4, col="salmon")
@@ -657,6 +705,28 @@ andy.cols <- c("royalblue", "skyblue")
 points(andy.bai[,(avg.dbh)], andy.bai[,(growth.mean)], 
        col=andy.cols[as.numeric(andy.bai$seg.Edge)],
        pch=15, cex=0.6)
+legend(x=60, y=0.6, legend=c("FIA", "Street trees '06-'14", "Reinmann '17"), fill=c("gray64", "salmon", "royalblue"), bty="n")
 
 
+### cumulative npp~biomass graph w/ LULC stacked
+biom.dat
+
+library(ggplot2)
+contain <- as.data.table(contain)
+contain <- contain[distance!=0,]
+ggplot(contain[distance!=0,], aes(x=distance, y=ha, fill=LULC)) + 
+  geom_area(aes(fill=LULC))+
+  xlim(1,50)+
+  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3"),
+                    name="Land Cover",
+                    breaks=c("forest", "dev", "hdres", "ldres", "lowveg"),
+                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg."))+
+  xlab("Canopy distance from edge (m)")+
+  ylab("Total canopy area (ha)")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())+
+  theme(legend.position = c(0.8, 0.2))
 

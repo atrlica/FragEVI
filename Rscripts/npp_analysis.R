@@ -22,6 +22,10 @@ names(fia) <- paste("fia", names(fia), sep=".")
 # hist(fia[fia.aoi>800, fia.npp.ann.forest.MgC.ha]) ## up to ~2.0
 # hist(fia[fia.aoi>800, fia.npp.ann.ground.MgC.ha]) ## up to ~2.0
 # hist(fia[fia.aoi>800, fia.npp.ann.perv.MgC.ha]) ## up to ~2.0
+### FIA results, empirically derived npp estiamtes
+fia.empir <- read.csv("processed/npp.FIA.empirV22.csv")
+fia.empir <- as.data.table(fia.empir)
+names(fia.empir) <- paste("fia.empir", names(fia.empir), sep=".")
   
 ## andy forest results and exploration of beta range
 andy.res <- read.csv("processed/andy.forest.results.csv")
@@ -39,9 +43,11 @@ names(st) <- paste("st", names(st), sep=".")
 ## pull together and clean up
 npp.dat <- merge(fia, andy.res, by.x="fia.pix.ID", by.y="andy.pix.ID", all=T)
 npp.dat <- merge(npp.dat, st, by.x="fia.pix.ID", by.y="st.pix.ID", all=T)
+npp.dat <- merge(npp.dat, fia.empir, by.x="fia.pix.ID", by.y="fia.empir.pix.ID", all=T)
 npp.dat[, fia.X:=NULL]
 npp.dat[, andy.X:=NULL]
 npp.dat[, st.X:=NULL]
+npp.dat[, fia.empir.X:=NULL]
 # sum(npp.dat$fia.aoi-npp.dat$andy.aoi, na.rm=T)
 # sum(npp.dat$fia.aoi-npp.dat$st.aoi, na.rm=T)
 npp.dat[,andy.aoi:=NULL]
@@ -62,6 +68,10 @@ npp.dat[,st.bos.biom30m:=NULL]
 npp.dat[,st.biom.kg:=NULL]
 # plot(npp.dat$fia.bos.biom30m, npp.dat$st.med.biom.all)
 # abline(a=0, b=1)
+npp.dat[,fia.empir.bos.biom30m:=NULL]
+npp.dat[,fia.empir.aoi:=NULL]
+npp.dat[,fia.empir.can.frac:=NULL]
+npp.dat[,fia.empir.isa.frac:=NULL]
 npp.dat <- cbind(npp.dat, getValues(lulc))
 names(npp.dat)[c(1:5, dim(npp.dat)[2])] <- c("pix.ID", "bos.biom30m", "aoi", "can.frac", "isa.frac", "lulc")
 
@@ -76,24 +86,24 @@ names(npp.dat)[c(1:5, dim(npp.dat)[2])] <- c("pix.ID", "bos.biom30m", "aoi", "ca
 
 
 ### package up series of rasters for visual exploratory
-r <- lulc
-for(f in grep(names(npp.dat), pattern="fia.")){
-  a <- setValues(r, npp.dat[[f]])
-  writeRaster(a, filename=paste("processed/boston/results/fia/", names(npp.dat)[f], ".tif", sep=""), overwrite=T, format="GTiff")
-  print(paste("exported", names(npp.dat)[f]))
-}
+# r <- lulc
+# for(f in grep(names(npp.dat), pattern="fia.")){
+#   a <- setValues(r, npp.dat[[f]])
+#   writeRaster(a, filename=paste("processed/boston/results/fia/", names(npp.dat)[f], ".tif", sep=""), overwrite=T, format="GTiff")
+#   print(paste("exported", names(npp.dat)[f]))
+# }
 #### FIA: raw area gives an overall younger forest, canopy basis is in general older than raw ground, perv gives some older estimates, a lot of non-retreives in perv
 #### more extremes in biomass density with raw ground; canopy has a more even spread, and perv has some hot spots in the v. built up parts of town
 ## canopy basis tends to raise density broadly, and pervious raises density only in high biomass high pervious places (residential nhoods)
 ## npp.ground is maxed out almost everywhere except the highest density places, npp.forest is maxed out only in places with nearly continuous canopy an dmiddling otherwise, 
 ## general reduction, some severe, in npp with either forest or perv, forest reduces more in the deep canopy parts while perv leaves it untouched
 
-r <- lulc
-for(f in grep(names(npp.dat), pattern="andy.")){
-  a <- setValues(r, npp.dat[[f]])
-  writeRaster(a, filename=paste("processed/boston/results/andy/", names(npp.dat)[f], ".tif", sep=""), overwrite=T, format="GTiff")
-  print(paste("exported", names(npp.dat)[f]))
-}
+# r <- lulc
+# for(f in grep(names(npp.dat), pattern="andy.")){
+#   a <- setValues(r, npp.dat[[f]])
+#   writeRaster(a, filename=paste("processed/boston/results/andy/", names(npp.dat)[f], ".tif", sep=""), overwrite=T, format="GTiff")
+#   print(paste("exported", names(npp.dat)[f]))
+# }
 ### andy plots: The only places with meaningful interior biomass are the forest fragments, similar canopy fraction
 ## npp follows some reasonably predictable association with biomass
 ## some really dipshit high values for npp MgC/ha
@@ -103,13 +113,13 @@ for(f in grep(names(npp.dat), pattern="andy.")){
 # hist(npp.dat[aoi>800, andy.npp.tot.MgC.ha], breaks=30) ## voila
 # hist(npp.dat[aoi>800, fia.npp.ann.forest.MgC.ha], breaks=30) ## contrast: stops at ~2.0
 
-### the street tree results
-r <- lulc
-for(f in grep(names(npp.dat), pattern="st.")){
-  a <- setValues(r, npp.dat[[f]])
-  writeRaster(a, filename=paste("processed/boston/results/street/", names(npp.dat)[f], ".tif", sep=""), overwrite=T, format="GTiff")
-  print(paste("exported", names(npp.dat)[f]))
-}
+# ### the street tree results
+# r <- lulc
+# for(f in grep(names(npp.dat), pattern="st.")){
+#   a <- setValues(r, npp.dat[[f]])
+#   writeRaster(a, filename=paste("processed/boston/results/street/", names(npp.dat)[f], ".tif", sep=""), overwrite=T, format="GTiff")
+#   print(paste("exported", names(npp.dat)[f]))
+# }
 ## process failures are mostly in the forest fragments, but not exclusively
 ## tree number follows the biomass contours ok
 ## basically every pixel that successfully runs gets all 100 samples done
@@ -123,6 +133,7 @@ npp.dat[bos.biom30m<10, st.med.ann.npp.MgC.ha:=0]
 npp.dat[is.finite(st.med.ann.npp.MgC.ha) & aoi>800,length(st.med.ann.npp.MgC.ha)] # up to 132896 retrievals
 npp.dat[is.finite(fia.npp.ann.forest.MgC.ha) & aoi>800, length(fia.npp.ann.forest.MgC.ha)] #135705 c.p. fia retrievals
 npp.dat[is.finite(andy.npp.tot.MgC.ha) & aoi>800, length(andy.npp.tot.MgC.ha)] ## 135705 c.p. andy retreivals
+npp.dat[is.finite(fia.empir.npp.kg.hw.forest) & aoi>800, length(fia.empir.live.kgbiom.ha.forest)] ## 135705
 npp.dat[!is.na(bos.biom30m) & aoi>800, length(bos.biom30m)] ## 135705 biomass records in relatively complete pixels
 ## get more retreivals in the forests for the street tree sim than for FIA (can't retrieve a good age using the equation approach)
 
@@ -131,10 +142,13 @@ npp.dat[!is.na(bos.biom30m) & aoi>800, length(bos.biom30m)] ## 135705 biomass re
 hist(npp.dat[aoi>800, st.med.ann.npp.MgC.ha]) ## 0-5 MgC/ha/yr
 hist(npp.dat[aoi>800, fia.npp.ann.forest.MgC.ha]) ## 0-2.5 MgC/ha/yr
 hist(npp.dat[aoi>800, andy.npp.tot.MgC.ha]) ## 0-8 MgC/ha/yr
+hist(npp.dat[aoi>800, fia.empir.npp.kg.hw.forest*(1E4/aoi)/2000]) ## up to~5 MgC/ha/yr
 
 sum(npp.dat[, st.med.ann.npp.MgC.ha*(aoi/1E4)], na.rm=T) ## 13.2k tC/yr street tree sim (missing a bunch of high-value pixels)
 sum(npp.dat[, fia.npp.ann.forest.MgC.ha*(aoi/1E4)], na.rm=T) ## 4.6k tC/yr ## fia forest method
 sum(npp.dat[, andy.npp.tot.MgC.ha*(aoi/1E4)], na.rm=T) ## 13.8k tC/yr ## andy trees
+sum(npp.dat[, fia.empir.npp.kg.hw.forest/2000], na.rm=T) ## 8.7k tC/yr for fia empirical(forest) method
+
 
 ## visualize the differences in npp retreivals between them (in actual MgC per pixel)
 ## note that FIA npp is in MgC, not in kg biomass
@@ -224,16 +238,21 @@ plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp], col=npp.dat[aoi>8
 # h$prop <- h$V1.x/h$V1.y ## nothing over 20% high weighting until >20000
 # duur[bos.biom30m>20000,] ## 8041 pix over 20k -- let's just swap the fuckers out
 # 
-npp.dat[aoi>800 & bos.biom30m>20000, length(bos.biom30m)]/npp.dat[aoi>800, length(bos.biom30m)]
-### swap the >20000kg biomass pixels with the andy forest npp estimates irrespective of lulc class
+npp.dat[aoi>800 & bos.biom30m>20000, length(bos.biom30m)]/npp.dat[aoi>800, length(bos.biom30m)] ## 6% of pixels are over 20k
+### swap the >20000kg biomass pixels with the andy forest npp estimates irrespective of lulc class; 20k/pix is 111 MgC/ha, about what a mature forest would be
 npp.dat[bos.biom30m>20000, hyb.npp:=andy.npp.tot]
+
+### export the collated results
+write.csv(npp.dat, "processed/npp.estimates.V1.csv")
 
 ## contrast
 plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp], col=as.numeric(npp.dat[aoi>800,lulc]))
 points(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.npp.ann.ground], col="goldenrod", pch=5)
 points(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.npp.ann.forest], col="lightgreen", pch=7)
 points(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.npp.ann.perv], col="gray55", pch=9)
+points(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.empir.npp.kg.hw.forest], col="lightblue", pch=11)
 ## all the fia estimates are forced into a low hump at the bottom end of the scale, below 500 kg-biomass/yr
+## fia empirical estimates are a lower arc below the hybrid output
 
 ### make a proper plot
 par(mfrow=c(1,1), mar=c(4,4,1,1))
@@ -263,11 +282,18 @@ abline(v=123, lwd=2, lty=4)
 
 ## how do it compare?
 options(scipen=999)
-npp.dat[aoi>800, sum(hyb.npp, na.rm=T)/1000, by=lulc] ## Mg-biomass
-npp.dat[aoi>800, sum(fia.npp.ann.ground, na.rm=T)/1000, by=lulc] ## Mg-Biomass
-npp.dat[aoi>800, .((sum(hyb.npp, na.rm=T)/1000),(sum(fia.npp.ann.ground, na.rm=T)/1000),(sum(fia.npp.ann.forest, na.rm=T)/1000), (sum(fia.npp.ann.perv, na.rm=T)/1000)), by=lulc] ## Mg-biomass
-npp.dat[aoi>800, .((sum(hyb.npp, na.rm=T)/1000), sum(andy.npp.tot, na.rm=T)/1000, sum(fia.npp.ann.ground, na.rm=T)/1000, sum(fia.npp.ann.forest, na.rm=T)/1000, sum(fia.npp.ann.perv, na.rm=T)/1000),]
-## total is close between hybrid and ground, but much higher than forest or perv
+npp.dat[aoi>800, .((sum(hyb.npp, na.rm=T)/1000),
+                   (sum(fia.npp.ann.ground, na.rm=T)/1000),
+                   (sum(fia.npp.ann.forest, na.rm=T)/1000), 
+                   (sum(fia.npp.ann.perv, na.rm=T)/1000),
+                   (sum(fia.empir.npp.kg.hw.forest, na.rm=T)/1000)), by=lulc] ## Mg-biomass per LULC
+npp.dat[aoi>800, .((sum(hyb.npp, na.rm=T)/1000), 
+                   sum(andy.npp.tot, na.rm=T)/1000, 
+                   sum(fia.npp.ann.ground, na.rm=T)/1000, 
+                   sum(fia.npp.ann.forest, na.rm=T)/1000, 
+                   sum(fia.npp.ann.perv, na.rm=T)/1000,
+                   sum(fia.empir.npp.kg.hw.forest, na.rm=T)/1000),] ## Mg-biomass total aoi
+## total is close between hybrid and ground, but much higher than forest or perv; fia.empir is middle of extreme for fia.equation
 ## hybrid vs. ground (otherwise beats)
 ## lower in dev hdres lowveg, but beats by a lot in forest (i.e. the most comparable parts)
 
@@ -303,19 +329,36 @@ write.csv(house, "processed/boston/results/summary.hybrid.fia.npp.csv")
 npp.dat[aoi>800, (sum(fia.npp.ann.ground, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 1.11 MgC/ha
 npp.dat[aoi>800, (sum(fia.npp.ann.forest, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 0.37 MgC/ha
 npp.dat[aoi>800, (sum(fia.npp.ann.perv, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 0.43 MgC/ha
+npp.dat[aoi>800, (sum(fia.empir.npp.kg.hw.forest, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 0.7 MgC/ha
 npp.dat[aoi>800, (sum(andy.npp.tot, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 1.11 MgC/ha
 npp.dat[aoi>800, (sum(st.med.ann.npp.all, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 1.07 MgC/ha (excluding non-retrieves)
-npp.dat[aoi>800, (sum(hyb.npp, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 1.13 MgC/ha
+npp.dat[aoi>800, (sum(hyb.npp, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 1.17 MgC/ha
 
 ### only thing is to decide whether or not to swap the high-biomass non-forest sim results with the andy forest equivalents
 ## I thiknk this is a yes: Anything >20000 kg/pix is a "forest" in the andy sense
 
+#### BRING IN NPP estimates based on the FIA empirical records
+npp.dat <- as.data.table(read.csv("processed/npp.estimates.V1.csv"))
+npp.tab <- npp.dat[aoi>800 & !is.na(lulc), .(round(sum(fia.empir.npp.kg.hw.ground, na.rm=T)/(1000*2), digits=0),
+                              round(sum(fia.empir.npp.kg.hw.forest, na.rm=T)/(1000*2), digits=0),
+                              round(sum(fia.empir.npp.kg.hw.perv, na.rm=T)/(1000*2), digits=0),
+                              round(sum(hyb.npp, na.rm=T)/(1000*2), digits=0)), by=lulc]
+npp.tab$lulc.name <- c("Dev", "Other Veg", "Forest", "Water", "HD Resid", "LD Resid")
+names(npp.tab) <- c("lulc", "FIA (Ground)", "FIA (canopy)", "FIA (pervious)", "Street+Urban Forest", "Type")
+npp.tab <- cbind(npp.tab[,2:5, with=F], npp.tab$Type)
+npp.tot <- apply(npp.tab[,1:4, with=F], 2, sum)
+npp.tot <- matrix(nrow=1, ncol=5, c(npp.tot, "Total"))
+npp.tab <- as.matrix(npp.tab)
+npp.tab <- rbind(npp.tab, npp.tot)
+npp.tab <- as.data.frame(cbind(npp.tab[,5], npp.tab[,1:4]))
+names(npp.tab)[1] <- "Type"
+
 #########
 ### question: what is the magnitude of effect of npp on ppCO2 in local column of atmosphere?
 ## DOY range 135-258
-gseas <- 258-135
-hrs <- 8
-ghrs <- hrs*gseas ## total photosynthesizing hours to distribute npp across
+gseas <- 258-135 ## number of days in growing season
+hrs <- 8 ## hours per day photosynthesis works during growing season
+ghrs <- hrs*gseas ## total photosynthesizing hours to distribute annual npp across
 pix.npp <- 60 ## for instance, a typical is 200 kg-biomass/pix, 60 is median for FIA.forest.empir
 pix.CO2 <- (pix.npp/2)*44/12 ## kg-CO2/pix
 air.dens <- 1.293 ## kg/m3
@@ -326,16 +369,42 @@ CO2.ppm <- 400
 CO2.col <- vol.col*air.dens*1000*(1/air.molwt)*CO2.ppm/1E6 ## 16k moles CO2 in column
 CO2.col/400 ## 1 ppm CO2 in the column is ~40 moles of CO2
 
-CO2.drawdown.hr <- (pix.CO2/ghrs)*1000*(1/co2.molwt) ## avg mols-CO2/hr drawdown during growing periods
+CO2.drawdown.hr <- (pix.CO2/ghrs)*1000*(1/CO2.molwt) ## avg mols-CO2/hr drawdown during growing periods
 
 (CO2.drawdown.hr*hrs)/(CO2.col/400) 
 ## so a 200 kg-biomass/yr pix can draw about 1.7 ppm CO2/d out of the local column
 ## ## an 800 kg-biomass/yr pix can draw about 6.7 pp CO2/d (this is a 4.4 MgC/ha/yr pixels)
 ## max NPP is ~ 8 MgC/ha/yr 
-(8*2000)*(900/1E4) ## 1440 kg-biomass/pix
+# (8*2000)*(900/1E4) ## 1440 kg-biomass/pix
 ## at 1440 kg-biomass/pix, local drawdown is 12.1 ppm CO2/d
 ## at FIA npp.forest median (60 kg-biomass/pix), draw about 0.5 ppm CO2/d
 
 ## what about for atmos. column over entire city in aggregate?
+npp.hyb <- npp.dat[aoi>800, sum(hyb.npp, na.rm=T)]
+area.tot <- npp.dat[aoi>800, sum(aoi, na.rm=T)]
+npp.co2 <- (npp.hyb/2)*(44/12) ## 52.7k tCO2
+vol.col <- 1000*area.tot ## volume of air column to 1km over city footprint
+CO2.molwt <- 44.01 ## gCO2/mol
+CO2.ppm <- 400
+CO2.col <- vol.col*air.dens*1000*(1/air.molwt)*(CO2.ppm/1E6) ## 2195 Mmol CO2 over city
 
 
+CO2.drawdown.hr <- (npp.co2/ghrs)*1000*(1/CO2.molwt)
+(CO2.drawdown.hr*hrs)  # daily avg drawdown of CO2 from 1km box over city
+((CO2.drawdown.hr*hrs)/(vol.col*air.dens*1000*(1/air.molwt)))*1E6  # daily avg drawdown of CO2 from 1km box over city
+
+### do you understand this shit about exponentials?
+x <- seq(1,100)
+test.b0 <- c(-1, 0, 1)
+test.b1 <- c(-1, -1, -1)
+plot(x, exp(test.b0[1]+(test.b1[1]*log(x))), col="blue")
+for(e in 2:3){
+  points(x, exp(test.b0[e]+(test.b1[e]*log(x))), col=e)
+}
+
+test.b0 <- c(0,0,0)
+test.b1 <- c(-1, -0.5, -1.5)
+plot(x, exp(test.b0[1]+(test.b1[1]*log(x))), col="blue")
+for(e in 2:3){
+  points(x, exp(test.b0[e]+(test.b1[e]*log(x))), col=e)
+}
