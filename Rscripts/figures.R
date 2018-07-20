@@ -279,12 +279,16 @@ for(g in 1:length(lu.classes)){
 colnames(contain) <- c("distance", "LULC", "pix.num")
 contain$distance <- as.integer(as.character(contain$distance))
 contain$pix.num <- as.integer(as.character(contain$pix.num))
-
 contain$ha <- contain$pix.num/(1E4)
+# m <- contain[, sum(ha), by=distance]
+# sum(m$V1) ### ok this really is the total sum of canopy area
+# plot(contain[LULC=="hdres", ha], col="salmon")
+# points(contain[LULC=="forest", ha], col="forestgreen")
+# points(contain[LULC=="dev", ha], col="gray55")
+# points(contain[LULC=="ldres", ha], col="gold")
 
 library(ggplot2)
 contain <- as.data.table(contain)
-contain <- contain[distance!=0,]
 ggplot(contain[distance!=0,], aes(x=distance, y=ha, fill=LULC)) + 
   geom_area(aes(fill=LULC))+
   xlim(1,50)+
@@ -708,25 +712,103 @@ points(andy.bai[,(avg.dbh)], andy.bai[,(growth.mean)],
 legend(x=60, y=0.6, legend=c("FIA", "Street trees '06-'14", "Reinmann '17"), fill=c("gray64", "salmon", "royalblue"), bty="n")
 
 
-### cumulative npp~biomass graph w/ LULC stacked
-biom.dat
+
+############
+### cumulative npp~biomass graph w/ LULC stacked --- hybrid results
+npp.dat <- as.data.table(read.csv("processed/npp.estimates.V1.csv"))
+npp.dat[,biom.bin:=cut(bos.biom30m, seq(0, 52000, by = 500), right=FALSE, ordered_result=T)]
+contain.npp <- npp.dat[!is.na(bos.biom30m) & !is.na(lulc), sum(hyb.npp, na.rm=T), by=.(biom.bin, lulc)]
+contain.npp <- contain.npp[order(biom.bin), ]
+contain.npp[, bin.num:=as.numeric(biom.bin)]
+names(contain.npp)[3] <- "tot.npp.kg"
+
+par(mfrow=c(1,1))
+### summed NPP by biom.density bin and LULC
+col.tmp <- c("forestgreen", "gray55", "salmon", "gold", "chartreuse3")
+plot(contain.npp[lulc==1, bin.num], contain.npp[lulc==1, tot.npp.kg/1000], 
+     col=col.tmp[1], pch=15, type="l", lwd=3,
+     ylim=c(0, 500), xlab="Biomass density (Mg/ha)", xaxt="n", ylab="Total NPP (Mg-biomass)") 
+axis(side = 1, at = seq(0,100, by=20), labels = c(0, 10000, 20000, 30000, 40000, 50000))
+for(e in 2:5){
+  lines(contain.npp[lulc==e, bin.num], contain.npp[lulc==e, tot.npp.kg/1000], col=col.tmp[e], pch=15, type="l", lwd=3)
+}
+legend(x = 60, y = 400, legend = c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other veg."), fill=col.tmp, bty="n")
+
+### cumulative with ascending binned biomass density
+dog <- contain.npp
+yup <- data.frame()
+ruler <- data.frame(bin.num=seq(1,104))
+for(f in 1:6){
+  a <- contain.npp[lulc==f, ]
+  a <- merge(a, ruler, by="bin.num", all=T)
+  a[is.na(lulc), lulc:=f]
+  a[is.na(tot.npp.kg), tot.npp.kg:=0]
+  a[,cum.sum:=cumsum(tot.npp.kg)]
+  yup <- rbind(yup, a)
+}
+yup[,LULC:=as.factor(lulc)]
 
 library(ggplot2)
-contain <- as.data.table(contain)
-contain <- contain[distance!=0,]
-ggplot(contain[distance!=0,], aes(x=distance, y=ha, fill=LULC)) + 
+ggplot(yup, aes(x=bin.num, y=cum.sum/1000, fill=LULC)) + 
   geom_area(aes(fill=LULC))+
-  xlim(1,50)+
-  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3"),
+  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
                     name="Land Cover",
-                    breaks=c("forest", "dev", "hdres", "ldres", "lowveg"),
-                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg."))+
-  xlab("Canopy distance from edge (m)")+
-  ylab("Total canopy area (ha)")+
+                    breaks=c(1,2,3,4,5,6),
+                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+  xlab("Biomass density (Mg biomass/ha)")+
+  ylab("Cumulative NPP (Mg biomass)")+
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
         panel.background = element_blank())+
-  theme(legend.position = c(0.8, 0.2))
+  theme(legend.position = c(60, 1.5E04))
 
+
+
+### cumulative npp~biomass graph w/ LULC stacked --- FIA empirical (canopy) results
+contain.npp <- npp.dat[!is.na(bos.biom30m) & !is.na(lulc), sum(fia.empir.npp.kg.hw.forest, na.rm=T), by=.(biom.bin, lulc)]
+contain.npp <- contain.npp[order(biom.bin), ]
+contain.npp[, bin.num:=as.numeric(biom.bin)]
+names(contain.npp)[3] <- "tot.npp.kg"
+
+### summed NPP by biom.density bin and LULC
+col.tmp <- c("forestgreen", "gray55", "salmon", "gold", "chartreuse3")
+plot(contain.npp[lulc==1, bin.num], contain.npp[lulc==1, tot.npp.kg/1000], 
+     col=col.tmp[1], pch=15, type="l", lwd=3,
+     ylim=c(0, 500), xlab="Biomass density (Mg/ha)", xaxt="n", ylab="Total NPP (Mg-biomass)") 
+axis(side = 1, at = seq(0,100, by=20), labels = c(0, 10000, 20000, 30000, 40000, 50000))
+for(e in 2:5){
+  lines(contain.npp[lulc==e, bin.num], contain.npp[lulc==e, tot.npp.kg/1000], col=col.tmp[e], pch=15, type="l", lwd=3)
+}
+legend(x = 60, y = 400, legend = c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other veg."), fill=col.tmp, bty="n")
+
+### cumulative with ascending binned biomass density
+dog <- contain.npp
+yup <- data.frame()
+ruler <- data.frame(bin.num=seq(1,104))
+for(f in 1:6){
+  a <- contain.npp[lulc==f, ]
+  a <- merge(a, ruler, by="bin.num", all=T)
+  a[is.na(lulc), lulc:=f]
+  a[is.na(tot.npp.kg), tot.npp.kg:=0]
+  a[,cum.sum:=cumsum(tot.npp.kg)]
+  yup <- rbind(yup, a)
+}
+yup[,LULC:=as.factor(lulc)]
+
+library(ggplot2)
+ggplot(yup, aes(x=bin.num, y=cum.sum/1000, fill=LULC)) + 
+  geom_area(aes(fill=LULC))+
+  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+                    name="Land Cover",
+                    breaks=c(1,2,3,4,5,6),
+                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+  xlab("Biomass density (Mg/ha)")+
+  ylab("Total NPP (kg biomass)")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())+
+  theme(legend.position = c(60, 1.5E04))

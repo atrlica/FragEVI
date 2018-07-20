@@ -57,6 +57,15 @@ street[record.good==1, range(npp.ann, na.rm=T)] ## 202 records show negative gro
 street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny trees
 write.csv(street, "processed/street.dbh.growth.results.csv")
 
+### a question: why is there so much periodicity in the dbh.2006 measures? Is this a function of diameter measured to nearest 1 inch?
+a <- street$dbh.2006
+a <- a[order(a)]
+a <- a[!is.na(a)]
+a <- a/2.54 ## convert to inches
+length(a) #3492
+length(a[a%%1==0]) ##3027
+3027/3492 ## 87% are whole inches
+unique(a[a%%1==0]) ## basically every inch reading up to 60"
 
 ### non-transformed growth~dbh
 summary(street$dbh.2006) ## goes down to 2.54, contrast andy.bai min 5.5, FIA 9cm
