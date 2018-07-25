@@ -79,7 +79,9 @@ biom.dat[,int.biom:=biom-ed.biom] # internal forest biomass
 hist(biom.dat[aoi>800, int.biom])
 hist(biom.dat[aoi>800, ed.biom])
 
-### How we determined rate of growth based on edge position
+
+##### ANALYSIS OF TREE CORE RECORDS
+## 
 andy.bai <- read.csv("docs/ian/Reinmann_Hutyra_2016_BAI.csv") 
 andy.bai <- as.data.table(andy.bai)
 ### the basic allometrics to get biomass
@@ -96,25 +98,26 @@ cleanup <- as.matrix(andy.bai[,7:33])
 for(r in 1:nrow(cleanup)){
   bust <- which(diff(cleanup[r,], lag = 1)>0) ## tells you where the NA's are located
   if(length(bust)>0){
-    cleanup[r, bust:ncol(cleanup)] <- NA
+    cleanup[r, which(colnames(cleanup)==names(bust)):ncol(cleanup)] <- NA
   }
 }
 cleanup <- as.data.table(cleanup)
+cleanup$num.yrs <- apply(cleanup, 1, function(x){return(sum(!is.na(x)))})
 andy.bai <- cbind(andy.bai[,1:6], cleanup)
 names(andy.bai)[7:33] <- paste0("dbh", 2016:1990)
-andy.bai[,incr.ID:=seq(1:dim(andy.bai)[1])]
+andy.bai[,incr.ID:=seq(1:dim(andy.bai)[1])] ## Tree.ID is not unique to each core
 names(andy.bai)[1:6] <- c("Plot.ID", "Tree.ID", "Spp", "X", "Y", "Can.class")
 
 ### biomass change as a % of previous biomass per year from the increment data
 taxa <- list(c("PIRI", "PIST"),
              c("ACRU"),
              c("QUAL", "QUCO", "QURU", "QUVE"))
-biom.rel <- list()
 bop <- data.table()
+## figure out biomass growth history applying species-specific allometrics
 for(sp in 1:3){
   tmp <- andy.bai[Spp %in% taxa[[sp]],]
   a <- tmp[, lapply(tmp[,7:33], function(x){biom.pred(x, b0.l[sp], b1.l[sp])})]
-  a <- cbind(tmp[,.(Tree.ID, incr.ID, Spp, Y, dbh2016)], a)
+  a <- cbind(tmp[,.(Tree.ID, incr.ID, Spp, X, Y)], a)
   bop <- rbind(bop, a)
 }
 bop$Spp <- as.character(bop$Spp) ### bop is the biomass time series for every core
@@ -128,7 +131,7 @@ for(i in 1:dim(bop)[1]){
   biom.rel[,i+1] <- te.di/te[-1]
 }
 names(biom.rel)[-1] <- paste0("Tree", bop[,incr.ID])
-names(biom.rel)[1] <- "Year" ## this has all the relative biomass gains by year (row) for each tree with increment (column)
+names(biom.rel)[1] <- "Year" ## this has all the relative forward biomass gains by year (row) for each tree with increment (column)
 
 ## exploratory plots of tree growth rates through time
 par(mfrow=c(2,2), mar=c(1,2,2,1), oma=c(2,1,1,1))
@@ -142,6 +145,7 @@ plot(biom.rel$Year, biom.rel$Tree188)
 ## everything looks like a slow decline in relative growth (not clear if that is just a funciton of trees getting bigger or canopy closing)
 ## most are in the 2-8% range, but some are v. high (20-40%)
 
+### initial approach: take mean of rel. biomass gain and mean of dbh across all the years present in each core sample
 ### figure the mean relative biomass gain per year across all years in each tree
 mean.na <- function(x){mean(x, na.rm=T)}
 m <- apply(biom.rel[,-1], FUN=mean.na, 2)
@@ -149,6 +153,11 @@ growth.mean <- data.frame(cbind(c(sub("Tree", '', colnames(biom.rel[,-1]))), m))
 names(growth.mean) <- c("incr.ID", "growth.mean")
 growth.mean$incr.ID <- as.integer(as.character(growth.mean$incr.ID))
 andy.bai <- merge(andy.bai, growth.mean, by="incr.ID")
+andy.bai$growth.mean <- as.numeric(as.character(andy.bai$growth.mean))
+andy.bai[,avg.dbh:=apply(as.matrix(andy.bai[,8:34]), FUN=mean.na, 1)]
+## note: final interaction model only applies correction coefficients for the interior segments
+
+### add guide data on tree position viz. edge
 andy.bai[Y<10, seg:=10]
 andy.bai[Y>=10 & Y<20, seg:=20]
 andy.bai[Y>=20, seg:=30]
@@ -156,17 +165,79 @@ andy.bai[seg==10, seg.F:="A"]
 andy.bai[seg==20, seg.F:="B"]
 andy.bai[seg==30, seg.F:="C"]
 andy.bai$seg.F <- as.factor(andy.bai$seg.F)
-andy.bai$growth.mean <- as.numeric(as.character(andy.bai$growth.mean))
-andy.bai[,avg.dbh:=apply(as.matrix(andy.bai[,8:34]), FUN=mean.na, 1)]
-## note: final interaction model only applies correction coefficients for the interior segments
 andy.bai[seg.F=="A", seg.Edge:="E"]
 andy.bai[seg.F %in% c("B", "C"), seg.Edge:="I"]
 andy.bai[,seg.Edge:=as.factor(seg.Edge)]
-write.csv(andy.bai, "processed/andy.bai.dbh.results.csv")
+write.csv(andy.bai, "processed/andy.bai.dbh.avg.results.csv")
 
-par(mfrow=c(1,1))
+####
+### upgrade Jul 23: treat five-year time slices as pseudo-replicates
+pseudo.A <- matrix(ncol=4, rep(999,4))
+pseudo.B <- matrix(ncol=4, rep(999,4))
+pseudo.C <- matrix(ncol=4, rep(999,4))
+pseudo.D <- matrix(ncol=4, rep(999,4))
+pseudo.E <- matrix(ncol=4, rep(999,4))
+for(d in unique(andy.bai$incr.ID)){
+  pseudo.A <- rbind(pseudo.A, c(((bop[incr.ID==d, biom2016]-bop[incr.ID==d, biom2011])/bop[incr.ID==d, biom2011])/5,
+                                andy.bai[incr.ID==d, dbh2011],
+                                andy.bai[incr.ID==d, incr.ID],
+                                "A"))
+  pseudo.B <- rbind(pseudo.B, c(((bop[incr.ID==d, biom2011]-bop[incr.ID==d, biom2006])/bop[incr.ID==d, biom2006])/5,
+                                andy.bai[incr.ID==d, dbh2006],
+                                andy.bai[incr.ID==d, incr.ID],
+                                "B"))
+  pseudo.C <- rbind(pseudo.C, c(((bop[incr.ID==d, biom2006]-bop[incr.ID==d, biom2001])/bop[incr.ID==d, biom2001])/5,
+                                andy.bai[incr.ID==d, dbh2001],
+                                andy.bai[incr.ID==d, incr.ID],
+                                "C"))
+  pseudo.D <- rbind(pseudo.D, c(((bop[incr.ID==d, biom2001]-bop[incr.ID==d, biom1996])/bop[incr.ID==d, biom1996])/5,
+                                andy.bai[incr.ID==d, dbh1996],
+                                andy.bai[incr.ID==d, incr.ID],
+                                "D"))
+
+  ### pseudo.E can have from 5-6 years in a successsful sample
+  tmp <- unlist(bop[incr.ID==d, 26:32, with=F])
+  t <- max(which(is.finite(tmp)), na.rm=T) ## where does the record run out?
+  if(t<6 | !is.finite(t)){ ## if record doesn't end in 1991 or 1990 (i.e. at least 5 year run)
+    psuedo.E <- rbind(pseudo.E, c(999,999,
+                                  andy.bai[incr.ID==d, incr.ID],
+                                  "E"))
+    # print("YOU LIKE IS FUNKY")
+  }else{
+    g <- ((bop[incr.ID==d, biom1996]-bop[incr.ID==d, (26+(t-1)), with=F])/bop[incr.ID==d, (26+(t-1)), with=F])/(sum(is.finite(tmp))-1)
+    deeb <- min(unlist(andy.bai[incr.ID==d, 28:34, with=F]), na.rm=T)
+    pseudo.E <- rbind(pseudo.E, c(g, deeb,
+                                  andy.bai[incr.ID==d, incr.ID],
+                                  "E"))
+    # print("I LIKE IS CHUNKY")
+  }
+}
+## collate
+ps.contain <- rbind(pseudo.A[-1,], pseudo.B[-1,], pseudo.C[-1,], pseudo.D[-1,], pseudo.E[-1,])
+ps.contain <- data.frame(biom.rel.ann=as.numeric(unlist(ps.contain[,1])),
+                 dbh.start=as.numeric(unlist(ps.contain[,2])),
+                 incr.ID=as.integer(unlist(ps.contain[,3])),
+                 interval=as.character(unlist(ps.contain[,4])),
+                 stringsAsFactors = F)
+ps.contain$interval <- as.factor(ps.contain$interval)
+ps.contain <- as.data.table(ps.contain)
+
+ps.contain[is.finite(biom.rel.ann) & dbh.start>5,] ## 900 reasonably big trees 
+plot(ps.contain$dbh.start, ps.contain$biom.rel.ann, col=ps.contain$interval, ylim=c(0,1))
+ps.contain <- merge(x=ps.contain, y=andy.bai[,.(incr.ID, seg, seg.Edge)], by="incr.ID", all.x=T, all.y=F)
+plot(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, dbh.start], 
+     ps.contain[is.finite(biom.rel.ann) & dbh.start>5, biom.rel.ann],
+     col=ps.contain[is.finite(biom.rel.ann) & dbh.start>5, seg.Edge])
+
+### anlaysis of growth rate~dbh
 plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean), col=as.numeric(andy.bai$seg.Edge))
 summary(andy.bai$growth.mean)
+plot(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, log(dbh.start)], 
+     ps.contain[is.finite(biom.rel.ann) & dbh.start>5, log(biom.rel.ann)],
+     col=ps.contain[is.finite(biom.rel.ann) & dbh.start>5, seg.Edge])
+
+table(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, seg.Edge]) ## 268:632
+
 ### initial edge vs. int growth model was full interactive, but slope modifier term was not significant
 # mod.int.edge <- summary(lm(log(growth.mean)~log(avg.dbh)*seg.Edge, data=andy.bai)) #r2=0.46, just edge vs. interior, no sig. dbh*edge interaction
 # b0 <- mod.int.edge$coefficients[1]
@@ -179,14 +250,26 @@ b0.bai <- mod.int.edge.fin$coefficients[1]
 b1.bai <- mod.int.edge.fin$coefficients[2]
 b2.bai <- mod.int.edge.fin$coefficients[3]
 ### generalized growth coefficients for edge/interior, based on andy.bai
-col.edge <- c("royalblue", "blue")
+col.edge <- c("black", "red")
 plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean), col=col.edge[as.numeric(as.factor(andy.bai$seg.Edge))],
      pch=15, cex=0.3)
 abline(b0.bai, b1.bai, col="black")
 abline(b0.bai+b2.bai, b1.bai, col="red")
-points(log(street$dbh.2006), log(street$npp.ann.rel), col="blue", pch=14)
 
-## non-transformed space
+### contrast to data with 5-year pseudoreplicates
+mod.int.edge.ps <- lm(log(biom.rel.ann)~log(dbh.start)+seg.Edge, 
+                      data=ps.contain[is.finite(biom.rel.ann) & dbh.start>5])
+summary(mod.int.edge.ps) ## down to 0.32 but all factors significant
+mod.int.edge.fin ## not tremendously different coefficients
+## contrast: loose a lot of predictive power with the edge/interior factor
+summary(lm(log(biom.rel.ann)~log(dbh.start), 
+                      data=ps.contain[is.finite(biom.rel.ann) & dbh.start>5]))
+x=seq(1,10, by=0.2)
+plot(x, exp(-1+(-1*x)))
+points(x, exp(-1+(-0.2*x)), col="red")
+points(x, exp(0+(-1*x)), col="blue")
+
+## non-transformed space ### average growth figures
 mod.int.edge.fin.nls <- nls(growth.mean ~ exp(a + b * log(avg.dbh)), data=andy.bai, start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
 summary(mod.int.edge.fin.nls)
 col.edge <- c("royalblue", "purple")
@@ -197,6 +280,24 @@ points(andy.bai$avg.dbh, exp(b0.bai)*exp(b1.bai*log(andy.bai$avg.dbh)),
 points(andy.bai$avg.dbh, exp(b0.bai+b2.bai)*exp(b1.bai*log(andy.bai$avg.dbh)), 
        col=col.edge[2], pch=13, cex=0.4)
 legend(x=50, y=0.3, legend=c("Edge (<10m)", "Interior"), fill=col.edge, bty="n")
+
+## non-transformed space ### pseudo-replicates
+mod.int.edge.ps.nls <- nls(biom.rel.ann ~ exp(a + b * log(dbh.start)), data=ps.contain[is.finite(biom.rel.ann & dbh.start>5),], start=list(a=0, b=0)) 
+summary(mod.int.edge.ps.nls) ## pretty similar to the original average-dbh assessment
+ee <- summary(mod.int.edge.ps) ## down to 0.32 but all factors significant
+
+col.edge <- c("royalblue", "purple")
+plot(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, dbh.start], ps.contain[is.finite(biom.rel.ann) & dbh.start>5, biom.rel.ann], 
+     col=col.edge[ps.contain[is.finite(biom.rel.ann) & dbh.start>5,seg.Edge]],
+     pch=15, cex=0.3, ylab="Growth Rate (kg/kg)", xlab="Stem DBH (cm)", main="Urban Forest stems")
+points(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, dbh.start], 
+       exp(ee$coefficients[1])*exp(ee$coefficients[2]*ps.contain[is.finite(biom.rel.ann) & dbh.start>5, log(dbh.start)]), 
+       col=col.edge[1], pch=13, cex=0.4)
+points(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, dbh.start], 
+       exp(ee$coefficients[1]+ee$coefficients[3])*exp(ee$coefficients[2]*ps.contain[is.finite(biom.rel.ann) & dbh.start>5, log(dbh.start)]), 
+       col=col.edge[2], pch=13, cex=0.4)
+legend(x=50, y=0.3, legend=c("Edge (<10m)", "Interior"), fill=col.edge, bty="n")
+## ok, minimal disturbance to the overall impression of growth rate by stem, should have minor impact on areal calcs
 
 ####
 ### bring in full andy.dbh data set, groom to determine growth rates on area/edge basis
