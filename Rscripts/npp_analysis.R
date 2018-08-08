@@ -245,6 +245,8 @@ npp.dat[bos.biom30m>20000, hyb.npp:=andy.npp.tot]
 ### export the collated results
 write.csv(npp.dat, "processed/npp.estimates.V1.csv")
 
+npp.dat <- read.csv("processed/npp.estimates.V1.csv")
+npp.dat <- as.data.table(npp.dat)
 ## contrast
 plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp], col=as.numeric(npp.dat[aoi>800,lulc]))
 points(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.npp.ann.ground], col="goldenrod", pch=5)
@@ -333,6 +335,9 @@ npp.dat[aoi>800, (sum(fia.empir.npp.kg.hw.forest, na.rm=T)/(1000*2))/sum(aoi, na
 npp.dat[aoi>800, (sum(andy.npp.tot, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 1.11 MgC/ha
 npp.dat[aoi>800, (sum(st.med.ann.npp.all, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 1.07 MgC/ha (excluding non-retrieves)
 npp.dat[aoi>800, (sum(hyb.npp, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 1.17 MgC/ha
+npp.dat[aoi>800, (sum(hyb.npp, na.rm=T)/(1000*2))] ### 14,393
+
+
 
 ### only thing is to decide whether or not to swap the high-biomass non-forest sim results with the andy forest equivalents
 ## I thiknk this is a yes: Anything >20000 kg/pix is a "forest" in the andy sense
@@ -408,3 +413,8 @@ plot(x, exp(test.b0[1]+(test.b1[1]*log(x))), col="blue")
 for(e in 2:3){
   points(x, exp(test.b0[e]+(test.b1[e]*log(x))), col=e)
 }
+
+
+### comparison NPP vs FFCO2 (ACES)
+
+
