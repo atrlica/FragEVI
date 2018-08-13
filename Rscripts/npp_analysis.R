@@ -29,8 +29,8 @@ names(fia.empir) <- paste("fia.empir", names(fia.empir), sep=".")
   
 ## andy forest results and exploration of beta range
 andy.res <- read.csv("processed/andy.forest.results.csv")
-andy.betas <- load("processed/andy.forest.beta.samples") ## comes in as list beta.track
-andy.samples <- read.csv("processed/andy.forest.npp.edge.int.samples.csv")
+# andy.betas <- load("processed/andy.forest.beta.samples") ## comes in as list beta.track
+# andy.samples <- read.csv("processed/andy.forest.npp.edge.int.samples.csv")
 andy.res <- as.data.table(andy.res)
 names(andy.res) <- paste("andy", names(andy.res), sep=".")
 
@@ -146,7 +146,8 @@ hist(npp.dat[aoi>800, fia.empir.npp.kg.hw.forest*(1E4/aoi)/2000]) ## up to~5 MgC
 
 sum(npp.dat[, st.med.ann.npp.MgC.ha*(aoi/1E4)], na.rm=T) ## 13.2k tC/yr street tree sim (missing a bunch of high-value pixels)
 sum(npp.dat[, fia.npp.ann.forest.MgC.ha*(aoi/1E4)], na.rm=T) ## 4.6k tC/yr ## fia forest method
-sum(npp.dat[, andy.npp.tot.MgC.ha*(aoi/1E4)], na.rm=T) ## 13.8k tC/yr ## andy trees
+sum(npp.dat[, andy.npp.tot.MgC.ha*(aoi/1E4)], na.rm=T) ## 13.8k tC/yr ## andy trees, avg. dbh
+sum(npp.dat[, andy.npp.tot.ps.MgC.ha*(aoi/1E4)], na.rm=T) ## 12.7k tC/yr ## andy trees with pseudoreps
 sum(npp.dat[, fia.empir.npp.kg.hw.forest/2000], na.rm=T) ## 8.7k tC/yr for fia empirical(forest) method
 
 
@@ -165,6 +166,7 @@ npp.dat[,diff.fia.ground.st:=fia.npp.ann.ground-st.med.ann.npp.all] ## FIA(groun
 range(npp.dat[,fia.npp.ann.forest],  na.rm=T) ## up to 394 kg-biom/pix
 range(npp.dat[,fia.npp.ann.ground],  na.rm=T) ## up to 395 kg-biom/pix
 range(npp.dat[,andy.npp.tot], na.rm=T)## up to 1443 kg-biom/pix
+range(npp.dat[,andy.npp.tot.ps], na.rm=T)## up to 1405 kg-biom/pix
 range(npp.dat[,(st.med.ann.npp.all)], na.rm=T) ## up to 936 kg-biom/pix
 
 ### differences between estimate sets (downside is always bigger for fia than upside)
@@ -210,11 +212,19 @@ plot(npp.dat[lulc==1 & aoi>800, bos.biom30m], npp.dat[lulc==1 & aoi>800, st.med.
 ## classic kink
 
 ### let's make a hybrid
+### version using growth in andy avg.dbh
 npp.dat[,hyb.npp:=andy.npp.tot]
 npp.dat[lulc!=1, hyb.npp:=st.med.ann.npp.all]
 npp.dat[aoi>800 & is.finite(hyb.npp), length(hyb.npp)] #134643
-plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp], col=npp.dat[aoi>800, lulc])
+plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp], 
+     col=npp.dat[aoi>800, lulc], main="avg.dbh")
 # ### still get that kink in the street trees
+
+npp.dat[,hyb.npp.ps:=andy.npp.tot.ps]
+npp.dat[lulc!=1, hyb.npp.ps:=st.med.ann.npp.all]
+npp.dat[aoi>800 & is.finite(hyb.npp.ps), length(hyb.npp.ps)] #134643
+plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.ps], 
+     col=npp.dat[aoi>800, lulc], main="with pseudoreps")
 
 # ### how can we reduce the artifacts in the street tree sim results, especially over 20k kg pixels?
 # plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, st.med.ann.npp.all], col=npp.dat[aoi>800, st.max.wts])
@@ -241,13 +251,17 @@ plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp], col=npp.dat[aoi>8
 npp.dat[aoi>800 & bos.biom30m>20000, length(bos.biom30m)]/npp.dat[aoi>800, length(bos.biom30m)] ## 6% of pixels are over 20k
 ### swap the >20000kg biomass pixels with the andy forest npp estimates irrespective of lulc class; 20k/pix is 111 MgC/ha, about what a mature forest would be
 npp.dat[bos.biom30m>20000, hyb.npp:=andy.npp.tot]
+npp.dat[bos.biom30m>20000, hyb.npp.ps:=andy.npp.tot.ps]
 
 ### export the collated results
-write.csv(npp.dat, "processed/npp.estimates.V1.csv")
+# write.csv(npp.dat, "processed/npp.estimates.V1.csv")
+write.csv(npp.dat, "processed/npp.estimates.V2.csv") ## with pseudorep based andy trees
 
-npp.dat <- read.csv("processed/npp.estimates.V1.csv")
+# npp.dat <- read.csv("processed/npp.estimates.V1.csv")
+npp.dat <- read.csv("processed/npp.estimates.V2.csv")
 npp.dat <- as.data.table(npp.dat)
-## contrast
+
+## contrast (avg.dbh)
 plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp], col=as.numeric(npp.dat[aoi>800,lulc]))
 points(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.npp.ann.ground], col="goldenrod", pch=5)
 points(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.npp.ann.forest], col="lightgreen", pch=7)
@@ -264,8 +278,8 @@ plot(npp.dat[aoi>800, (bos.biom30m/aoi)*1E4/2000], npp.dat[aoi>800, (hyb.npp/aoi
      xlab="biomass MgC/ha", ylab="NPP MgC/ha/yr")
 legend(fill=col.lulc, legend=c("Forest", "Developed", "HDResid", "LDResid", "Other Veg", "Water"), x=200, y=4)
 abline(v=111, lwd=2, lty=2)
-points(npp.dat[aoi>800, (bos.biom30m/aoi)*1E4/2000], npp.dat[aoi>800, (st.med.ann.npp.all/aoi)*1E4/2000],
-       col="gray55", cex=0.2)
+# points(npp.dat[aoi>800, (bos.biom30m/aoi)*1E4/2000], npp.dat[aoi>800, (st.med.ann.npp.all/aoi)*1E4/2000],
+#        col="purple", cex=0.2)
 
 
 ## contrast overlay the fia results

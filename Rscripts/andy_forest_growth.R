@@ -177,6 +177,8 @@ pseudo.B <- matrix(ncol=4, rep(999,4))
 pseudo.C <- matrix(ncol=4, rep(999,4))
 pseudo.D <- matrix(ncol=4, rep(999,4))
 pseudo.E <- matrix(ncol=4, rep(999,4))
+
+### for each tree core, pick successive 5-year chunks moving backward until you run out of rings
 for(d in unique(andy.bai$incr.ID)){
   pseudo.A <- rbind(pseudo.A, c(((bop[incr.ID==d, biom2016]-bop[incr.ID==d, biom2011])/bop[incr.ID==d, biom2011])/5,
                                 andy.bai[incr.ID==d, dbh2011],
@@ -202,7 +204,7 @@ for(d in unique(andy.bai$incr.ID)){
     psuedo.E <- rbind(pseudo.E, c(999,999,
                                   andy.bai[incr.ID==d, incr.ID],
                                   "E"))
-    # print("YOU LIKE IS FUNKY")
+    # print("YOU LIKE IS FUNKY") ## this record not long enough
   }else{
     g <- ((bop[incr.ID==d, biom1996]-bop[incr.ID==d, (26+(t-1)), with=F])/bop[incr.ID==d, (26+(t-1)), with=F])/(sum(is.finite(tmp))-1)
     deeb <- min(unlist(andy.bai[incr.ID==d, 28:34, with=F]), na.rm=T)
@@ -229,72 +231,100 @@ plot(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, dbh.start],
      ps.contain[is.finite(biom.rel.ann) & dbh.start>5, biom.rel.ann],
      col=ps.contain[is.finite(biom.rel.ann) & dbh.start>5, seg.Edge])
 
+### dump the pseudo-replicated file to disk
+write.csv(ps.contain, "processed/andy.bai.dbh.pseudo.csv")
+
 ### anlaysis of growth rate~dbh
-plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean), col=as.numeric(andy.bai$seg.Edge))
-summary(andy.bai$growth.mean)
-plot(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, log(dbh.start)], 
-     ps.contain[is.finite(biom.rel.ann) & dbh.start>5, log(biom.rel.ann)],
-     col=ps.contain[is.finite(biom.rel.ann) & dbh.start>5, seg.Edge])
+par(mfrow=c(1,1))
 
-table(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, seg.Edge]) ## 268:632
+# ## avg.dbh~avg.growth
+# plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean), 
+#      col=as.numeric(andy.bai$seg.Edge), main="Andy trees, avg. dbh")
+# summary(andy.bai$growth.mean)
+# table(andy.bai$seg.Edge) ## 64 edge: 131 interior
+# ## vs. pseudoreps
+# plot(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, log(dbh.start)], 
+#      ps.contain[is.finite(biom.rel.ann) & dbh.start>5, log(biom.rel.ann)],
+#      col=ps.contain[is.finite(biom.rel.ann) & dbh.start>5, seg.Edge],
+#      main="Andy trees, dbh pseudoreps")
+# table(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, seg.Edge]) ## 268 edge:632 interior
+# 
+# summary(andy.bai$growth.mean)
+# summary(ps.contain$biom.rel.ann) ## comparable in the middle, pseudos have greater range
+# plot(ps.contain[incr.ID==1, dbh.start], ps.contain[incr.ID==1, biom.rel.ann])
+# plot(ps.contain[incr.ID==4, dbh.start], ps.contain[incr.ID==4, biom.rel.ann])
+# plot(ps.contain[incr.ID==11, dbh.start], ps.contain[incr.ID==11, biom.rel.ann])
+# plot(ps.contain[incr.ID==100, dbh.start], ps.contain[incr.ID==100, biom.rel.ann]) ## Ok, comforting. Big trees grow slowly, and within tree growth declines with time/dbh
 
-### initial edge vs. int growth model was full interactive, but slope modifier term was not significant
-# mod.int.edge <- summary(lm(log(growth.mean)~log(avg.dbh)*seg.Edge, data=andy.bai)) #r2=0.46, just edge vs. interior, no sig. dbh*edge interaction
-# b0 <- mod.int.edge$coefficients[1]
-# b1 <- mod.int.edge$coefficients[2]
-# b2 <- mod.int.edge$coefficients[3]
+### modeling growth~dbh*edge
+### ifull interactive, avg.dbh and pseudo
+mod.int.edge <- summary(lm(log(growth.mean)~log(avg.dbh)*seg.Edge, data=andy.bai)) #r2=0.47, no sig. dbh*edge interaction
+mod.int.edge.ps <- summary(lm(log(biom.rel.ann)~log(dbh.start)*seg.Edge, data=ps.contain[dbh.start>=5,])) #r2=0.33, no sig. dbh*edge interaction
 
 ## removing the slope modifier (i.e. just a different intercept for edge vs. interior)
-mod.int.edge.fin <- summary(lm(log(growth.mean)~log(avg.dbh)+seg.Edge, data=andy.bai)) #r2=0.46, just edge vs. interior
+mod.int.edge.fin <- summary(lm(log(growth.mean)~log(avg.dbh)+seg.Edge, data=andy.bai)) #r2=0.47, just edge vs. interior
 b0.bai <- mod.int.edge.fin$coefficients[1]
 b1.bai <- mod.int.edge.fin$coefficients[2]
 b2.bai <- mod.int.edge.fin$coefficients[3]
+
+mod.int.edge.fin.ps <- summary(lm(log(biom.rel.ann)~log(dbh.start)+seg.Edge, data=ps.contain[dbh.start>=5,])) #r2=0.32, just edge vs. interior
+b0.bai.ps <- mod.int.edge.fin.ps$coefficients[1]
+b1.bai.ps <- mod.int.edge.fin.ps$coefficients[2]
+b2.bai.ps <- mod.int.edge.fin.ps$coefficients[3]
+### so really pretty comparable results at individual stem growth level looking at psuedoreps or avg.dbh/growth
+
 ### generalized growth coefficients for edge/interior, based on andy.bai
 col.edge <- c("black", "red")
 plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean), col=col.edge[as.numeric(as.factor(andy.bai$seg.Edge))],
-     pch=15, cex=0.3)
+     pch=15, cex=0.5, main="Andy Trees, avg. dbh")
 abline(b0.bai, b1.bai, col="black")
 abline(b0.bai+b2.bai, b1.bai, col="red")
 
-### contrast to data with 5-year pseudoreplicates
-mod.int.edge.ps <- lm(log(biom.rel.ann)~log(dbh.start)+seg.Edge, 
-                      data=ps.contain[is.finite(biom.rel.ann) & dbh.start>5])
-summary(mod.int.edge.ps) ## down to 0.32 but all factors significant
-mod.int.edge.fin ## not tremendously different coefficients
-## contrast: loose a lot of predictive power with the edge/interior factor
-summary(lm(log(biom.rel.ann)~log(dbh.start), 
-                      data=ps.contain[is.finite(biom.rel.ann) & dbh.start>5]))
-x=seq(1,10, by=0.2)
-plot(x, exp(-1+(-1*x)))
-points(x, exp(-1+(-0.2*x)), col="red")
-points(x, exp(0+(-1*x)), col="blue")
+plot(log(ps.contain$dbh.start), log(ps.contain$biom.rel.ann), col=col.edge[as.numeric(as.factor(ps.contain$seg.Edge))],
+     pch=15, cex=0.5, main="Andy Trees, Pseudoreps")
+abline(b0.bai.ps, b1.bai.ps, col="black")
+abline(b0.bai.ps+b2.bai.ps, b1.bai.ps, col="red")
 
-## non-transformed space ### average growth figures
-mod.int.edge.fin.nls <- nls(growth.mean ~ exp(a + b * log(avg.dbh)), data=andy.bai, start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
-summary(mod.int.edge.fin.nls)
+# ## non-transformed space ### average growth figures
+# mod.int.edge.fin.nls <- nls(growth.mean ~ exp(a + b * log(avg.dbh)), data=andy.bai, start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
+# summary(mod.int.edge.fin.nls)
+# col.edge <- c("royalblue", "purple")
+# plot(andy.bai$avg.dbh, andy.bai$growth.mean, col=col.edge[as.numeric(as.factor(andy.bai$seg.Edge))],
+#      pch=15, cex=0.3, ylab="Growth Rate (kg/kg)", xlab="Stem DBH (cm)", main="Urban Forest stems")
+# points(andy.bai$avg.dbh, exp(b0.bai)*exp(b1.bai*log(andy.bai$avg.dbh)), 
+#        col=col.edge[1], pch=13, cex=0.4)
+# points(andy.bai$avg.dbh, exp(b0.bai+b2.bai)*exp(b1.bai*log(andy.bai$avg.dbh)), 
+#        col=col.edge[2], pch=13, cex=0.4)
+# legend(x=50, y=0.3, legend=c("Edge (<10m)", "Interior"), fill=col.edge, bty="n")
+# 
+# ## non-transformed space ### pseudo-replicates
+# mod.int.edge.ps.nls <- nls(biom.rel.ann ~ exp(a + b * log(dbh.start)), data=ps.contain[is.finite(biom.rel.ann & dbh.start>5),], start=list(a=0, b=0)) 
+# summary(mod.int.edge.ps.nls) ## pretty similar to the original average-dbh assessment
+# ee <- summary(mod.int.edge.ps)
+
+### scatter avg.growth~avg.dbh
 col.edge <- c("royalblue", "purple")
-plot(andy.bai$avg.dbh, andy.bai$growth.mean, col=col.edge[as.numeric(as.factor(andy.bai$seg.Edge))],
-     pch=15, cex=0.3, ylab="Growth Rate (kg/kg)", xlab="Stem DBH (cm)", main="Urban Forest stems")
-points(andy.bai$avg.dbh, exp(b0.bai)*exp(b1.bai*log(andy.bai$avg.dbh)), 
-       col=col.edge[1], pch=13, cex=0.4)
-points(andy.bai$avg.dbh, exp(b0.bai+b2.bai)*exp(b1.bai*log(andy.bai$avg.dbh)), 
-       col=col.edge[2], pch=13, cex=0.4)
+plot(andy.bai$avg.dbh, andy.bai$growth.mean, 
+     col=col.edge[andy.bai$seg.Edge],
+     pch=15, cex=0.4, ylab="Growth Rate (kg/kg)", xlab="Stem DBH (cm)", main="Urban Forest stems (avg dbh)")
+points(andy.bai$avg.dbh, 
+       exp(b0.bai+(b1.bai*log(andy.bai$avg.dbh))), 
+       col=col.edge[1], pch=13, cex=0.6)
+points(andy.bai$avg.dbh, 
+       exp(b2.bai+b0.bai+(b1.bai*log(andy.bai$avg.dbh))), 
+       col=col.edge[2], pch=13, cex=0.6)
 legend(x=50, y=0.3, legend=c("Edge (<10m)", "Interior"), fill=col.edge, bty="n")
 
-## non-transformed space ### pseudo-replicates
-mod.int.edge.ps.nls <- nls(biom.rel.ann ~ exp(a + b * log(dbh.start)), data=ps.contain[is.finite(biom.rel.ann & dbh.start>5),], start=list(a=0, b=0)) 
-summary(mod.int.edge.ps.nls) ## pretty similar to the original average-dbh assessment
-ee <- summary(mod.int.edge.ps) ## down to 0.32 but all factors significant
-
+### with pseudoreps
 col.edge <- c("royalblue", "purple")
-plot(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, dbh.start], ps.contain[is.finite(biom.rel.ann) & dbh.start>5, biom.rel.ann], 
-     col=col.edge[ps.contain[is.finite(biom.rel.ann) & dbh.start>5,seg.Edge]],
-     pch=15, cex=0.3, ylab="Growth Rate (kg/kg)", xlab="Stem DBH (cm)", main="Urban Forest stems")
-points(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, dbh.start], 
-       exp(ee$coefficients[1])*exp(ee$coefficients[2]*ps.contain[is.finite(biom.rel.ann) & dbh.start>5, log(dbh.start)]), 
+plot(ps.contain[dbh.start>5, dbh.start], ps.contain[is.finite(biom.rel.ann) & dbh.start>5, biom.rel.ann], 
+     col=col.edge[ps.contain[dbh.start>5,seg.Edge]],
+     pch=15, cex=0.3, ylab="Growth Rate (kg/kg)", xlab="Stem DBH (cm)", main="Urban Forest stems (pseudoreps)")
+points(ps.contain[dbh.start>5, dbh.start], 
+       exp(b0.bai.ps+(b1.bai.ps*ps.contain[dbh.start>5, log(dbh.start)])), 
        col=col.edge[1], pch=13, cex=0.4)
-points(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, dbh.start], 
-       exp(ee$coefficients[1]+ee$coefficients[3])*exp(ee$coefficients[2]*ps.contain[is.finite(biom.rel.ann) & dbh.start>5, log(dbh.start)]), 
+points(ps.contain[dbh.start>5, dbh.start], 
+       exp(b2.bai.ps+b0.bai.ps+(b1.bai.ps*ps.contain[dbh.start>5, log(dbh.start)])), 
        col=col.edge[2], pch=13, cex=0.4)
 legend(x=50, y=0.3, legend=c("Edge (<10m)", "Interior"), fill=col.edge, bty="n")
 ## ok, minimal disturbance to the overall impression of growth rate by stem, should have minor impact on areal calcs
@@ -324,34 +354,50 @@ names(biom.pred.key) <- c("Spp", "b0", "b1")
 for(b in 1:dim(biom.pred.key)[1]){
   andy.dbh[Spp==biom.pred.key[b, Spp], biom:=exp(biom.pred.key[b, b0]+(biom.pred.key[b,b1]*log(dbh)))]
 }
-hist(andy.dbh[, biom]) ## a couple of monsters
+# hist(andy.dbh[, biom]) ## a couple of monsters
 
 ### where we get the generalized biomass gain per kg in edge vs. interior forest
 andy.dbh[seg==10, growth.kg:=biom*exp(b0.bai+(b1.bai*log(dbh)))]
 andy.dbh[seg%in%c(20,30), growth.kg:=biom*exp(b0.bai+(b1.bai*log(dbh))+b2.bai)]
+### growth as calculated from the dbh~growth including pseudoreplicates
+andy.dbh[seg==10, growth.kg.ps:=biom*exp(b0.bai.ps+(b1.bai.ps*log(dbh)))]
+andy.dbh[seg%in%c(20,30), growth.kg.ps:=biom*exp(b0.bai.ps+(b1.bai.ps*log(dbh))+b2.bai.ps)]
 ## export the processed andy.dbh figures to make life easier elsewhere
 write.csv(andy.dbh, "processed/andy.dbh.proc.results.csv")
 
-g <- andy.dbh[, .(sum(growth), sum(biom)), by=.(seg, Plot.ID)] ## total biomass gain and total biomass for each plot
-g[,rel.gain:=V1/V2] ## this deals in forest growth as a function of biomass, not of forest area
-plot(g$V2, g$rel.gain, col=as.numeric(g$seg), xlab="total plot biomass")
+par(mar=c(4,4,1,1))
+g <- andy.dbh[, .(sum(growth.kg), sum(growth.kg.ps), sum(biom)), by=.(seg, Plot.ID)] ## total biomass gain and total biomass for each plot
+names(g)[3:5] <- c("growth.kg", "growth.kg.ps", "biom")
+g[,rel.gain:=growth.kg/biom] ## this deals in forest growth as a function of biomass, not of forest area
+g[,rel.gain.ps:=growth.kg.ps/biom]
+plot(g$biom, g$rel.gain, col=as.numeric(g$seg), xlab="total plot biomass", main="avg.dbh")
+plot(g$biom, g$rel.gain.ps, col=as.numeric(g$seg), xlab="total plot biomass", main="pseudoreps")
 g[seg==10, seg.F:="E"]
 g[seg!=10, seg.F:="I"]
-g[,mean(rel.gain), by=seg.F] ## 4.34% edge vs. 2.85% interior, annual gain on biomass per edge category
+edint.fact <- g[,mean(rel.gain), by=seg.F] ## 4.34% edge vs. 2.85% interior, annual gain on biomass per edge category
+edint.fact.ps <- g[,mean(rel.gain.ps), by=seg.F] ## 3.91% edge vs. 2.74% interior, annual gain on biomass per edge category
 
 
 ### apply the growth factors to the edge/interior biomass fractions
-biom.dat[,npp.edge:=ed.biom*0.043] ## apply growth of edge trees to edge biomass
-biom.dat[,npp.int:=int.biom*0.028] ## apply growth of interior trees to interior biomass
+biom.dat[,npp.edge:=ed.biom*edint.fact[seg.F=="E", V1]] ## apply growth of edge trees to edge biomass
+biom.dat[,npp.int:=int.biom*edint.fact[seg.F=="I", V1]] ## apply growth of interior trees to interior biomass
 biom.dat[,npp.tot:=npp.edge+npp.int]
 biom.dat[,range(npp.tot, na.rm=T)] ## 0 1443 kg biomass/cell/yr
 biom.dat[,npp.tot.MgC.ha:=((npp.tot*1E-3*(1/2))/aoi)*1E4]
 
-biom.dat[,sum(npp.tot, na.rm=T)]*1E-3*(1/2) #13.8k tC ## IDENTICAL TO FIA ESTIMATE?E??E?E?E
-(biom.dat[,sum(npp.tot, na.rm=T)]*1E-3*(1/2))/(biom.dat[,sum(aoi, na.rm=T)]*1E-4) ## ie 1.1 tC/ha/yr
+### same for pseudorep coefficients
+biom.dat[,npp.edge.ps:=ed.biom*edint.fact.ps[seg.F=="E", V1]] ## apply growth of edge trees to edge biomass
+biom.dat[,npp.int.ps:=int.biom*edint.fact.ps[seg.F=="I", V1]] ## apply growth of interior trees to interior biomass
+biom.dat[,npp.tot.ps:=npp.edge.ps+npp.int.ps]
+biom.dat[,range(npp.tot.ps, na.rm=T)] ## 0 1404 kg biomass/cell/yr
+biom.dat[,npp.tot.ps.MgC.ha:=((npp.tot.ps*1E-3*(1/2))/aoi)*1E4]
 
-hist(biom.dat[aoi>800 & biom>10, npp.tot]) ## up to 1500 kg/cell/yr
-hist(biom.dat[aoi>800 & biom>10, npp.tot.MgC.ha]) ## up to 8 MgC/ha/yr
+
+biom.dat[,sum(npp.tot.ps, na.rm=T)]*1E-3*(1/2) #12.7k tC, a full 1k tC less than using the average dbh coefficients
+(biom.dat[,sum(npp.tot.ps, na.rm=T)]*1E-3*(1/2))/(biom.dat[,sum(aoi, na.rm=T)]*1E-4) ## ie 1.02 tC/ha/yr
+
+hist(biom.dat[aoi>800 & biom>10, npp.tot.ps]) ## up to 1500 kg/cell/yr
+hist(biom.dat[aoi>800 & biom>10, npp.tot.ps.MgC.ha]) ## up to 8 MgC/ha/yr
 ## so that's interesting. A lot produce not much, but there's a longer tail of high productivity that starts to look more like real forest -- up to ~8 MgC/ha/yr
 ## an ancillary question: why does FIA have such a pessimistic idea of productivity, maxes out at 2.5 MgC/ha/yr
 write.csv(biom.dat, "processed/andy.forest.results.csv")
