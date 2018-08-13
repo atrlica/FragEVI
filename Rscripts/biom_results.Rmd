@@ -15,34 +15,49 @@ library(raster)
 ```
 
 ```{r data_setup1, echo=FALSE}
-live <- read.csv("processed/fia.live.stem.dbh.growth.csv")
+## this is all ~7k live stem records from Morreale for local FIA sites
+live <- read.csv("processed/fia.live.stem.dbh.growth.csv") 
 live <- as.data.table(live)
-andy.bai <- read.csv("processed/andy.bai.dbh.results.csv")
+live <- live[order(DIAM_T0, decreasing=F),]
+
+## these are the growth~dbh relationships (ca. 900) for all the Andy forest records, including psuedoreplicates calculated in 5 year intervals for each of the 195 tree cores taken
+andy.bai <- read.csv("processed/andy.bai.dbh.pseudo.csv") 
 andy.bai <- as.data.table(andy.bai)
-street <- read.csv("processed/street.dbh.growth.results.csv")
+andy.bai <- andy.bai[order(dbh.start, decreasing = F),]
+
+## these are the 2006/2014 revisit records for the 6k street trees in Boston
+street <- read.csv("processed/street.dbh.growth.results.csv") 
 street <- as.data.table(street)
+street <- street[order(dbh.2006, decreasing = F),]
 ```
 
-```{r dbh_records, echo=FALSE}
+## Estimates of annual biomass growth rates
+Trees from all three sampling regimes showed a negative inverse relationship between stem DBH (cm) and relative annual growth rate (kg/kg) (Table). Measured relative growth rates were higher in the urban forest and street tree samples than in FIA forest samples, and all samples displayed considerable variability in growth rate, particularly in smaller stems. In the FIA rural forest samples, median DBH was `r round(live[,median(DIAM_T0, na.rm=T)], digits=1)` cm corresponding to median annual growth of `r round(live[, median(growth.ann.rel, na.rm=T)], digits=3)` kg/kg. Urban forest stems grew faster than rural forest, and showed higher growth in edge (<10m) compared to interior stems, with median DBH of `r round(andy.bai[seg.Edge=="E", median(avg.dbh, na.rm=T)], digits=1)` cm and `r round(andy.bai[seg.Edge=="I", median(avg.dbh, na.rm=T)], digits=1)` cm, respectively, corresponding to median annual growth of `r round(andy.bai[seg.Edge=="E", median(growth.mean, na.rm=T)], digits=3)` kg/kg and `r round(andy.bai[seg.Edge=="I", median(growth.mean, na.rm=T)], digits=3)` kg/kg. Street trees showed the highest median annual growth rate of `r round(street[record.good==1 & dbh.2006>5, median(npp.ann.rel, na.rm=T)], digits=3)` kg/kg corresponding to median DBH of `r round(street[record.good==1 & dbh.2006>5, median(dbh.2006, na.rm=T)], digits=1)`. The range and median stem DBH in each sample context were similar, but the street tree sample included very few conifers and a relatively large fraction of non-native taxa, primarily deciduous hardwoods including members of *Gleditsia*, *Zelkova* and *Pyrus*. 
+
+```{r growth_dbh_mod, echo=FALSE}
 ### individual stem growth~dbh
 ## FIA dbh records
-mod.fia.stem.nls <- nls(growth.ann.rel ~ exp(a + b * log(DIAM_T0)), data=live, start=list(a=0, b=0))
-## this is most parsimonious model; log-log including Hard/softwood factor not significant
-# summary(mod.fia.stem.nls)
+mod.fia.stem.nls <- summary(nls(growth.ann.rel ~ exp(a + b * log(DIAM_T0)), data=live, start=list(a=0, b=0)))
+a.fia <- mod.fia.stem.nls$coefficients[1]
+b.fia <- mod.fia.stem.nls$coefficients[2]
+live$pred <- exp(a.fia+(b.fia*log(live$DIAM_T0)))
 
-### Andy dbh records
-mod.int.edge.fin <- summary(lm(log(growth.mean)~log(avg.dbh)+seg.Edge, data=andy.bai)) ## can get away with log-log model here because no negative growth records
+### Andy dbh records ## can get away with log-log model here because no negative growth records
+# mod.int.edge.fin <- summary(lm(log(growth.mean)~log(avg.dbh)+seg.Edge, data=andy.bai)) # not including pseudoreps
+mod.int.edge.fin <- summary(lm(log(biom.rel.ann)~log(dbh.start)+seg.Edge, data=andy.bai))
 b0.bai <- mod.int.edge.fin$coefficients[1]
 b1.bai <- mod.int.edge.fin$coefficients[2]
 b2.bai <- mod.int.edge.fin$coefficients[3]
+andy.bai[seg.Edge=="E", pred:=exp(b0.bai+(b1.bai*log(dbh.start)))]
+andy.bai[seg.Edge=="I", pred:=exp(b0.bai+b2.bai+(b1.bai*log(dbh.start)))]
 
 ## street tree dbh records
-mod.street.nls <- nls(npp.ann.rel ~ exp(a + b * log(dbh.2006)), data=street[record.good==1,], start=list(a=0, b=0)) 
-grub <- summary(mod.street.nls)
-
+mod.street.nls <- summary(nls(npp.ann.rel ~ exp(a + b * log(dbh.2006)), data=street[record.good==1 & dbh.2006>5,], start=list(a=0, b=0))) 
+a.street <- mod.street.nls$coefficients[1]
+b.street <- mod.street.nls$coefficients[2]
+street$pred <- exp(a.street+(b.street*log(street$dbh.2006)))
 ```
-## Estimates of annual biomass growth rates
-Trees from all three sampling regimes showed a negative inverse relationship between stem DBH (cm) and relative annual growth rate (kg/kg) (Table). Measured relative growth rates were higher in the urban forest and street tree samples than in FIA forest samples, and all samples displayed considerable variability in growth rate, particularly in smaller stems. In the FIA rural forest samples, median DBH was `r round(live[,median(DIAM_T0, na.rm=T)], digits=1)` cm corresponding to growth of `r round(live[, median(growth.ann.rel, na.rm=T)], digits=3)` kg/kg. Urban forest stems grew faster than rural forest, and showed significantly higher growth in edge (<10m) compared to interior stems, with median DBH of `r round(andy.bai[seg.Edge=="E", median(avg.dbh, na.rm=T)], digits=1)` cm and `r round(andy.bai[seg.Edge=="I", median(avg.dbh, na.rm=T)], digits=1)` cm, respectively, corresponding to median relative growth of `r round(andy.bai[seg.Edge=="E", median(growth.mean, na.rm=T)], digits=3)` kg/kg and `r round(andy.bai[seg.Edge=="I", median(growth.mean, na.rm=T)], digits=3)` kg/kg. Street trees showed the largest median relative growth rate of `r round(street[record.good==1, median(npp.ann.rel, na.rm=T)], digits=3)` kg/kg corresponding to median DBH of `r round(street[record.good==1, median(dbh.2006, na.rm=T)], digits=1)`. The range and median stem DBH in each sample context were similar, but the street tree sample included very few conifers and a relatively large fraction of non-native taxa, primarily deciduous hardwoods including members of *Gleditsia*, *Zelkova* and *Pyrus*. 
+
 
 ```{r dbh_vs_stemgrowth_FIG, echo=FALSE, message=FALSE, fig.width=8.5, fig.height=3.7}
 par(mfrow=c(1,3), mar=c(4,4,3,1))
@@ -53,35 +68,44 @@ col.type <- c("green", "forestgreen")
 plot(live$DIAM_T0, live$growth.ann.rel, col=col.type[as.numeric(live$type)],
      pch=15, cex=0.3, xlim=main.xlim, ylim=main.ylim,
      xlab="Stem DBH (cm)", ylab="Growth rate (kg/kg)", main="FIA")
-points(live$DIAM_T0, predict(mod.fia.stem.nls),col="black", pch=13, cex=0.4)
+lines(live$DIAM_T0, live$pred,
+       col="black", lwd=3)
 legend(x=30, y=0.6, bty="n", legend = c("Hardwood", "Softwood"), fill=c("green", "forestgreen"))
 abline(v=live[, median(DIAM_T0)])
 abline(h=live[, median(growth.ann.rel)])
 
 ### Andy forest growth~dbh
 col.edge <- c("royalblue", "purple")
-plot(andy.bai$avg.dbh, andy.bai$growth.mean, col=col.edge[as.numeric(as.factor(andy.bai$seg.Edge))],
+# plot(andy.bai$avg.dbh, andy.bai$growth.mean, col=col.edge[as.numeric(as.factor(andy.bai$seg.Edge))],
+#      pch=15, cex=0.3, xlim=main.xlim, ylim=main.ylim,
+#      ylab="Growth Rate (kg/kg)", xlab="Stem DBH (cm)", main="Urban Forest")
+# points(andy.bai$avg.dbh, exp(b0.bai)*exp(b1.bai*log(andy.bai$avg.dbh)), 
+#        col=col.edge[1], pch=13, cex=0.4)
+# points(andy.bai$avg.dbh, exp(b0.bai+b2.bai)*exp(b1.bai*log(andy.bai$avg.dbh)), 
+#        col=col.edge[2], pch=13, cex=0.4)
+### with pseudoreps
+plot(andy.bai$dbh.start, andy.bai$biom.rel.ann, col=col.edge[as.numeric(as.factor(andy.bai$seg.Edge))],
      pch=15, cex=0.3, xlim=main.xlim, ylim=main.ylim,
      ylab="Growth Rate (kg/kg)", xlab="Stem DBH (cm)", main="Urban Forest")
-points(andy.bai$avg.dbh, exp(b0.bai)*exp(b1.bai*log(andy.bai$avg.dbh)), 
-       col=col.edge[1], pch=13, cex=0.4)
-points(andy.bai$avg.dbh, exp(b0.bai+b2.bai)*exp(b1.bai*log(andy.bai$avg.dbh)), 
-       col=col.edge[2], pch=13, cex=0.4)
+lines(andy.bai[seg.Edge=="E", dbh.start], andy.bai[seg.Edge=="E", pred],
+       col=col.edge[1], lwd=3)
+lines(andy.bai[seg.Edge=="I", dbh.start], andy.bai[seg.Edge=="I", pred],
+       col=col.edge[2], lwd=3)
 legend(x=30, y=0.6, legend=c("Edge (<10m)", "Interior"), fill=col.edge, bty="n")
-abline(v=andy.bai[seg.Edge=="E", median(avg.dbh)], col=col.edge[1])
-abline(v=andy.bai[seg.Edge=="I", median(avg.dbh)], col=col.edge[2])
-abline(h=andy.bai[seg.Edge=="E", median(growth.mean)], col=col.edge[1])
-abline(h=andy.bai[seg.Edge=="I", median(growth.mean)], col=col.edge[2])
+abline(v=andy.bai[seg.Edge=="E", median(dbh.start, na.rm=T)], col=col.edge[1])
+abline(v=andy.bai[seg.Edge=="I", median(dbh.start, na.rm=T)], col=col.edge[2])
+abline(h=andy.bai[seg.Edge=="E", median(biom.rel.ann, na.rm=T)], col=col.edge[1])
+abline(h=andy.bai[seg.Edge=="I", median(biom.rel.ann, na.rm=T)], col=col.edge[2])
 
 ## street tree growth~dbh
-plot(street[record.good==1, dbh.2006], street[record.good==1, npp.ann.rel],
+plot(street[record.good==1 & dbh.2006>5, dbh.2006], street[record.good==1, npp.ann.rel],
      pch=15, col="red", cex=0.3, xlim=main.xlim, ylim=main.ylim,
      xlab="Stem DBH (cm)", ylab="Growth rate (kg/kg)", main="Street trees")
-points(street[record.good==1, dbh.2006], 
-       street[record.good==1, exp(grub$coefficients[1]+(grub$coefficients[2]*log(dbh.2006)))],
-       pch=8, col="black", cex=0.4)
-abline(v=street[record.good==1, median(dbh.2006)])
-abline(h=street[record.good==1, median(npp.ann.rel)])
+lines(street[record.good==1 & dbh.2006>5, dbh.2006], 
+       street[record.good==1 & dbh.2006>5, pred],
+       col="black", lwd=3)
+abline(v=street[record.good==1 & dbh.2006>5, median(dbh.2006)])
+abline(h=street[record.good==1 & dbh.2006>5, median(npp.ann.rel)])
 ```
 
 ##### **Figure 1**: Stem DBH and relative growth rate for different forest contexts. Note: Street tree figure truncated to exclude relatively small number of large DBH and large relative growth points.
@@ -94,17 +118,18 @@ live.plot <- live[,.(sum(biom1.spp-biom0.spp, na.rm=T),
                      length(DIAM_T0)), by=PlotID] 
 names(live.plot)[2:4] <- c("biom.growth.spp", "total.biom0.spp.kg", 
                            "num.stems")
-hwood <- live[type=="H", .(sum(biom1.spp-biom0.spp, na.rm=T), 
-                           sum(biom0.spp, na.rm=T)), 
+hwood <- live[type=="H", .(sum(biom1.spp-biom0.spp, na.rm=T),
+                           sum(biom0.spp, na.rm=T)),
               by=PlotID]
 names(hwood)[2:3] <- c("biom.growth.spp.hw", "total.biom0.spp.kg.hw")
-swood <- live[type=="S", .(sum(biom1.spp-biom0.spp, na.rm=T), 
+swood <- live[type=="S", .(sum(biom1.spp-biom0.spp, na.rm=T),
                            sum(biom0.spp, na.rm=T)),
               by=PlotID]
 names(swood)[2:3] <- c("biom.growth.spp.sw", "total.biom0.spp.kg.sw")
 live.plot[,growth.ann.rel.spp:=(biom.growth.spp/4.8)/total.biom0.spp.kg]
+## model of relative areal growth rate~areal biomass density (kg-biomass/ha)
 mod.spp <- lm(log(growth.ann.rel.spp)~log(((total.biom0.spp.kg/675)*1E4)), data=live.plot)
-roop <- (mod.spp) ## slightly sloppier, R2 0.19, coefficients about the same
+## slightly sloppier, R2 0.19, coefficients about the same
 live.plot <- merge(live.plot, hwood, by="PlotID")
 live.plot <- merge(live.plot, swood, by="PlotID")
 live.plot[,growth.ann.rel.hw:=(biom.growth.spp.hw/4.8)/total.biom0.spp.kg.hw]
@@ -124,42 +149,43 @@ g[, total.biom.Mg.ha:=(total.biom.kg/(20*30))*1E4*1E-3]
 ```
 
 ```{r Table_1, echo=FALSE}
-fia.mod <- summary(mod.fia.stem.nls)
+fia.mod <- mod.fia.stem.nls
 andy.mod <- mod.int.edge.fin
-street.mod <- grub
+street.mod <- mod.street.nls
+
 context <- c("FIA (Hard/Softwood)", "Urban Forest (Edge/Int)", "Street Trees")
 
 ### number of stem observations
 N <- c(length(live[PlotID%in%(live.plot[num.stems>20, PlotID]), DIAM_T0]),
-       length(andy.bai[,avg.dbh]),
+       length(andy.bai[dbh.start>5, dbh.start]),
        length(street[dbh.2006>5 & standing.dead.2014==0 & Health!="Poor", dbh.2006]))
 
 ### DBH ranges
 dbh.med <- round(c(live[PlotID%in%(live.plot[num.stems>20, PlotID]), quantile(DIAM_T0, probs=c(0.5))],
-             andy.bai[,quantile(avg.dbh, probs=c(0.5))],
+             andy.bai[is.finite(dbh.start), quantile(dbh.start, probs=c(0.5))],
              street[dbh.2006>5 & standing.dead.2014==0 & Health!="Poor", quantile(dbh.2006, probs=c(0.5))]), digits=1)
 
 dbh.low <- round(c(live[PlotID%in%(live.plot[num.stems>20, PlotID]), quantile(DIAM_T0, probs=c(0.025))],
-             andy.bai[,quantile(avg.dbh, probs=c(0.025))],
+             andy.bai[is.finite(dbh.start),quantile(dbh.start, probs=c(0.025))],
              street[dbh.2006>5 & standing.dead.2014==0 & Health!="Poor", quantile(dbh.2006, probs=c(0.025))]), digits=1)  
 
 dbh.hi <- round(c(live[PlotID%in%(live.plot[num.stems>20, PlotID]), quantile(DIAM_T0, probs=c(0.975))],
-             andy.bai[,quantile(avg.dbh, probs=c(0.975))],
+             andy.bai[is.finite(dbh.start),quantile(dbh.start, probs=c(0.975))],
              street[dbh.2006>5 & standing.dead.2014==0 & Health!="Poor", quantile(dbh.2006, probs=c(0.975))]), digits=1)
 
 dbh.col <- paste(dbh.med, " (", dbh.low, "-", dbh.hi, ")", sep="")
 
 ## growth ranges
 growth.med <- round(c(live[PlotID%in%(live.plot[num.stems>20, PlotID]), quantile(growth.ann.rel, probs=c(0.5))],
-             andy.bai[,quantile(growth.mean, probs=c(0.5))],
+             andy.bai[is.finite(dbh.start),quantile(biom.rel.ann, probs=c(0.5))],
              street[dbh.2006>5 & standing.dead.2014==0 & Health!="Poor", quantile(npp.ann.rel, probs=c(0.5))]), digits=3)
 
 growth.low <- round(c(live[PlotID%in%(live.plot[num.stems>20, PlotID]), quantile(growth.ann.rel, probs=c(0.025))],
-             andy.bai[,quantile(growth.mean, probs=c(0.025))],
+             andy.bai[is.finite(dbh.start),quantile(biom.rel.ann, probs=c(0.025))],
              street[dbh.2006>5 & standing.dead.2014==0 & Health!="Poor", quantile(npp.ann.rel, probs=c(0.025))]), digits=3)  
 
 growth.hi <- round(c(live[PlotID%in%(live.plot[num.stems>20, PlotID]), quantile(growth.ann.rel, probs=c(0.975))],
-             andy.bai[,quantile(growth.mean, probs=c(0.975))],
+             andy.bai[is.finite(dbh.start),quantile(biom.rel.ann, probs=c(0.975))],
              street[dbh.2006>5 & standing.dead.2014==0 & Health!="Poor", quantile(npp.ann.rel, probs=c(0.975))]), digits=3)
 
 growth.col <- paste(growth.med, " (", growth.low, "-", growth.hi, ")", sep="")
@@ -175,7 +201,7 @@ b0.col <- paste(b0.mods, " (", b0.se, ")", sep="")
 b1.col <- paste(b1.mods, " (", b1.se, ")", sep="")
 b2.col <- paste(b2.mods, " (", b2.se, ")", sep="")
 
-stem.tab <- data.frame(cbind(N, dbh.col, growth.col, b0.col, b1.col, b2.col))
+stem.tab <- data.frame(cbind(context, N, dbh.col, growth.col, b0.col, b1.col, b2.col))
 
 ## areal biomass density
 biom.dens <- round(live.plot[num.stems>20, median(((total.biom0.spp.kg/675)*1E4*1E-3), na.rm=T)], digits=1)

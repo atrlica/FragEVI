@@ -391,9 +391,11 @@ points((live.plot$total.biom0.spp.kg/675)*1E4, live.plot$growth.ann.rel.hw, cex=
 summary((live.plot$total.biom0.spp.kg.hw*(1E4/675))/(live.plot$total.biom0.spp.kg*(1E4/675))) ## most plots are more than half hardwood
 live.plot[,hw.frac:=total.biom0.spp.kg.hw/total.biom0.spp.kg]
 live.plot[hw.frac<0.1,] ## the high ones are all low fraction of HW
-live.plot[growth.ann.rel.hw>0.1, hw.frac] ## but there's on that is 40% HW
+live.plot[growth.ann.rel.hw>0.1, hw.frac] ## but there's one that is 40% HW
 ### fuck it, life is messy
 mod.exp.all <- nls(growth.ann.rel.spp ~ exp(a + b * (total.biom0.spp.kg*(1E4/675))),
+                   data=live.plot, start=list(a=0, b=0))
+mod.exp.all.log <- nls(growth.ann.rel.spp ~ exp(a + b * log(total.biom0.spp.kg*(1E4/675))),
                    data=live.plot, start=list(a=0, b=0))
 mod.exp.hw <- nls(growth.ann.rel.hw ~ exp(a + b * (total.biom0.spp.kg*(1E4/675))),
                   data=live.plot, start=list(a=0, b=0))

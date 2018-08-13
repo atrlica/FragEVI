@@ -454,7 +454,7 @@ mod.spp <- lm(log(growth.ann.rel.spp)~log(((total.biom0.spp.kg/675)*1E4)), data=
 summary(mod.spp) ## slightly sloppier, R2 0.19, coefficients about the same
 
 plot(live.plot[,log(((total.biom0.def.kg/675)*1E4))], live.plot[,log(growth.ann.rel.def)], cex=0.5, col="gray55")
-points(live.plot[,log(((total.biom0.spp.kg/675)*1E4))], live.plot[,log(growth.ann.rel.spp)], cex=0.5, col="forestgreen")
+plot(live.plot[,log(((total.biom0.spp.kg/675)*1E4))], live.plot[,log(growth.ann.rel.spp)], cex=0.5, col="forestgreen")
 ### a marginal shift , doesn't apear to be pivotal
 live.plot[growth.ann.rel.spp<0,] ## two plots 255 47 show a decline in biomss! One of them is very low biomass (255)
 
