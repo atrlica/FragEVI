@@ -6,6 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
+library(knitr)
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = "E:/FragEVI/")
 library(data.table)
@@ -32,7 +33,7 @@ street <- street[order(dbh.2006, decreasing = F),]
 ```
 
 ## Estimates of annual biomass growth rates
-Trees from all three sampling regimes showed a negative inverse relationship between stem DBH (cm) and relative annual growth rate (kg/kg) (Table). Measured relative growth rates were higher in the urban forest and street tree samples than in FIA forest samples, and all samples displayed considerable variability in growth rate, particularly in smaller stems. In the FIA rural forest samples, median DBH was `r round(live[,median(DIAM_T0, na.rm=T)], digits=1)` cm corresponding to median annual growth of `r round(live[, median(growth.ann.rel, na.rm=T)], digits=3)` kg/kg. Urban forest stems grew faster than rural forest, and showed higher growth in edge (<10m) compared to interior stems, with median DBH of `r round(andy.bai[seg.Edge=="E", median(avg.dbh, na.rm=T)], digits=1)` cm and `r round(andy.bai[seg.Edge=="I", median(avg.dbh, na.rm=T)], digits=1)` cm, respectively, corresponding to median annual growth of `r round(andy.bai[seg.Edge=="E", median(growth.mean, na.rm=T)], digits=3)` kg/kg and `r round(andy.bai[seg.Edge=="I", median(growth.mean, na.rm=T)], digits=3)` kg/kg. Street trees showed the highest median annual growth rate of `r round(street[record.good==1 & dbh.2006>5, median(npp.ann.rel, na.rm=T)], digits=3)` kg/kg corresponding to median DBH of `r round(street[record.good==1 & dbh.2006>5, median(dbh.2006, na.rm=T)], digits=1)`. The range and median stem DBH in each sample context were similar, but the street tree sample included very few conifers and a relatively large fraction of non-native taxa, primarily deciduous hardwoods including members of *Gleditsia*, *Zelkova* and *Pyrus*. 
+Trees from all three sampling regimes showed a negative inverse relationship between stem DBH (cm) and relative annual growth rate (kg/kg) (Table 1). Median relative growth rates were higher in the urban forest and street tree samples than in FIA forest samples, and all stems displayed considerable intrasite variability, particularly in smaller stems. In the FIA rural forest samples, median DBH was `r round(live[,median(DIAM_T0, na.rm=T)], digits=1)` cm corresponding to median annual growth of `r round(live[, median(growth.ann.rel, na.rm=T)], digits=3)` kg/kg. Urban forest stems grew faster than rural forest, and showed higher growth in edge (<10m) compared to interior stems, with median DBH of `r round(andy.bai[seg.Edge=="E", median(avg.dbh, na.rm=T)], digits=1)` cm and `r round(andy.bai[seg.Edge=="I", median(avg.dbh, na.rm=T)], digits=1)` cm, respectively, corresponding to median annual growth of `r round(andy.bai[seg.Edge=="E", median(growth.mean, na.rm=T)], digits=3)` kg/kg and `r round(andy.bai[seg.Edge=="I", median(growth.mean, na.rm=T)], digits=3)` kg/kg. Street trees showed the highest median annual growth rate of `r round(street[record.good==1 & dbh.2006>5, median(npp.ann.rel, na.rm=T)], digits=3)` kg/kg corresponding to median DBH of `r round(street[record.good==1 & dbh.2006>5, median(dbh.2006, na.rm=T)], digits=1)`. The range and median stem DBH in each sample context were similar, but the street tree sample included very few conifers and a relatively large fraction of non-native taxa, primarily deciduous hardwoods including members of *Gleditsia*, *Zelkova* and *Pyrus*. 
 
 ```{r growth_dbh_mod, echo=FALSE}
 ### individual stem growth~dbh
@@ -111,44 +112,9 @@ abline(h=street[record.good==1 & dbh.2006>5, median(npp.ann.rel)])
 ##### **Figure 1**: Stem DBH and relative growth rate for different forest contexts. Note: Street tree figure truncated to exclude relatively small number of large DBH and large relative growth points.
 
 
-```{r areal_growth, echo=FALSE, message=FALSE, warning=FALSE}
-### FIA areal basis
-live.plot <- live[,.(sum(biom1.spp-biom0.spp, na.rm=T),
-                     sum(biom0.spp, na.rm=T),
-                     length(DIAM_T0)), by=PlotID] 
-names(live.plot)[2:4] <- c("biom.growth.spp", "total.biom0.spp.kg", 
-                           "num.stems")
-hwood <- live[type=="H", .(sum(biom1.spp-biom0.spp, na.rm=T),
-                           sum(biom0.spp, na.rm=T)),
-              by=PlotID]
-names(hwood)[2:3] <- c("biom.growth.spp.hw", "total.biom0.spp.kg.hw")
-swood <- live[type=="S", .(sum(biom1.spp-biom0.spp, na.rm=T),
-                           sum(biom0.spp, na.rm=T)),
-              by=PlotID]
-names(swood)[2:3] <- c("biom.growth.spp.sw", "total.biom0.spp.kg.sw")
-live.plot[,growth.ann.rel.spp:=(biom.growth.spp/4.8)/total.biom0.spp.kg]
-## model of relative areal growth rate~areal biomass density (kg-biomass/ha)
-mod.spp <- lm(log(growth.ann.rel.spp)~log(((total.biom0.spp.kg/675)*1E4)), data=live.plot)
-## slightly sloppier, R2 0.19, coefficients about the same
-live.plot <- merge(live.plot, hwood, by="PlotID")
-live.plot <- merge(live.plot, swood, by="PlotID")
-live.plot[,growth.ann.rel.hw:=(biom.growth.spp.hw/4.8)/total.biom0.spp.kg.hw]
-live.plot[,growth.ann.rel.sw:=(biom.growth.spp.sw/4.8)/total.biom0.spp.kg.sw]
-
-## Andy plot-level
-andy.dbh <- read.csv("processed/andy.dbh.proc.results.csv")
-andy.dbh <- as.data.table(andy.dbh)
-g <- andy.dbh[, .(sum(growth.kg), sum(biom)), by=.(seg, Plot.ID)] 
-g[,rel.gain:=V1/V2] 
-g[seg==10, seg.F:="E"]
-g[seg!=10, seg.F:="I"]
-names(g)[3:4] <- c("plot.growth.kg", "total.biom.kg")
-g[, total.biom.Mg.ha:=(total.biom.kg/(20*30))*1E4*1E-3]
-# g[,mean(rel.gain), by=seg.F] ## 4.34% edge vs. 2.85% interior, annual gain on biomass per edge category
-
-```
-
+Talk about the model construction of stem growth as function of dbh here
 ```{r Table_1, echo=FALSE}
+require(knitr)
 fia.mod <- mod.fia.stem.nls
 andy.mod <- mod.int.edge.fin
 street.mod <- mod.street.nls
@@ -203,27 +169,83 @@ b2.col <- paste(b2.mods, " (", b2.se, ")", sep="")
 
 stem.tab <- data.frame(cbind(context, N, dbh.col, growth.col, b0.col, b1.col, b2.col))
 
+kable(stem.tab, format="markdown", row.names=F, 
+      col.names=c("Site", "N", "DBH (cm)", "Growth (kg/kg)", "B0", "B1", "B2"),
+      align="l", caption=c("Stem growth rates in local site samples"))
+```
+
+```{r areal_growth, echo=FALSE, message=FALSE, warning=FALSE}
+### FIA areal basis
+live <- read.csv("processed/fia.live.stem.dbh.growth.csv")
+live <- as.data.table(live)
+live.plot <- live[,
+                  .(length(unique(SubID)),
+                    sum(biom.delt.spp, na.rm=T), 
+                    sum(biom0.spp, na.rm=T),
+                    length(DIAM_T0)),
+                  by=PlotID]
+names(live.plot) <- c("PlotID", "num.subplots", "biom.growth", "total.biom0.kg", "num.stems")
+subplot.area <- (7.3152^2)*pi ## subplots are 24ft in radius
+live.plot[,total.biom0.Mg.ha:=((total.biom0.kg/1000)/(num.subplots*subplot.area))*1E4] ## biomass density in aggregated area covered by the fully forested subplots
+live.plot[,biom.growth.ann:=biom.growth/4.8]
+live.plot[,biom.growth.ann.rel:=(biom.growth.ann)/total.biom0.kg]
+hwood <- live[type=="H", .(sum(biom1.spp-biom0.spp, na.rm=T), 
+                           sum(biom0.spp, na.rm=T)), 
+              by=PlotID]
+names(hwood)[2:3] <- c("biom.growth.spp.hw", "total.biom0.spp.kg.hw")
+swood <- live[type=="S", .(sum(biom1.spp-biom0.spp, na.rm=T), 
+                           sum(biom0.spp, na.rm=T)),
+              by=PlotID]
+names(swood)[2:3] <- c("biom.growth.spp.sw", "total.biom0.spp.kg.sw")
+
+live.plot <- merge(live.plot, hwood, by="PlotID")
+live.plot <- merge(live.plot, swood, by="PlotID")
+live.plot[,biom.growth.ann.hw:=(biom.growth.spp.hw/4.8)/total.biom0.spp.kg.hw]
+live.plot[,biom.growth.ann.sw:=(biom.growth.spp.sw/4.8)/total.biom0.spp.kg.sw]
+
+
+## Andy plot-level
+andy.dbh <- read.csv("processed/andy.dbh.proc.results.csv")
+andy.dbh <- as.data.table(andy.dbh)
+g <- andy.dbh[, .(sum(growth.kg), sum(growth.kg.ps), sum(biom)), by=.(seg, Plot.ID)] ## total biomass gain and total biomass for each plot
+names(g)[3:5] <- c("growth.kg", "growth.kg.ps", "biom")
+g[,rel.gain:=growth.kg/biom] ## this deals in forest growth as a function of biomass, not of forest area
+g[,rel.gain.ps:=growth.kg.ps/biom]
+g[seg==10, seg.F:="E"]
+g[seg!=10, seg.F:="I"]
+g[,biom.kg.ha:=(biom/(10*20))*1E4] ## get things in a standard biomass density
+g[,mean(rel.gain), by=seg.F] ## 4.34% edge vs. 2.85% interior, annual gain on biomass per edge category
+g[,mean(rel.gain.ps), by=seg.F] ## 3.91% edge vs. 2.74% interior, annual gain on biomass per edge category
+
+```
+
+Growth rates on an areal basis (kg-biomass/Mg-biomass/ha) were best predicted as an exponential function of log-biomass density (kg-biomass/ha), comparable to the growth-DBH relationships shown on a per-stem basis (Table 2). On an areal basis, the FIA rural forest plots showed a lower median hardwood growth rate of `r round(live.plot[num.stems>20, median(growth.ann.rel.hw, na.rm=T)], digits=3)` kg/Mg/ha corresponding to median biomass density of `r round(live.plot[num.stems>20, (median(total.biom0.spp.kg, na.rm=T)/675)*1E-3*1E4], digits=1)` Mg/ha, reflecting the lower per-stem rate of growth in the rural forest sample. In the FIA rural forest sample growth rates in individual stems did not differ significantly between hard- and softwoods, but given the comparatively low frequency of softwoods noted in the urban forest and street tree samples the the modeled areal-basis growth rate of hardwoods alone was used as the basis for estimating productivity in the city of Boston.
+Areal growth rates in urban forest plots were estimated by estimating edge- and interior-specific stem growth rates of every tree >5cm DBH in each plot based on stem DBH. Median areal growth rate in the urban forest plots, accounting for edge position, was `r round(g[seg.F=="E", median(rel.gain, na.rm=T)], digits=3)` kg/Mg/ha in the edge (<10m) plots compared to `r round(g[seg.F=="I", median(rel.gain, na.rm=T)], digits=3)` kg/Mg/ha in interior plots across a range of biomass density from `r round(g[, (min(total.biom.kg)/(20*30))*1E4*1E-3], digits=1)`--`r round(g[, (max(total.biom.kg)/(20*30))*1E4*1E-3], digits=1)` Mg/ha. Per-area growth in edge canopy of urban forests was higher than interior canopy, but declined more quickly with greater biomass density. Street tree growth on a per-area basis could not be estimated directly with the sample scheme employed, and was instead areal biomass productivity was predicted on the basis of estimated productivity in simulated aggregates of individual stems (Methods).
+
+```{r Table_2, echo=F, message=F}
 ## areal biomass density
-biom.dens <- round(live.plot[num.stems>20, median(((total.biom0.spp.kg/675)*1E4*1E-3), na.rm=T)], digits=1)
-andy.dens <- round(c(g[seg.F=="E", median(total.biom.Mg.ha)],
-                     g[seg.F=="I", median(total.biom.Mg.ha)]), digits=1)
-biom.dens <- paste(biom.dens, " (", 
+live.N <- dim(live.plot[num.stems<20,]) ## update once you figure how to groom this for partial
+live.dens <- round(live.plot[num.stems>20, median(((total.biom0.spp.kg/675)*1E4*1E-3), na.rm=T)], digits=1)
+live.dens <- paste(live.dens, " (", 
                    round(live.plot[num.stems>20, quantile(((total.biom0.spp.kg/675)*1E4*1E-3), probs=0.025)], digits=1),
                    "-",
                    round(live.plot[num.stems>20, quantile(((total.biom0.spp.kg/675)*1E4*1E-3), probs=0.975)], digits=1),
                    ")", sep="")
+
+andy.dens <- round(c(g[seg.F=="E", median(biom.kg.ha)/1000],
+                     g[seg.F=="I", median(biom.kg.ha)]/1000), digits=1)
 andy.dens <- paste(andy.dens[1], " (",
-                   round(g[seg.F=="E", quantile(total.biom.Mg.ha, probs=0.025)], digits=1),
+                   round(g[seg.F=="E", quantile(biom.kg.ha, probs=0.025)/1000], digits=1),
                    "-",
-                   round(g[seg.F=="E", quantile(total.biom.Mg.ha, probs=0.975)], digits=1),
+                   round(g[seg.F=="E", quantile(biom.kg.ha, probs=0.975)/1000], digits=1),
                    ") / ",
                    andy.dens[2], " (",
-                   round(g[seg.F=="I", quantile(total.biom.Mg.ha, probs=0.025)], digits=1),
+                   round(g[seg.F=="I", quantile(biom.kg.ha, probs=0.025)/1000], digits=1),
                    "-",
-                   round(g[seg.F=="I", quantile(total.biom.Mg.ha, probs=0.975)], digits=1),
+                   round(g[seg.F=="I", quantile(biom.kg.ha, probs=0.975)/1000], digits=1),
                    ")", sep="")
 
-biom.dens.col <- c(biom.dens, andy.dens, "NA")
+biom.dens.col <- c(live.dens, andy.dens, "NA")
 
 ## areal biomass growth rate
 biom.growth <- round(live.plot[num.stems>20, median(growth.ann.rel.hw, na.rm=T)], digits=3)
@@ -255,7 +277,7 @@ stem.tab
 ```
 ##### **Table 1**: Summary of stem growth in FIA plots, urban forest, and street trees. Figures in parentheses represent median and central 95% of data; significant model coefficients (p<0.05) are shown with standard errors and apply to the formula growth = exp(B0 + B1*log(DBH) + B2), with B2 corresponding to hardwoods vs. softwoods in FIA plots and in edge vs. interior plots in the urban forest. 
 
-Biomass growth on an areal basis was lowest in the FIA plots with a median growth rate in hardwoods of `r round(live.plot[num.stems>20, median(growth.ann.rel.hw, na.rm=T)], digits=3)` kg/Mg/ha corresponding to median biomass density of `r round(live.plot[num.stems>20, (median(total.biom0.spp.kg, na.rm=T)/675)*1E-3*1E4], digits=1)` Mg/ha, reflecting to the lower per-stem rate of growth in the rural forest sample. Areal growth rates in urban forest plots were estimated by estimating edge- and interior-specific stem growth rates of every tree >5cm DBH in each plot based on stem DBH. Median areal growth rate in the urban forest plots was `r round(g[seg.F=="E", median(rel.gain, na.rm=T)], digits=3)` kg/Mg/ha in the edge (<10m) plots compared to `r round(g[seg.F=="I", median(rel.gain, na.rm=T)], digits=3)` kg/Mg/ha in interior plots across a range of biomass density from `r round(g[, (min(total.biom.kg)/(20*30))*1E4*1E-3], digits=1)`--`r round(g[, (max(total.biom.kg)/(20*30))*1E4*1E-3], digits=1)` Mg/ha. Urban forest plots showed a significant exponential relationship to log-biomass density, but variability at all levels of density remained high. Due to the lower number of individual plots and somewhat restricted range of biomass density sampled in the urban forest context, a single growth factor was used for edge and interior biomass in order to estimate NPP in urban forest and high-biomass pixels. Street trees were not sampled on an areal basis, necessitating the estimation of areal biomass productivity on the basis of estimated productivity in simulated aggregates of individual stems. 
+
 
 ### Estimates of NPP in Boston
 ```{r npp_estimates, echo=FALSE}

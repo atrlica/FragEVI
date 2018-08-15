@@ -257,10 +257,11 @@ summary(mod.fia.live.spp) ## no significant effect of tree type (hard or soft)
 
 ###########
 spp.allo <- read.csv("data/FIA/spp_allometrics.csv") 
-live <- read.csv("data/FIA/MA_Tree_Data_ID_NOMORT.csv")
+live <- read.csv("data/FIA/MA_Tree_Data_ID_NOMORT_SUBID.csv")
 live <- as.data.table(live)
 names(live)[1] <- c("TreeID")
 names(live)[2] <- c("PlotID")
+names(live)[3] <- c("SubID")
 spec <- read.csv("data/FIA/REF_SPECIES.csv")
 live <- merge(x=live, y=spec[,c("SPCD", "GENUS", "SPECIES")], by.x="SPECIES_CD", by.y="SPCD", all.x=T, all.y=F)
 live$GENUS <- as.character(live$GENUS)
@@ -284,7 +285,7 @@ live[,growth.ann.rel:=(biom.delt.spp/biom0.spp)/4.8]
 summary(live$growth.ann.rel)
 write.csv(live, "processed/fia.live.stem.dbh.growth.csv")
 
-# 
+# Previous approach -- using eastern hardwood defaults for all allometrics
 # ### using eastern hardwood defaults, but a lot of the record are Pinus or Tsuga. Might be good to go ahead and use the correct generic equation
 # b0 <- -2.48
 # b1 <- 2.4835 ## these are eastern hardwood defaults
@@ -296,15 +297,32 @@ write.csv(live, "processed/fia.live.stem.dbh.growth.csv")
 # live$dbh.delt <- live$DIAM_T1-live$DIAM_T0
 # summary(live$biom.delt) ## some living trees are losing a lot of biomass
 
+
+# ### how much correction are we seeing by adjusting the equations?
+# plot(live[,biom0], live[,biom0.spp])
+# abline(a=0, b=1) ## most are slightly more biomass than predicted by E hardwood defaults
+# plot(live[, biom1], live[, biom1.spp])
+# abline(a=0, b=1) ## same, slightly higher biomass
+# summary(live$DIAM_T0) ### most of these aren't too far out of spec for the allometric equations to use
+
+
 ### individual stem growth~dbh
 plot(log(live$DIAM_T0), log(live$growth.ann.rel))
 plot(live$DIAM_T0, live$growth.ann.rel)
 
+#### Next Hotness: Get rid of records from partially forested subplots
+## first cull out the subplots that are too sparse (no fewer than 5 trees per subplot)
+a <- live[,length(DIAM_T0), by=.(PlotID, SubID)]
+a[,compID:=paste(PlotID, SubID, sep=".")]
+kill.me <- a[V1<5, compID]
+live[,compID:=paste(PlotID, SubID, sep=".")]
+live <- live[!(compID%in%kill.me),] ## remove records of dbh if they come from subplots with fewer than 5 trees
+
 ## log model, growth>0, no hard/soft designation
 mod.fia.stem.log <- lm(log(growth.ann.rel)~log(DIAM_T0), data=live[growth.ann.rel>0])
-m1 <- summary(mod.fia.stem.log) #R2 0.04, signficant
+m1 <- summary(mod.fia.stem.log) #R2 0.03, signficant
 mod.fia.stem.type.log <- lm(log(growth.ann.rel)~log(DIAM_T0)*type, data=live[growth.ann.rel>0])
-m2 <- summary(mod.fia.stem.type.log) # R2 0.05, type not significant
+m2 <- summary(mod.fia.stem.type.log) # R2 0.04, type not significant
 plot(log(live$DIAM_T0), log(live$growth.ann.rel), col=as.numeric(live$type)+1) #S=2, H=1
 abline(a=m2$coefficients[1], b=m2$coefficients[2], lty=2, col="gray55")
 abline(a=m1$coefficients[1], b=m1$coefficients[2], lty=1, col="black")
@@ -316,118 +334,57 @@ plot(live$DIAM_T0, live$growth.ann.rel, col=col.type[as.numeric(live$type)], pch
 points(live$DIAM_T0, predict(mod1.nls),col="black", pch=13, cex=0.4)
 legend(x=60, y=0.4, bty="n", legend = c("Hardwood", "Softwood"), fill=c("green", "forestgreen"))
 
+write.csv(live, "processed/fia.live.stem.dbh.growth.csv") ## get this groomed data out
 
 
-### equivalent plot-level assessment in live-only data
-live.plot <- live[,.(sum(biom.delt, na.rm=T), 
-                     sum(biom0, na.rm=T),
-                     length(DIAM_T0)), by=PlotID] ## we are missing one plot -- all dead?
-names(live.plot)[2:4] <- c("biom.growth", "total.biom0.kg", "num.stems")
+### equivalent plot-level assessment in live-only data ## 331 plots have at least one subplot dense enough to bother with
+live <- read.csv("processed/fia.live.stem.dbh.growth.csv")
+live <- as.data.table(live)
 
+live.plot <- live[,
+                  .(length(unique(SubID)),
+                    sum(biom.delt.spp, na.rm=T), 
+                    sum(biom0.spp, na.rm=T),
+                    length(DIAM_T0)),
+                  by=PlotID]
+names(live.plot) <- c("PlotID", "num.subplots", "biom.growth", "total.biom0.kg", "num.stems")
 plot(live.plot[,total.biom0.kg], live.plot[,num.stems]) ## linear but gets unconstrained above ~20 stems/plot
-plot(live.plot[num.stems>20, total.biom0.kg], live.plot[num.stems>20, num.stems]) ## shotgun
-cor(live.plot[num.stems>20, total.biom0.kg], live.plot[num.stems>20, num.stems]) ## rho 0.07
+cor(live.plot[, total.biom0.kg], live.plot[, num.stems]) ## rho 0.60
 ## the "fully forested" plots sample 5k to 25k kg/plot
-(25000/675)*1E4/2000 ##37 to 185 tC/ha -- anything below 37 we might claim is not wall to wall forest
 
 ## plot-level growth
+subplot.area <- (7.3152^2)*pi ## subplots are 24ft in radius
+live.plot[,total.biom0.Mg.ha:=((total.biom0.kg/1000)/(num.subplots*subplot.area))*1E4] ## biomass density in aggregated area covered by the fully forested subplots
 live.plot[,biom.growth.ann:=biom.growth/4.8]
-live.plot[,biom.growth.ann.rel:=biom.growth.ann/total.biom0.kg]
-hist(live.plot$biom.growth.ann.rel) ## most plots below 5%, a few are wildly productive, 25%, a couple decline
-summary(live.plot$biom.growth.ann.rel) ## -2% to 25% per plot !!!
-hist(live.plot[num.stems>20, biom.growth.ann.rel])
-summary(live.plot[num.stems>20, biom.growth.ann.rel]) ## still one ass plot that has slightly negative growth
+live.plot[,biom.growth.ann.rel:=(biom.growth.ann)/total.biom0.kg]
+hist(live.plot$biom.growth.ann.rel) ## most plots below 5%, a few are wildly productive, a couple decline
+summary(live.plot$biom.growth.ann.rel) ## -1% to 14%
 
-
-## plot level density
-hist(live.plot[num.stems>20, total.biom0.kg], breaks=10) ## peak 5-10k kg
-hist((live.plot[num.stems>20, total.biom0.kg]/675)*1E4/2000, breaks=10) ## i.e. peaking 50-100 MgC/ha, up to 200
-(live.plot[num.stems>20,median(total.biom0.kg, na.rm=T)/2000]/675)*1E4 ## median 71 MgC/ha/yr
-(live.plot[num.stems>20, (median(num.stems, na.rm=T)/675)*1E4]) ## median 430 stems/ha
-
+# ## plot level density
+# hist(live.plot[num.stems>20, total.biom0.kg], breaks=10) ## peak 5-10k kg
+# hist((live.plot[num.stems>20, total.biom0.kg]/675)*1E4/2000, breaks=10) ## i.e. peaking 50-100 MgC/ha, up to 200
+# (live.plot[num.stems>20,median(total.biom0.kg, na.rm=T)/2000]/675)*1E4 ## median 71 MgC/ha/yr
+# (live.plot[num.stems>20, (median(num.stems, na.rm=T)/675)*1E4]) ## median 430 stems/ha
 
 ## growth~biomass
 plot(live.plot$total.biom0.kg, live.plot$biom.growth.ann.rel) ## exponential negative, the super productive ones were very low biomass to begin
 plot(live.plot$total.biom0.kg, live.plot$biom.growth.ann) ## linear-ish, more biomass --> more growth (no bottoming out)
-## excluding partial forest
-plot(live.plot[num.stems>20, total.biom0.kg], live.plot[num.stems>20, biom.growth.ann.rel]) ## exponential negative, the super productive ones were very low biomass to begin
-live.plot[,biom0.kg.ha:=(total.biom0.kg/675)*1E4]
-hist(live.plot$biom0.kg.ha/1000) ## some of these plots are very high biomass, well above the equation cut off for positive growth
-plot(live.plot$biom0.kg.ha/1000, live.plot$biom.growth.ann) 
-plot(live.plot$biom0.kg.ha/1000, live.plot$biom.growth.ann.rel) ##  contrast the equation version that says anything >120 Mg/ha doesn't gain live biomass
-abline(h=0, col="red")
+plot(live.plot$total.biom0.Mg.ha, live.plot$biom.growth.ann.rel) ## OK more happily exponential
+plot(live.plot[,log(total.biom0.Mg.ha)], live.plot[,log(biom.growth.ann.rel)]) ## kind of lackluster negative scatter
 
-summary(live.plot$biom.growth.ann.rel) ## 0.4-25%, fairly tight 2-3%
-summary(live.plot$biom0.kg.ha/1000) ## 0.7 <- 384, 66-154 middle part -- some are nearly not forest!
-hist(log(live.plot$biom.growth.ann.rel)) ## this is more normal
-hist(log(live.plot$total.biom0.kg)) ## this is more normal but not that normal, skewed left (a handful of super low biomass plots)
-plot(log(live.plot$total.biom0.kg), log(live.plot$biom.growth.ann.rel))
-l <- lm(log(biom.growth.ann.rel)~log(total.biom0.kg), data=live.plot) ### not great
-points(log(live.plot$total.biom0.kg), predict(l), col="red", lty=2)
-summary(l) ## really minor difference to the growth>0 filtered set above, R2 0.22
+# ## excluding partial forest
+# plot(live.plot[num.stems>20, total.biom0.kg], live.plot[num.stems>20, biom.growth.ann.rel]) ## exponential negative, the super productive ones were very low biomass to begin
+# live.plot[,biom0.kg.ha:=(total.biom0.kg/675)*1E4]
+# hist(live.plot$biom0.kg.ha/1000) ## some of these plots are very high biomass, well above the equation cut off for positive growth
+# plot(live.plot$biom0.kg.ha/1000, live.plot$biom.growth.ann) 
+# plot(live.plot$biom0.kg.ha/1000, live.plot$biom.growth.ann.rel) ##  contrast the equation version that says anything >120 Mg/ha doesn't gain live biomass
 
-
-
-##### FIT CORRECT ALLOMETRICS TO DOMINANT SPECIES
-# # table(live$GENUS) ## I'll do ACER, BETULA, CARY, PINUS, QUERCUS, FRAXINUS, PRUNUS, TSUGA
-# live[GENUS%in%c("Acer", "Betula", "Carya", "Fraxinus", "Pinus", "Prunus", "Quercus", "Tsuga")]
-# 7612/dim(live)[1] ## 96% of records covered
-# live[,spp:=paste(substr(GENUS, 1,1), ".", SPECIES, sep="")]
-# live[GENUS%in%c("Acer", "Betula", "Carya", "Fraxinus", "Pinus", "Prunus", "Quercus", "Tsuga"), unique(spp)]
-# table(live[GENUS%in%c("Acer", "Betula", "Carya", "Fraxinus", "Pinus", "Prunus", "Quercus", "Tsuga"), spp])
-# 
-# spec <- as.data.table(spec)
-# spec[,spp:=paste(substr(GENUS, 1,1), ".", SPECIES, sep="")]
-# moo <- live[,length(DIAM_T0), by=spp]
-# moo <- moo[order(moo$V1, decreasing = T)]
-# keep <- moo[, spp][1:13]
-# sum(moo$V1[1:13])/dim(live)[1] ## top 13 spp are 91% of lives stems
-# moo$b0 <- NA
-# moo$b1 <- NA
-# moo$b0[1:13] <- c(-2.0470, -3.0506, -2.0705, -2.3480, -2.0705, -2.0705, -2.0705, -2.2652, -1.8096, -1.8384, -2.2271, -2.2118 -1.8011)
-# moo$b1[1:13] <- c(2.3852, 2.6465, 2.4410, 2.3876, 2.4410, 2.4410, 2.4410, 2.5349, 2.3480, 2.3524, 2.4313, 2.4133, 2.3852)
-# moo$b0[14:47] <- (-2.48)
-# moo$b1[14:47] <- 2.4835 ## these are eastern hardwood defaults
-# biom.pred2 <- function(b0, b1, x){exp(b0+(b1*log(x)))}
-# 
-# ## let's get a close look at what all is in the marginal pile of spp
-# View(spec[spp%in%moo$spp[14:47], .(spp, GENUS, SPECIES)])
-# ## there's a few P. rigida, get the right equation for him too
-# moo[spp=="P.rigida", b0:=(-3.0506)]
-# moo[spp=="P.rigida", b1:=2.6465] 
-# names(moo)[1] <- "spp.name"
-### the others will get E hardwood defaults
-spp.allo <- read.csv("data/FIA/spp_allometrics.csv") ## manually entered selected map from spp to b0+b1
-live[,spp:=paste(substr(GENUS, 1,1), ".", SPECIES, sep="")]
-live <- merge(x=live, y=spp.allo[,c("spp", "b0", "b1")], by="spp", all.x=T)
-live[is.na(b0), b0:=(-2.48)]
-live[is.na(b1), b1:=2.4835]
-biom.pred2 <- function(b0, b1, x){exp(b0+(b1*log(x)))}
-## class as hard or soft wood
-live[,type:="H"]
-live[spp%in%c("P.strobus", "P.resinosa", "T.canadensis", "A.balsamea"), type:="S"]
-live[,type:=as.factor(type)]
-live[,biom0.spp:=biom.pred2(b0, b1, DIAM_T0)]
-live[,biom1.spp:=biom.pred2(b0, b1, DIAM_T1)]
-
-# ### how much correction are we seeing by adjusting the equations?
-# plot(live[,biom0], live[,biom0.spp])
-# abline(a=0, b=1) ## most are slightly more biomass than predicted by E hardwood defaults
-# plot(live[, biom1], live[, biom1.spp])
-# abline(a=0, b=1) ## same, slightly higher biomass
-# summary(live$DIAM_T0) ### most of these aren't too far out of spec for the allometric equations to use
+l <- lm(log(biom.growth.ann.rel)~log(total.biom0.Mg.ha), data=live.plot) ### R2 0.15, all factors significant
+plot(live.plot[,log(total.biom0.Mg.ha)], live.plot[,log(biom.growth.ann.rel)])
+s <- summary(l)
+abline(a=s$coefficients[1], b=s$coefficients[2], col="red") ## ok ho hum
 
 # ## compare the models of areal biomass growth with raw data and using only hardwoods
-live.plot <- live[,.(sum(biom1.spp-biom0.spp, na.rm=T),
-                     sum(biom0.spp, na.rm=T),
-                     length(DIAM_T0)), by=PlotID] ## we are missing one plot -- all dead?
-names(live.plot)[2:4] <- c("biom.growth.spp", "total.biom0.spp.kg", ## species specific and default calcs
-                           "num.stems")
-# plot(live.plot$biom.growth.def, live.plot$biom.growth.spp) ## higher growth in spp
-# abline(a=0, b=1)
-# plot(live.plot$total.biom0.def.kg, live.plot$total.biom0.spp.kg)
-# abline(a=0, b=1) # corresponding to somewhat more biomass with spp
-
 hwood <- live[type=="H", .(sum(biom1.spp-biom0.spp, na.rm=T), 
                            sum(biom0.spp, na.rm=T)), 
               by=PlotID]
@@ -436,6 +393,44 @@ swood <- live[type=="S", .(sum(biom1.spp-biom0.spp, na.rm=T),
                            sum(biom0.spp, na.rm=T)),
               by=PlotID]
 names(swood)[2:3] <- c("biom.growth.spp.sw", "total.biom0.spp.kg.sw")
+
+live.plot <- merge(live.plot, hwood, by="PlotID")
+live.plot <- merge(live.plot, swood, by="PlotID")
+live.plot[,biom.growth.ann.hw:=(biom.growth.spp.hw/4.8)/total.biom0.spp.kg.hw]
+live.plot[,biom.growth.ann.sw:=(biom.growth.spp.sw/4.8)/total.biom0.spp.kg.sw]
+
+### comparative models in hardwoods and softwoods in isolation
+hw <- lm(live.plot[biom.growth.ann.hw>0,log(biom.growth.ann.hw)]~live.plot[biom.growth.ann.hw>0,log(total.biom0.Mg.ha)])
+summary(hw) ## barely significant, R2 0.01
+sw <- lm(live.plot[biom.growth.ann.sw>0,log(biom.growth.ann.sw)]~live.plot[biom.growth.ann.sw>0,log(total.biom0.Mg.ha)])
+summary(sw) ## significant, R2 0.12
+
+### model without respect to hard/softwood
+tot.mod <- lm(live.plot[biom.growth.ann.rel>0,log(biom.growth.ann.rel)]~live.plot[biom.growth.ann.rel>0,log(total.biom0.Mg.ha)])
+summary(tot.mod) ### ok does like R2 0.18 and significant
+
+plot(live.plot[,log(total.biom0.Mg.ha)], live.plot[,log(biom.growth.ann.rel)], 
+     main="FIA growth~biomass (plot level)", ylab="Relative growth rate (Mg/Mg/ha)", xlab="Plot biomass density (Mg/ha)",
+     xaxt="n", yaxt="n")
+axis(side = 1, at = c(4.5, 5, 5.5, 6, 6.5), labels = round(exp(c(4.5, 5, 5.5, 6, 6.5)), digits=0))
+axis(side=2, at=seq(-5.5, -2.5, by=0.5), labels=round(exp(seq(-5.5, -2.5, by=0.5)), digits=3))
+abline(a=tot.mod$coefficients[1], b=tot.mod$coefficients[2], lwd=1.4, col="black")
+# points(live.plot[,log(((total.biom0.spp.kg.hw/1000)/(num.subplots*subplot.area))*1E4)],
+#        live.plot[,log(biom.growth.ann.hw)], pch=15, cex=0.6, col="red")
+points(live.plot[,log(total.biom0.Mg.ha)],
+       live.plot[,log(biom.growth.ann.hw)], pch=15, cex=0.6, col="red")
+abline(a=hw$coefficients[1], b=hw$coefficients[2], col="red")
+# points(live.plot[,log(((total.biom0.spp.kg.sw/1000)/(num.subplots*subplot.area))*1E4)],
+#        live.plot[,log(biom.growth.ann.sw)], pch=17, cex=0.6, col="blue")
+points(live.plot[,log(total.biom0.Mg.ha)],
+       live.plot[,log(biom.growth.ann.sw)], pch=17, cex=0.6, col="blue")
+abline(a=sw$coefficients[1], b=sw$coefficients[2], col="blue")
+legend(x=4.3, y=-5, legend = c("All", "Hardwoods", "Softwoods"), 
+       fill = c("black", "red", "blue"))
+
+
+
+
 
 ## plot-level growth
 ### all hard+softwood

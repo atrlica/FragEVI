@@ -367,7 +367,8 @@ andy.dbh[seg==10, growth.kg.ps:=biom*exp(b0.bai.ps+(b1.bai.ps*log(dbh)))]
 andy.dbh[seg%in%c(20,30), growth.kg.ps:=biom*exp(b0.bai.ps+(b1.bai.ps*log(dbh))+b2.bai.ps)]
 ## export the processed andy.dbh figures to make life easier elsewhere
 write.csv(andy.dbh, "processed/andy.dbh.proc.results.csv")
-
+andy.dbh <- read.csv("processed/andy.dbh.proc.results.csv")
+andy.dbh <- as.data.table(andy.dbh)
 
 ### what is areal-basis growth, growth~biomass(kg/ha)
 par(mar=c(4,4,1,1))
@@ -381,7 +382,7 @@ plot(g$biom, g$rel.gain.ps, col=as.numeric(g$seg), xlab="total plot biomass", ma
 g[seg==10, seg.F:="E"]
 g[seg!=10, seg.F:="I"]
 andy.growth.log <- lm(log(g$rel.gain.ps)~log(biom), data=g) ## R2 0.16, barely significant
-andy.growth.log.edge <- lm(log(g$rel.gain.ps)~log(biom)*seg.F, data=g) ## R2 0.75, sig
+andy.growth.log.edge <- lm(log(g$rel.gain.ps)~log(biom)*seg.F, data=g) ## R2 0.75, all factors signifiant
 andy.plot.mod <- summary(andy.growth.log.edge)
 test <- seq(2000, 12000, by=100)
 points(test, exp(andy.plot.mod$coefficients[1]+(andy.plot.mod$coefficients[2]*log(test))),
@@ -463,7 +464,7 @@ hist(biom.dat[aoi>800 & biom>10, npp.tot.mod.MgC.ha]) ## up to 6 MgC/ha/yr
 ## so that's interesting. A lot produce not much, but there's a longer tail of high productivity that starts to look more like real forest -- up to ~8 MgC/ha/yr
 ## an ancillary question: why does FIA have such a pessimistic idea of productivity, maxes out at 2.5 MgC/ha/yr
 write.csv(biom.dat, "processed/andy.forest.results.csv")
-
+"processed/andy.dbh.proc.results.csv"
 ## noise testing to look at spread around the model coefficients here
 ### select randomly the coefficients to within +/- 1 sterr of the model estimates
 mod.int.edge.fin <- summary(lm(log(growth.mean)~log(avg.dbh)+seg.Edge, data=andy.bai)) #r2=0.46, just edge vs. interior

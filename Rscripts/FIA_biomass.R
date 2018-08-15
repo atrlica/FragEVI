@@ -369,11 +369,12 @@ points(live.plot[,log(((total.biom0.spp.kg/675)*1E4))], live.plot[,log(growth.an
 points(live.plot[,log(((total.biom0.spp.kg/675)*1E4))], live.plot[,log(growth.ann.rel.sw)], cex=0.5, col="blue", pch=16)
 ## dummy log-log models
 mod.hw <- lm(log(growth.ann.rel.hw)~log(((total.biom0.spp.kg/675)*1E4)), data=live.plot[growth.ann.rel.hw>0,])
-summary(mod.hw) ## v. miserable, R2 0.06
+summary(mod.hw) ## v. miserable, R2 0.06, but factor is significant
 mod.sw <- lm(log(growth.ann.rel.sw)~log(((total.biom0.spp.kg/675)*1E4)), data=live.plot[growth.ann.rel.sw>0,])
 summary(mod.sw) ## v. miserable, R2 0.13
 lines(live.plot[growth.ann.rel.hw>0, log(((total.biom0.spp.kg/675)*1E4))], predict(mod.hw), col="red")
 lines(live.plot[growth.ann.rel.sw>0, log(((total.biom0.spp.kg/675)*1E4))], predict(mod.sw), col="blue")
+legend(x=10, y=-5, legend = c("Hardwood", "Softwood"), fill=c("red", "blue"))
 ## so pines growth faster at low density, but slow down at higher densities harder
 
 ## this is the relationship of HARDWOOD relative growth rate to total forest density
