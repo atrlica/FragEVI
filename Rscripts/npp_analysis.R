@@ -23,7 +23,8 @@ names(fia) <- paste("fia", names(fia), sep=".")
 # hist(fia[fia.aoi>800, fia.npp.ann.ground.MgC.ha]) ## up to ~2.0
 # hist(fia[fia.aoi>800, fia.npp.ann.perv.MgC.ha]) ## up to ~2.0
 ### FIA results, empirically derived npp estiamtes
-fia.empir <- read.csv("processed/npp.FIA.empirV22.csv")
+# fia.empir <- read.csv("processed/npp.FIA.empirV22.csv")
+fia.empir <- read.csv("processed/npp.FIA.empirV23.csv") ### most recent Aug 16 analysis
 fia.empir <- as.data.table(fia.empir)
 names(fia.empir) <- paste("fia.empir", names(fia.empir), sep=".")
   
@@ -133,7 +134,7 @@ npp.dat[bos.biom30m<10, st.med.ann.npp.MgC.ha:=0]
 npp.dat[is.finite(st.med.ann.npp.MgC.ha) & aoi>800,length(st.med.ann.npp.MgC.ha)] # up to 132896 retrievals
 npp.dat[is.finite(fia.npp.ann.forest.MgC.ha) & aoi>800, length(fia.npp.ann.forest.MgC.ha)] #135705 c.p. fia retrievals
 npp.dat[is.finite(andy.npp.tot.MgC.ha) & aoi>800, length(andy.npp.tot.MgC.ha)] ## 135705 c.p. andy retreivals
-npp.dat[is.finite(fia.empir.npp.kg.hw.forest) & aoi>800, length(fia.empir.live.kgbiom.ha.forest)] ## 135705
+npp.dat[is.finite(fia.empir.npp.kg.hw.forest) & aoi>800, length(fia.empir.live.Mgbiom.ha.forest)] ## 135705
 npp.dat[!is.na(bos.biom30m) & aoi>800, length(bos.biom30m)] ## 135705 biomass records in relatively complete pixels
 ## get more retreivals in the forests for the street tree sim than for FIA (can't retrieve a good age using the equation approach)
 
@@ -146,9 +147,10 @@ hist(npp.dat[aoi>800, fia.empir.npp.kg.hw.forest*(1E4/aoi)/2000]) ## up to~5 MgC
 
 sum(npp.dat[, st.med.ann.npp.MgC.ha*(aoi/1E4)], na.rm=T) ## 13.2k tC/yr street tree sim (missing a bunch of high-value pixels)
 sum(npp.dat[, fia.npp.ann.forest.MgC.ha*(aoi/1E4)], na.rm=T) ## 4.6k tC/yr ## fia forest method
-sum(npp.dat[, andy.npp.tot.MgC.ha*(aoi/1E4)], na.rm=T) ## 13.8k tC/yr ## andy trees, avg. dbh
-sum(npp.dat[, andy.npp.tot.ps.MgC.ha*(aoi/1E4)], na.rm=T) ## 12.7k tC/yr ## andy trees with pseudoreps
-sum(npp.dat[, fia.empir.npp.kg.hw.forest/2000], na.rm=T) ## 8.7k tC/yr for fia empirical(forest) method
+sum(npp.dat[, andy.npp.tot.MgC.ha*(aoi/1E4)], na.rm=T) ## 13.8k tC/yr ## andy trees, avg. dbh, static
+sum(npp.dat[, andy.npp.tot.ps.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.1k tC/yr ## andy trees with pseudoreps, static
+sum(npp.dat[, fia.empir.npp.kg.hw.forest/2000], na.rm=T) ## 7.8k tC/yr for fia empirical(forest) method
+sum(npp.dat[, andy.npp.tot.mod.MgC.ha*(aoi/1E4)], na.rm=T) ## 12.2k tC/yr ## andy trees with pseudoreps, modeled
 
 
 ## visualize the differences in npp retreivals between them (in actual MgC per pixel)
@@ -193,8 +195,10 @@ for(f in grep(names(npp.dat), pattern="diff.")){
 ## fia.FOREST vs. andy: andy is generally a tiny bit higher except for leafier parts where it is a lot higher; the only parts with FIA higher are non-forest but still moderate biomass (where it looks like a young forest)
 ## fia.FOREST vs. street: basically same as andy forest, higher all over esp. in forest except for a few little spots with moderate biomass
 
-##### HYBRID urban productivity map
-### let us then combine the andy and street maps into a single "let's get real" map
+
+#######
+### PREPARATION OF A FINAL ANDY+STREET HYBRID MAP
+### let us then combine the andy and street maps into a single "let's get real" map: Andy forest in dense parts, street trees in scattered parts
 ## first where are the difficult sim pixels re. LULC
 npp.dat[st.sim.incomp==1, length(pix.ID), by=lulc]
 ## bulk are forest (2k), but significant numbers in dev and hdres
@@ -212,7 +216,7 @@ plot(npp.dat[lulc==1 & aoi>800, bos.biom30m], npp.dat[lulc==1 & aoi>800, st.med.
 ## classic kink
 
 ### let's make a hybrid
-### version using growth in andy avg.dbh
+### version using growth based on avg.dbh, static
 npp.dat[,hyb.npp:=andy.npp.tot]
 npp.dat[lulc!=1, hyb.npp:=st.med.ann.npp.all]
 npp.dat[aoi>800 & is.finite(hyb.npp), length(hyb.npp)] #134643
@@ -220,11 +224,20 @@ plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp],
      col=npp.dat[aoi>800, lulc], main="avg.dbh")
 # ### still get that kink in the street trees
 
-npp.dat[,hyb.npp.ps:=andy.npp.tot.ps]
+### version using the psuedoreps, static
+npp.dat[,hyb.npp.ps:=andy.npp.tot.ps] ## 
 npp.dat[lulc!=1, hyb.npp.ps:=st.med.ann.npp.all]
 npp.dat[aoi>800 & is.finite(hyb.npp.ps), length(hyb.npp.ps)] #134643
 plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.ps], 
-     col=npp.dat[aoi>800, lulc], main="with pseudoreps")
+     col=npp.dat[aoi>800, lulc], main="with pseudoreps, static")
+
+## version using the pseudoreps, modeled
+npp.dat[,hyb.npp.mod:=andy.npp.tot.mod] ## 
+npp.dat[lulc!=1, hyb.npp.mod:=st.med.ann.npp.all]
+npp.dat[aoi>800 & is.finite(hyb.npp.mod), length(hyb.npp.mod)] #134643
+plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.mod], 
+     col=npp.dat[aoi>800, lulc], main="with pseudoreps, modeled")
+
 
 # ### how can we reduce the artifacts in the street tree sim results, especially over 20k kg pixels?
 # plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, st.med.ann.npp.all], col=npp.dat[aoi>800, st.max.wts])
@@ -252,13 +265,20 @@ npp.dat[aoi>800 & bos.biom30m>20000, length(bos.biom30m)]/npp.dat[aoi>800, lengt
 ### swap the >20000kg biomass pixels with the andy forest npp estimates irrespective of lulc class; 20k/pix is 111 MgC/ha, about what a mature forest would be
 npp.dat[bos.biom30m>20000, hyb.npp:=andy.npp.tot]
 npp.dat[bos.biom30m>20000, hyb.npp.ps:=andy.npp.tot.ps]
+npp.dat[bos.biom30m>20000, hyb.npp.mod:=andy.npp.tot.mod]
+
+### how's the new future look?
+npp.dat[aoi>800, (sum(hyb.npp, na.rm=T)/2000)] ## 14.4 kMgC/yr
+npp.dat[aoi>800, (sum(hyb.npp.ps, na.rm=T)/2000)] ## 13.2 kMgC/yr
 
 ### export the collated results
 # write.csv(npp.dat, "processed/npp.estimates.V1.csv")
-write.csv(npp.dat, "processed/npp.estimates.V2.csv") ## with pseudorep based andy trees
+# write.csv(npp.dat, "processed/npp.estimates.V2.csv") ## with pseudorep based andy trees
+write.csv(npp.dat, "processed/npp.estimates.V3.csv") ## with pseudorep/model based andy trees
 
 # npp.dat <- read.csv("processed/npp.estimates.V1.csv")
-npp.dat <- read.csv("processed/npp.estimates.V2.csv")
+# npp.dat <- read.csv("processed/npp.estimates.V2.csv")
+npp.dat <- read.csv("processed/npp.estimates.V3.csv")
 npp.dat <- as.data.table(npp.dat)
 
 ## contrast (avg.dbh)

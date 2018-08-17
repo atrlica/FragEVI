@@ -138,6 +138,24 @@ plot(fack$V2, fack$V1) ## generally higher biomass == higher stem count
 
 ### OK: We know that most of the trees in the FIA plots grow more slowly than the stem records we have for street and Andy forests.
 
+### why not make a nice plot? ## export 600x600
+par(mfrow=c(1,1), mar=c(4,4,3,1))
+main.xlim <- c(4, 100)
+main.ylim <- c(-0.15, 1)
+## FIA stem growth~dbh
+col.type <- c("green", "forestgreen")
+plot(live$DIAM_T0, live$growth.ann.rel, col=col.type[as.numeric(live$type)],
+     pch=15, cex=0.4, xlim=main.xlim, ylim=main.ylim,
+     xlab="Stem DBH (cm)", ylab="Relative growth (kg/kg)", main="FIA stem growth~DBH")
+test <- seq(from=main.xlim[1], to=main.xlim[2], length.out=100)
+lines(test, exp(mm$coefficients[1]+(mm$coefficients[2]*log(test))),
+      col="black", lwd=3, lty=2)
+legend(x=30, y=0.6, bty="n", legend = c("Hardwood", "Softwood"), fill=c("green", "forestgreen"))
+abline(v=live[, median(DIAM_T0)])
+abline(h=live[, median(growth.ann.rel)])
+
+
+
 #####
 #### Plot-level assessment of growth~biomass.density
 ### equivalent plot-level assessment in live-only data ## 331 plots have at least one subplot dense enough to bother with
@@ -156,7 +174,7 @@ plot(live.plot[,total.biom0.kg], live.plot[,num.stems]) ## linear but gets uncon
 cor(live.plot[, total.biom0.kg], live.plot[, num.stems]) ## rho 0.60
 ## the "fully forested" plots sample 0 to 25k kg/plot 
 live.plot[total.biom0.kg<5000,] ## mostly single-subplot plots (ie plot is mostly non-forest)
-live.plot[,hw.frac:=total.biom0.spp.kg.hw/total.biom0.kg]
+
 
 ## plot-level growth
 subplot.area <- (7.3152^2)*pi ## subplots are 24ft in radius
@@ -199,6 +217,7 @@ live.plot <- merge(live.plot, hwood, by="PlotID")
 live.plot <- merge(live.plot, swood, by="PlotID")
 live.plot[,biom.growth.ann.hw:=(biom.growth.spp.hw/4.8)/total.biom0.spp.kg.hw]
 live.plot[,biom.growth.ann.sw:=(biom.growth.spp.sw/4.8)/total.biom0.spp.kg.sw]
+live.plot[,hw.frac:=total.biom0.spp.kg.hw/total.biom0.kg] ## get fraction of hardwood in total biomass
 
 ### comparative models in hardwoods and softwoods in isolation
 hw <- lm(live.plot[biom.growth.ann.hw>0,log(biom.growth.ann.hw)]~live.plot[biom.growth.ann.hw>0,log(total.biom0.Mg.ha)])
@@ -251,14 +270,14 @@ r <- summary(tot.mod.exp) ## definitely significant
 
 ## visual comparison of the plot-level models
 plot(live.plot[,(total.biom0.Mg.ha)], 
-     live.plot[,(biom.growth.ann.rel)], main="FIA plot-level, HW+SW",
-     xlab="Biomass Density (Mg/ha)", ylab="Growth (Mg/Mg/ha/yr)")
+     live.plot[,(biom.growth.ann.rel)], main="FIA growth~biomass (plot-level)",
+     xlab="Biomass Density (Mg/ha)", ylab="Relative growth (Mg/Mg/ha)")
 points(live.plot[,(total.biom0.Mg.ha)], 
        live.plot[,(biom.growth.ann.hw)], col="red", pch=17, cex=0.6)
 test <- seq(min(live.plot$total.biom0.Mg.ha), max(live.plot$total.biom0.Mg.ha), length.out=100)
 lines(test, exp(r$coefficients[1]+(r$coefficients[2]*log(test))),
       lwd=3, lty=2)
-abline(h=mean(live.plot$biom.growth.ann.hw), col="orangered", lwd=3, lty=4)
+# abline(h=mean(live.plot$biom.growth.ann.hw), col="orangered", lwd=3, lty=4)
 
 ## why so poor fit on hw model, why some high biomass plots have such high hw growth rate?
 # summary(live.plot$hw.frac) ## most have a majority hardwoods, a few v low
@@ -267,8 +286,6 @@ abline(h=mean(live.plot$biom.growth.ann.hw), col="orangered", lwd=3, lty=4)
 points(live.plot[hw.frac<0.25, total.biom0.Mg.ha],
        live.plot[hw.frac<0.25, biom.growth.ann.hw],
        cex=1.2, lwd=3, pch=5, col="seagreen")
-legend(x=100, y=0.01, legend=c("Hardwoods", "Low HW frac.", "All"), 
-       fill=c("red",  "seagreen", "black"), bty="n")
 
 ### OOOOOOKKKKKKAAAAYYYYY Let's elminate the handful of weird low-HW plots (could be weird places that favor pines or something, not really how an urban forest do)
 hw.mod.exp.filt <- nls(biom.growth.ann.hw ~ exp(a + b * log(total.biom0.Mg.ha)),
@@ -277,6 +294,12 @@ y <- summary(hw.mod.exp.filt) ## b is not even close to significant
 y$coefficients
 r$coefficients ## quite comparable
 ## so we will use the low-hw filtered plots to approximate growth in the final NPP calculations
+### show on plot
+lines(test, exp(y$coefficients[1]+(y$coefficients[2]*log(test))),
+      lwd=3, lty=2, col="red")
+legend(x=100, y=0.01, legend=c("Hardwoods", "Low HW frac.", "All"), 
+       fill=c("red",  "seagreen", "black"), bty="n")
+
 
 
 
@@ -320,7 +343,7 @@ live.plot[,hw.frac:=total.biom0.spp.kg.hw/total.biom0.kg]
 ## final exponential model fit, hardwood growth~biomass
 hw.mod.exp.filt <- nls(biom.growth.ann.hw ~ exp(a + b * log(total.biom0.Mg.ha)),
                        data=live.plot[hw.frac>0.25,], start=list(a=0, b=0))
-y <- summary(hw.mod.exp.filt) 
+y <- summary(hw.mod.exp.filt) ## residual standard error = standard error of regression = how far off values may be from predicted (vs. R2, which is unreliable)
 
 ## load the biomass data and reprocess
 biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel
@@ -416,6 +439,11 @@ biom.dat[aoi>800 & is.finite(isa.frac) & is.finite(can.frac), ((sum(npp.kg.hw.pe
 biom.dat[aoi>800, .(median(npp.kg.hw.ground, na.rm=T), ## median is ~50-60 kg-biomass/pix
                     median(npp.kg.hw.forest, na.rm=T),
                     median(npp.kg.hw.perv, na.rm=T))]
+
+hist(biom.dat[aoi>800, ((npp.kg.hw.forest/2000)/aoi)*1E4]) ### sombitch, it too craps out at about 3 MgC/ha/yr
+hist(biom.dat[aoi>800, ((npp.kg.hw.ground/2000)/aoi)*1E4]) ### 
+hist(biom.dat[aoi>800, ((npp.kg.hw.perv/2000)/aoi)*1E4]) ### 
+## all of these seem to recapitulate the productivity distributions seen IN THE EQUATION-BASED FIA THING WHATT???
 
 write.csv(biom.dat, "processed/npp.FIA.empirV23.csv")
 
