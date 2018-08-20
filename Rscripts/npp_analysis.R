@@ -270,6 +270,7 @@ npp.dat[bos.biom30m>20000, hyb.npp.mod:=andy.npp.tot.mod]
 ### how's the new future look?
 npp.dat[aoi>800, (sum(hyb.npp, na.rm=T)/2000)] ## 14.4 kMgC/yr
 npp.dat[aoi>800, (sum(hyb.npp.ps, na.rm=T)/2000)] ## 13.2 kMgC/yr
+npp.dat[aoi>800, (sum(hyb.npp.mod, na.rm=T)/2000)] ## 13.0 kMgC/yr
 
 ### export the collated results
 # write.csv(npp.dat, "processed/npp.estimates.V1.csv")
@@ -290,7 +291,7 @@ points(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.empir.npp.kg.hw.fores
 ## all the fia estimates are forced into a low hump at the bottom end of the scale, below 500 kg-biomass/yr
 ## fia empirical estimates are a lower arc below the hybrid output
 
-### make a proper plot
+### make a proper plot -- per pixel NPP 
 par(mfrow=c(1,1), mar=c(4,4,1,1))
 col.lulc <- c("forestgreen", "grey55", "salmon", "gold2", "lawngreen", "cadetblue3")
 plot(npp.dat[aoi>800, (bos.biom30m/aoi)*1E4/2000], npp.dat[aoi>800, (hyb.npp/aoi)*1E4/2000], 
@@ -342,6 +343,13 @@ fox <- npp.dat[aoi>800 & !is.na(lulc),
                  (sum(bos.biom30m, na.rm=T)/1000), 
                  (sum(bos.biom30m, na.rm=T)/1000)/(sum(aoi)/1E4)), by=lulc]
 names(fox) <- c("lulc", "area.frac", "med.can.frac", "tot.biomass.Mg", "biomass.Mg.ha")
+npp.dat[aoi>800 & !is.na(lulc), ## whole area
+               .((sum(aoi)/tot.area), 
+                 (median(can.frac, na.rm=T)), 
+                 (sum(bos.biom30m, na.rm=T)/1000), 
+                 (sum(bos.biom30m, na.rm=T)/1000)/(sum(aoi)/1E4))]
+
+
 
 ## productivity summaries
 hyb.tot <- npp.dat[aoi>800 & !is.na(lulc), sum(hyb.npp, na.rm=T)/(1000*2)]
@@ -391,6 +399,36 @@ npp.tab <- as.matrix(npp.tab)
 npp.tab <- rbind(npp.tab, npp.tot)
 npp.tab <- as.data.frame(cbind(npp.tab[,5], npp.tab[,1:4]))
 names(npp.tab)[1] <- "Type"
+
+
+####
+### summary table comparing NPP hybrid to FIA
+npp.dat <- read.csv("processed/npp.estimates.V3.csv")
+npp.dat <- as.data.table(npp.dat)
+
+yee <- npp.dat[,.(sum(aoi, na.rm=T)/1E4,
+                  sum(bos.biom30m, na.rm=T)/1000,
+                  sum((aoi*can.frac), na.rm=T)/1E4,
+                  round(sum(hyb.npp.mod/2000, na.rm=T), 1),
+                  round(sum(fia.empir.npp.kg.hw.forest/2000, na.rm=T), 1)), by=lulc]
+names(yee)[2:6] <- c("area.ha", "biom.Mg", "can.ha", "hyb.MgC", "fia.MgC")
+yee[,area.frac:=round(area.ha/sum(area.ha)*100, 1)]
+yee[,biom.frac:=round(biom.Mg/sum(biom.Mg)*100, 1)]
+yee[,biom.dens.can:=round((biom.Mg/can.ha), 1)]
+yee[,biom.dens.ground:=round((biom.Mg/area.ha), 1)]
+yee[,hyb.MgC.ha:=round(hyb.MgC/area.ha, 2)]
+yee[,hyb.frac:=round(hyb.MgC/sum(hyb.MgC)*100, 1)]
+yee[,fia.MgC.ha:=round(fia.MgC/area.ha, 2)]
+yee[,fia.frac:=round(fia.MgC/sum(fia.MgC)*100, 1)]
+
+yee <- yee[order(lulc),]
+write.csv(yee[, c(1,7,8,10,11,5,12,13,6,14)], "processed/boston/results/lulc_NPP_summary.csv")
+
+## final things
+yee[,sum(biom.Mg)/sum(area.ha)] ## avg biomass density across entire city
+yee[,sum(hyb.MgC)/sum(area.ha)] ## avg productivty of Hybrid
+yee[,sum(fia.MgC)/sum(area.ha)]
+yee
 
 #########
 ### question: what is the magnitude of effect of npp on ppCO2 in local column of atmosphere?
