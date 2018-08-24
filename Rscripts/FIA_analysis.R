@@ -290,7 +290,7 @@ points(live.plot[hw.frac<0.25, total.biom0.Mg.ha],
 ### OOOOOOKKKKKKAAAAYYYYY Let's elminate the handful of weird low-HW plots (could be weird places that favor pines or something, not really how an urban forest do)
 hw.mod.exp.filt <- nls(biom.growth.ann.hw ~ exp(a + b * log(total.biom0.Mg.ha)),
                        data=live.plot[hw.frac>0.25,], start=list(a=0, b=0))
-y <- summary(hw.mod.exp.filt) ## b is not even close to significant
+y <- summary(hw.mod.exp.filt) ## all significant
 y$coefficients
 r$coefficients ## quite comparable
 ## so we will use the low-hw filtered plots to approximate growth in the final NPP calculations

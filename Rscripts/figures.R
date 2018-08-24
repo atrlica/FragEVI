@@ -715,24 +715,68 @@ legend(x=60, y=0.6, legend=c("FIA", "Street trees '06-'14", "Reinmann '17"), fil
 
 ############
 ### cumulative npp~biomass graph w/ LULC stacked --- hybrid results
-npp.dat <- as.data.table(read.csv("processed/npp.estimates.V1.csv"))
-npp.dat[,biom.bin:=cut(bos.biom30m, seq(0, 52000, by = 500), right=FALSE, ordered_result=T)]
-contain.npp <- npp.dat[!is.na(bos.biom30m) & !is.na(lulc), sum(hyb.npp, na.rm=T), by=.(biom.bin, lulc)]
+npp.dat <- as.data.table(read.csv("processed/npp.estimates.V3.csv"))
+npp.dat[,biom.Mg.ha:=((bos.biom30m/1000)/(aoi*can.frac))*1E4] ### Forest basis
+npp.dat[can.frac<0.005, biom.Mg.ha:=0]
+# range(npp.dat[aoi>800, biom.Mg.ha], na.rm=T) ## up to 570 Mg/ha, canopy basis
+# hist(npp.dat[aoi>800 & lulc==2,biom.Mg.ha])
+npp.dat[,biom.bin:=cut(biom.Mg.ha, seq(0, 570, by = 10), right=FALSE, ordered_result=T)]
+contain.npp <- npp.dat[!is.na(bos.biom30m) & !is.na(lulc), .(sum(hyb.npp.mod, na.rm=T), 
+                                                             sum(fia.empir.npp.kg.hw.forest, na.rm=T),
+                                                             sum(bos.biom30m, na.rm=T)), by=.(biom.bin, lulc)]
 contain.npp <- contain.npp[order(biom.bin), ]
 contain.npp[, bin.num:=as.numeric(biom.bin)]
-names(contain.npp)[3] <- "tot.npp.kg"
+names(contain.npp)[3:5] <- c("hyb.npp.kg", "fia.npp.kg", "tot.biom.kg")
 
-par(mfrow=c(1,1))
-### summed NPP by biom.density bin and LULC
+## where is the biomass compared to where is the npp?
+npp.tot <- npp.dat[, sum(hyb.npp.mod, na.rm=T)]
+ar <- npp.dat[, sum(hyb.npp.mod, na.rm=T), by=lulc]
+ar$npp.frac <- ar$V1/npp.tot #20% forest, 16% dev, 50% hdres
+
+biom.tot <- npp.dat[, sum(bos.biom30m, na.rm=T)]
+af <- npp.dat[, sum(bos.biom30m, na.rm=T), by=lulc]
+af$biom.frac <- af$V1/biom.tot ## 13% dev, 31% forest, 43% hdres
+
+## plots of biomass and NPP density by LULC along binned biomass density
+par(mfrow=c(1,3), mar=c(3,4,4,1))
 col.tmp <- c("forestgreen", "gray55", "salmon", "gold", "chartreuse3")
-plot(contain.npp[lulc==1, bin.num], contain.npp[lulc==1, tot.npp.kg/1000], 
-     col=col.tmp[1], pch=15, type="l", lwd=3,
-     ylim=c(0, 500), xlab="Biomass density (Mg/ha)", xaxt="n", ylab="Total NPP (Mg-biomass)") 
-axis(side = 1, at = seq(0,100, by=20), labels = c(0, 10000, 20000, 30000, 40000, 50000))
+### summed biomass by biomass density bin and LULC
+plot(contain.npp[lulc==1, bin.num], contain.npp[lulc==1, tot.biom.kg/1E6], 
+     col=col.tmp[1], pch=15, type="l", lwd=3, main="Total Biomass",
+     ylim=c(0,18), xaxt="n", ylab="Total Biomass (Mg x 1000)") 
+axis(side = 1, at = c(0, 10, 20, 30, 40, 50), labels = seq(0, 500, by=100))
 for(e in 2:5){
-  lines(contain.npp[lulc==e, bin.num], contain.npp[lulc==e, tot.npp.kg/1000], col=col.tmp[e], pch=15, type="l", lwd=3)
+  lines(contain.npp[lulc==e, bin.num], contain.npp[lulc==e, tot.biom.kg/1E6], col=col.tmp[e], pch=15, type="l", lwd=3)
 }
-legend(x = 60, y = 400, legend = c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other veg."), fill=col.tmp, bty="n")
+# legend(x = 40, y = 15, legend = c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other veg."), fill=col.tmp, bty="n")
+# mtext(side=1, "Biomass density, canopy basis (Mg-biomass/ha)", line=2)
+
+### summed hyb.NPP by biom.density bin and LULC
+col.tmp <- c("forestgreen", "gray55", "salmon", "gold", "chartreuse3")
+plot(contain.npp[lulc==1, bin.num], contain.npp[lulc==1, hyb.npp.kg/2000], 
+     col=col.tmp[1], pch=15, type="l", lwd=3, main="NPP, Urban Hybrid",
+     ylim=c(0, 420), xaxt="n", ylab="Total NPP (MgC/yr)") 
+axis(side = 1, at = c(0, 10, 20, 30, 40, 50), labels = seq(0, 500, by=100))
+for(e in 2:5){
+  lines(contain.npp[lulc==e, bin.num], contain.npp[lulc==e, hyb.npp.kg/2000], col=col.tmp[e], pch=15, type="l", lwd=3)
+}
+# legend(x = 40, y = 400, legend = c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other veg."), fill=col.tmp, bty="n")
+mtext(side=1, "Biomass density, canopy basis (Mg-biomass/ha)", line=2)
+
+### summed fia.empir.NPP by biom.density bin and LULC
+col.tmp <- c("forestgreen", "gray55", "salmon", "gold", "chartreuse3")
+plot(contain.npp[lulc==1, bin.num], contain.npp[lulc==1, fia.npp.kg/2000], 
+     col=col.tmp[1], pch=15, type="l", lwd=3, main="NPP, FIA",
+     ylim=c(0, 420), xaxt="n", ylab="Total NPP (MgC/yr)") 
+axis(side = 1, at = c(0, 10, 20, 30, 40, 50), labels = seq(0, 500, by=100))
+for(e in 2:5){
+  lines(contain.npp[lulc==e, bin.num], contain.npp[lulc==e, fia.npp.kg/2000], col=col.tmp[e], pch=15, type="l", lwd=3)
+}
+legend(x = 20, y = 400, legend = c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other veg."), fill=col.tmp, bty="n")
+# mtext(side=1, "Biomass density, canopy basis (Mg-biomass/ha)", line=2)
+
+
+
 
 ### cumulative with ascending binned biomass density
 dog <- contain.npp
@@ -812,3 +856,150 @@ ggplot(yup, aes(x=bin.num, y=cum.sum/1000, fill=LULC)) +
         panel.border = element_blank(),
         panel.background = element_blank())+
   theme(legend.position = c(60, 1.5E04))
+
+
+
+########
+#### Try again: SUMMED NPP, BINNED BY DENSITY AND COLORED BY LULC
+library(reshape2)
+npp.dat <- read.csv("processed/npp.estimates.V3.csv")
+npp.dat <- as.data.table(npp.dat)
+npp.dat[,biom.MgC.ha.ground:=((bos.biom30m/2000)/aoi)*1E4] ## per-pixel ground biomass density
+npp.dat[,biom.MgC.ha.can:=((bos.biom30m/2000)/(aoi*can.frac))*1E4] ## per-pixel canopy biomass density
+npp.dat[can.frac<0.005, biom.MgC.ha.can:=0]
+npp.dat[,fia.empir.npp.MgC.ha.ground:=((fia.empir.npp.kg.hw.forest/2000)/aoi)*1E4] 
+npp.dat[,fia.empir.npp.MgC.ha.can:=((fia.empir.npp.kg.hw.forest/2000)/(aoi*can.frac))*1E4]
+npp.dat[can.frac<0.005, fia.empir.npp.MgC.ha.can:=0]
+npp.dat[,hyb.npp.MgC.ha.ground:=((hyb.npp.mod.cap/2000)/aoi)*1E4]
+npp.dat[,hyb.npp.MgC.ha.can:=((hyb.npp.mod.cap/2000)/(aoi*can.frac))*1E4]
+npp.dat[can.frac<0.005, hyb.npp.MgC.ha.can:=0]
+npp.dat2 <- npp.dat[aoi>800,]
+# range(npp.dat[aoi>800, biom.Mg.ha], na.rm=T) ## up to 570 Mg/ha, canopy basis
+hist(npp.dat2[, biom.MgC.ha.can])
+hist(npp.dat2[, biom.MgC.ha.ground])
+npp.dat2[,biom.bin:=cut(biom.MgC.ha.can, seq(0, 300, by = 10), right=FALSE, ordered_result=T)]
+npp.dat2[,biom.bin.ground:=cut(biom.MgC.ha.ground, seq(0, 300, by = 10), right=FALSE, ordered_result=T)]
+
+###
+### plots ordered in bins along MgC/ha-CANOPY
+contain.npp <- npp.dat2[!is.na(bos.biom30m) & !is.na(lulc), .(sum(hyb.npp.mod.cap, na.rm=T)/2000, 
+                                                                       sum(fia.empir.npp.kg.hw.forest, na.rm=T)/2000,
+                                                                       sum(bos.biom30m, na.rm=T)/2000), by=.(biom.bin, lulc)]
+contain.npp <- contain.npp[order(biom.bin), ]
+contain.npp[, bin.num:=as.numeric(biom.bin)]
+names(contain.npp)[3:5] <- c("hyb.npp.MgC", "fia.npp.MgC", "tot.biom.MgC")
+contain.npp[,LULC:=as.factor(lulc)]
+
+### HYBRID STACKED NPP
+ggplot(contain.npp, aes(x=bin.num, y=hyb.npp.MgC, fill=LULC))+
+  geom_area(position='stack')+
+  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+                    name="Land Cover",
+                    breaks=c(1,2,3,4,5,6),
+                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+  xlab("Biomass density (MgC/ha-canopy)")+
+  ylab("Hybrid, total NPP (MgC/yr)")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())+
+  scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
+  ylim(0, 1400)
+
+
+### FIA STACKED NPP
+ggplot(contain.npp, aes(x=bin.num, y=fia.npp.MgC, fill=LULC))+
+  geom_area(position='stack')+
+  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+                    name="Land Cover",
+                    breaks=c(1,2,3,4,5,6),
+                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+  xlab("Biomass density (MgC/ha-canopy)")+
+  ylab("FIA, total NPP (MgC/yr)")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())+
+  scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
+  ylim(0, 1400)
+
+### TOTAL BIOMASS STACKED
+ggplot(contain.npp, aes(x=bin.num, y=tot.biom.MgC, fill=LULC))+
+  geom_area(position='stack')+
+  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+                    name="Land Cover",
+                    breaks=c(1,2,3,4,5,6),
+                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+  xlab("Biomass density (MgC/ha-canopy)")+
+  ylab("Total biomass (MgC)")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())+
+  scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))
+
+
+###
+### plots ordered in bins along MgC/ha-GROUND
+contain.npp <- npp.dat2[!is.na(bos.biom30m) & !is.na(lulc), .(sum(hyb.npp.mod.cap, na.rm=T)/2000, 
+                                                             sum(fia.empir.npp.kg.hw.forest, na.rm=T)/2000,
+                                                             sum(bos.biom30m, na.rm=T)/2000), by=.(biom.bin.ground, lulc)]
+contain.npp <- contain.npp[order(biom.bin.ground), ]
+contain.npp[, bin.num:=as.numeric(biom.bin.ground)]
+names(contain.npp)[3:5] <- c("hyb.npp.MgC", "fia.npp.MgC", "tot.biom.MgC")
+contain.npp[,LULC:=as.factor(lulc)]
+
+### HYBRID STACKED NPP
+ggplot(contain.npp, aes(x=bin.num, y=hyb.npp.MgC, fill=LULC))+
+  geom_area(position='stack')+
+  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+                    name="Land Cover",
+                    breaks=c(1,2,3,4,5,6),
+                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+  xlab("Biomass density (MgC/ha-ground)")+
+  ylab("Hybrid, total NPP (MgC/yr)")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())+
+  scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
+  ylim(0, 1400)
+
+
+### FIA STACKED NPP
+ggplot(contain.npp, aes(x=bin.num, y=fia.npp.MgC, fill=LULC))+
+  geom_area(position='stack')+
+  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+                    name="Land Cover",
+                    breaks=c(1,2,3,4,5,6),
+                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+  xlab("Biomass density (MgC/ha-ground)")+
+  ylab("FIA, total NPP (MgC/yr)")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())+
+  scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
+  ylim(0, 1400)
+
+### TOTAL BIOMASS STACKED
+ggplot(contain.npp, aes(x=bin.num, y=tot.biom.MgC, fill=LULC))+
+  geom_area(position='stack')+
+  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+                    name="Land Cover",
+                    breaks=c(1,2,3,4,5,6),
+                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+  xlab("Biomass density (MgC/ha-canopy)")+
+  ylab("Total biomass (MgC)")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())+
+  scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))
+
