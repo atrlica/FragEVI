@@ -204,10 +204,13 @@ b0.bai <- mod.int.edge.fin$coefficients[1]
 b1.bai <- mod.int.edge.fin$coefficients[2]
 b2.bai <- mod.int.edge.fin$coefficients[3]
 
+## model using pseudoreplicates
 mod.int.edge.fin.ps <- summary(lm(log(biom.rel.ann)~log(dbh.start)+seg.Edge, data=ps.contain[dbh.start>=5,])) #r2=0.30, just edge vs. interior
 b0.bai.ps <- mod.int.edge.fin.ps$coefficients[1]
 b1.bai.ps <- mod.int.edge.fin.ps$coefficients[2]
 b2.bai.ps <- mod.int.edge.fin.ps$coefficients[3]
+mod.int.edge.fin.ps$coefficients
+
 ### at individual stem growth level the effect of dbh and edge position are similar but looks like avg.dbh/growth is a bit higher overall
 
 plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean), pch=13)

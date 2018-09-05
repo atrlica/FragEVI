@@ -594,23 +594,44 @@ ggplot(npp.melt, aes(x=value, fill=variable)) +
 
 
 
+###
+##
+## FIGURE 2A: STEM LEVEL BIOMASS GROWTH (FIA, ANDY, STREET)
 #######
-###### FIGURE 2A: STEM LEVEL BIOMASS GROWTH 
-### combined biomass.growth~dbh for Street, Andy, FIA
 library(MASS)
 library(ggplot2)
 library(viridis)
-get_density <- function(x, y, n = 100) {
-  dens <- MASS::kde2d(x = x, y = y, n = n) ## two dimensional kernel density estimation from MASS package
+get_density <- function(x, y, n = 100) { ## two dimensional kernel density estimation from MASS package
+  dens <- MASS::kde2d(x = x, y = y, n = n) 
   ix <- findInterval(x, dens$x)
   iy <- findInterval(y, dens$y)
   ii <- cbind(ix, iy)
   return(dens$z[ii])
 }
+
+## set up common visual parameters
 xlim.all <- c(4, 100)
 ylim.all <- c(-0.1, 1)
+title.size <- 12
+axis.marks <- 10
+axis.titles <- 11
+theme.master <-   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                        panel.background = element_blank(), axis.line = element_line(colour = "black"),
+                        axis.title.x = element_text(face="bold", size=axis.titles),
+                        axis.title.y = element_text(face="bold", size=axis.titles),
+                        axis.text.x = element_text(face="plain", size=axis.marks),
+                        axis.text.y = element_text(face="plain", size=axis.marks),
+                        plot.title = element_text(face="bold", size=title.size))
+med.lines.col <- "gray70"
+med.lines.width <- 0.4
+fit.col <- "gray60"
+fit.col <- "royalblue2"
+fit.width <- 1.2
+fit.type <- "4222"
+legend.title.size=9
 
-### individual FIA tree data from sites near Boston
+####
+### FIA rural trees
 live <- read.csv("data/FIA/MA_Tree_Data_ID_NOMORT.csv")
 live <- as.data.table(live)
 names(live)[1] <- c("TreeID")
@@ -619,7 +640,6 @@ spec <- read.csv("data/FIA/REF_SPECIES.csv")
 live <- merge(x=live, y=spec[,c("SPCD", "GENUS", "SPECIES")], by.x="SPECIES_CD", by.y="SPCD", all.x=T, all.y=F)
 live$GENUS <- as.character(live$GENUS)
 live$GENUS <- as.factor(live$GENUS)
-table(live$GENUS)
 live$GENUS.num <- as.numeric(live$GENUS)
 spp.allo <- read.csv("data/FIA/spp_allometrics.csv") ## manually entered selected map from spp to b0+b1
 live[,spp:=paste(substr(GENUS, 1,1), ".", SPECIES, sep="")]
@@ -647,108 +667,88 @@ pred_live <- data.frame(growth.pred=predict(mod.fia.nls, newdata=data.frame(DIAM
 live$density <- get_density(live$DIAM_T0, live$growth.ann.rel)
 
 ## single color, density via alpha density
-ggplot(live, aes(DIAM_T0, growth.ann.rel))+
-  geom_point(alpha=1/7, color=plasma(6)[4])+
+fia.mono <- ggplot(live, aes(DIAM_T0, growth.ann.rel))+
+  geom_point(alpha=1/7, color=plasma(6)[1])+
   # scale_colour_viridis(option="B", guide=FALSE)+
   lims(x=xlim.all, y=ylim.all)+
-  geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color="gray55")+
-  geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color="gray55")+
-  geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color="royalblue1", linetype="longdash", size=1.3)+
-  theme(axis.text.x = element_text(face="plain",
-                                   size=14))+
+  geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color=fit.col, linetype=fit.type, size=fit.width)+
   labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="FIA")+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+  theme.master
 
 ### density via color gradient
-ggplot(live, aes(DIAM_T0, growth.ann.rel, color=density))+geom_point(alpha=1/5)+scale_colour_viridis(option="B", guide=FALSE)+
+fia.dens <- ggplot(live, aes(DIAM_T0, growth.ann.rel, color=density))+
+  geom_point(alpha=1/5)+
+  scale_colour_viridis(option="B", guide=FALSE)+
   lims(x=xlim.all, y=ylim.all)+
-  geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color="gray55")+
-  geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color="gray55")+
-  geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color="royalblue1", linetype="longdash", size=1.3)+
-  theme(axis.text.x = element_text(face="plain",
-                                   size=14))+
+  geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color=fit.col, linetype=fit.type, size=fit.width)+
   labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="FIA")+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+  theme.master
 
 
-### now the andy trees
-andy.dbh <- read.csv("processed/andy.dbh.proc.results.csv")
-andy.dbh <- as.data.table(andy.dbh)
+####
+### Andy Trees
+andy.bai <- as.data.table(read.csv("processed/andy.bai.dbh.pseudo.csv"))
 
-# andy.bai <- read.csv("docs/ian/Reinmann_Hutyra_2016_BAI.csv") 
-# andy.bai <- as.data.table(andy.bai)
-# ## artifact: dbh's have hidden NA's that are marked as repeating numbers, basically when the dbh gets too small -- they are higher than the min dbh though
-# cleanup <- as.matrix(andy.bai[,7:33])
-# for(r in 1:nrow(cleanup)){
-#   bust <- which(diff(cleanup[r,], lag = 1)>0) ## tells you where the NA's are located
-#   if(length(bust)>0){
-#     cleanup[r, bust:ncol(cleanup)] <- NA
-#   }
-# }
-# cleanup <- as.data.table(cleanup)
-# andy.bai <- cbind(andy.bai[,1:6], cleanup)
-# names(andy.bai)[7:33] <- paste0("dbh", 2016:1990)
-# andy.bai[,incr.ID:=seq(1:dim(andy.bai)[1])]
-# names(andy.bai)[1:6] <- c("Plot.ID", "Tree.ID", "Spp", "X", "Y", "Can.class")
-# 
-# ### biomass change as a % of previous biomass per year from the increment data
-# ### the basic allometrics to get biomass
-# ## Jenkins, C.J., D.C. Chojnacky, L.S. Heath and R.A. Birdsey. 2003. Forest Sci 49(1):12-35.
-# ## Chojnacky, D.C., L.S. Heath and J.C. Jenkins. 2014. Forestry 87: 129-151.
-# # Pinus rigida, Pinus strobus, both spg>0.45
-# # Acer rubrum, Aceraceae <0.50 spg
-# # Quercus alba, Quercus coccinea, Quercus rubra, Quercus velutina --> deciduous Fagaceae
-# b0.l <- c(-3.0506, -2.0470, -2.0705)
-# b1.l <- c(2.6465, 2.3852, 2.4410)
-# biom.pred <- function(x, b0, b1){exp(b0+(b1*log(x)))} ## dbh in cm, biom. in kg
-# taxa <- list(c("PIRI", "PIST"),
-#              c("ACRU"),
-#              c("QUAL", "QUCO", "QURU", "QUVE"))
-# biom.rel <- list()
-# bop <- data.table()
-# for(sp in 1:3){
-#   tmp <- andy.bai[Spp %in% taxa[[sp]],]
-#   a <- tmp[, lapply(tmp[,7:33], function(x){biom.pred(x, b0.l[sp], b1.l[sp])})]
-#   a <- cbind(tmp[,.(Tree.ID, incr.ID, Spp, Y, dbh2016)], a)
-#   bop <- rbind(bop, a)
-# }
-# bop$Spp <- as.character(bop$Spp) ### bop is the biomass time series for every core
-# names(bop)[6:32] <- paste0("biom", 2016:1990)
-# 
-# ### lagged biomass gains, relative to previous year biomass
-# biom.rel <- data.frame(c(2015:1990))
-# for(i in 1:dim(bop)[1]){
-#   te <- unlist(bop[i,6:32])
-#   te.di <- (-1*diff(te, lag=1))
-#   biom.rel[,i+1] <- te.di/te[-1]
-# }
-# names(biom.rel)[-1] <- paste0("Tree", bop[,incr.ID])
-# names(biom.rel)[1] <- "Year" ## this has all the relative biomass gains by year (row) for each tree with increment (column)
-# 
-# ### figure the mean relative biomass gain per year across all years in each tree
-# mean.na <- function(x){mean(x, na.rm=T)}
-# m <- apply(biom.rel[,-1], FUN=mean.na, 2)
-# growth.mean <- data.frame(cbind(c(sub("Tree", '', colnames(biom.rel[,-1]))), m))
-# names(growth.mean) <- c("incr.ID", "growth.mean")
-# growth.mean$incr.ID <- as.integer(as.character(growth.mean$incr.ID))
-# andy.bai <- merge(andy.bai, growth.mean, by="incr.ID")
-# andy.bai[Y<10, seg:=10]
-# andy.bai[Y>=10 & Y<20, seg:=20]
-# andy.bai[Y>=20, seg:=30]
-# andy.bai[seg==10, seg.F:="A"]
-# andy.bai[seg==20, seg.F:="B"]
-# andy.bai[seg==30, seg.F:="C"]
-# andy.bai$seg.F <- as.factor(andy.bai$seg.F)
-# andy.bai$growth.mean <- as.numeric(as.character(andy.bai$growth.mean))
-# andy.bai[,avg.dbh:=apply(as.matrix(andy.bai[,8:34]), FUN=mean.na, 1)]
-# ## note: final interaction model only applies correction coefficients for the interior segments
-# andy.bai[seg.F=="A", seg.Edge:="E"]
-# andy.bai[seg.F %in% c("B", "C"), seg.Edge:="I"]
-# andy.bai[,seg.Edge:=as.factor(seg.Edge)]
+### log-transformed growth~dbh*edge
+mod.andy.log <- lm(log(biom.rel.ann)~log(dbh.start)+seg.Edge, data=andy.bai[dbh.start>=5,]) #R2 0.31, dbh:edge not significant
+pred_andy.edge <- data.frame(growth.pred=exp(predict(mod.andy.log, newdata=data.frame(dbh.start=seq(from=andy.bai[dbh.start>=5,min(dbh.start, na.rm=T)], to=100, length.out=200),
+                                                                                  seg.Edge=rep("E", 200)))),
+                          dbh.start=seq(from=andy.bai[dbh.start>=5,min(dbh.start, na.rm=T)],
+                                       to=100, length.out=200))
+pred_andy.int <- data.frame(growth.pred=exp(predict(mod.andy.log, newdata=data.frame(dbh.start=seq(from=andy.bai[dbh.start>=5,min(dbh.start, na.rm=T)], to=100, length.out=200),
+                                                                                      seg.Edge=rep("I", 200)))),
+                             dbh.start=seq(from=andy.bai[dbh.start>=5, min(dbh.start, na.rm=T)],
+                                           to=100, length.out=200))
+andy.bai[dbh.start>=5, density:=get_density(andy.bai[dbh.start>=5, dbh.start], andy.bai[dbh.start>=5, biom.rel.ann])]
 
+## split colors (seg.Edge), density via alpha
+andy.col <- plasma(6)[c(3,5)]
+names(andy.col) <- levels(andy.bai$seg.Edge)
+col.map <- scale_color_manual(name="seg.Edge", values=andy.col, labels=c("Edge <10m", "Interior"))
+andy.mono <- ggplot(andy.bai[dbh.start>=5], aes(dbh.start, biom.rel.ann, color=seg.Edge))+
+  geom_point(alpha=1/4)+
+  col.map+
+  lims(x=xlim.all, y=ylim.all)+
+  geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(dbh.start, na.rm=T)], color="gray55", size=med.lines.width)+
+  geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(biom.rel.ann, na.rm=T)], color="gray55", size=med.lines.width)+
+  geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(dbh.start, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(biom.rel.ann, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  geom_line(data = pred_andy.edge, aes(x=dbh.start, y=growth.pred), color="royalblue2", linetype=fit.type, size=fit.width)+
+  geom_line(data = pred_andy.int, aes(x=dbh.start, y=growth.pred), color="lightskyblue", linetype=fit.type, size=fit.width)+
+  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Urban Forest '90-'16")+
+  theme.master+
+  theme(legend.position = c(0.8, 0.5),
+        legend.title = element_text(size=legend.title.size, face="bold"),
+        legend.background = element_rect(fill = "white"),
+        legend.key =  element_blank(),
+        legend.text = element_text(size=legend.title.size-1, face="plain"),
+        legend.justification = "center")+
+  guides(color=guide_legend(title="Tree position"))
 
+## density via color shading
+andy.dens <- ggplot(andy.bai[dbh.start>=5], aes(dbh.start, biom.rel.ann, color=density))+
+  geom_point(alpha=1/3)+
+  scale_colour_viridis(option="B", guide=FALSE)+
+  lims(x=xlim.all, y=ylim.all)+
+  geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(dbh.start, na.rm=T)], color="gray55", size=med.lines.width)+
+  geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(biom.rel.ann, na.rm=T)], color="gray55", size=med.lines.width)+
+  geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(dbh.start, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(biom.rel.ann, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  geom_line(data = pred_andy.edge, aes(x=dbh.start, y=growth.pred), color="royalblue2", linetype=fit.type, size=fit.width)+
+  geom_line(data = pred_andy.int, aes(x=dbh.start, y=growth.pred), color="lightskyblue", linetype=fit.type, size=fit.width)+
+  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Urban Forest '90-'15")+
+  theme.master+  
+  theme(legend.position = c(0.8, 0.5),
+                       legend.title = element_text(size=10, face="bold"),
+                       legend.background = element_rect(fill = "white"),
+                       legend.key =  element_blank())+
+  guides(color=FALSE)
+
+####
 # ###  street trees
 b0 <- -2.48
 b1 <- 2.4835 ## these are eastern hardwood defaults
@@ -774,92 +774,40 @@ pred_street <- data.frame(growth.pred=predict(mod.street.nls, newdata=data.frame
 street[record.good==1, density:=get_density(street[record.good==1, dbh.2006], street[record.good==1, growth.ann.rel])]
 
 ## single color, density via alpha
-ggplot(street[record.good==1], aes(dbh.2006, growth.ann.rel))+
-  geom_point(alpha=1/7, color=plasma(6)[3])+
+street.mono <- ggplot(street[record.good==1], aes(dbh.2006, growth.ann.rel))+
+  geom_point(alpha=1/5, color=plasma(6)[4])+
   # scale_colour_viridis(option="B", guide=FALSE)+
   lims(x=xlim.all, y=ylim.all)+
-  geom_vline(xintercept=street[,median(dbh.2006, na.rm=T)], color="gray55")+
-  geom_hline(yintercept=street[,median(growth.ann.rel, na.rm=T)], color="gray55")+
-  geom_line(data = pred_street, aes(x=dbh.2006, y=growth.pred), color="royalblue1", linetype="longdash", size=1.3)+
-  theme(axis.text.x = element_text(face="plain",
-                                   size=14))+
-  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Boston street trees '06-'14")+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+  geom_vline(xintercept=street[record.good==1, median(dbh.2006, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  geom_hline(yintercept=street[record.good==1, median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  geom_line(data = pred_street, aes(x=dbh.2006, y=growth.pred), color=fit.col, linetype=fit.type, size=fit.width)+
+  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Street trees '06-'14")+
+  theme.master
 
 ## density via color shading
-ggplot(street[record.good==1], aes(dbh.2006, growth.ann.rel, color=density))+
+street.dens <- ggplot(street[record.good==1], aes(dbh.2006, growth.ann.rel, color=density))+
   geom_point(alpha=1/7)+
   scale_colour_viridis(option="B", guide=FALSE)+
   lims(x=xlim.all, y=ylim.all)+
-  geom_vline(xintercept=street[,median(dbh.2006, na.rm=T)], color="gray55")+
-  geom_hline(yintercept=street[,median(growth.ann.rel, na.rm=T)], color="gray55")+
-  geom_line(data = pred_street, aes(x=dbh.2006, y=growth.pred), color="royalblue1", linetype="longdash", size=1.3)+
-  theme(axis.text.x = element_text(face="plain",
-                                   size=14))+
-  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Boston street trees '06-'14")+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+  geom_vline(xintercept=street[record.good==1, median(dbh.2006, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  geom_hline(yintercept=street[record.good==1, median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  geom_line(data = pred_street, aes(x=dbh.2006, y=growth.pred), color=fit.col, linetype=fit.type, size=fit.width)+
+  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Street trees '06-'14")+
+  theme.master
 
+### monocolored plots
+library(gridExtra)
+png(width=8, height=3, units="in", res=600, bg="white", filename="images/Fig2A_stem-dbh-growth_mono.png")
+grid.arrange(grobs=list(fia.mono, andy.mono, street.mono),
+             widths=c(1,1,1))
+dev.off()
 
-# 
-# # plot(street[record.good==1, dbh.2006],street[record.good==1, npp.ann.rel])
-# mod.street.nls <- nls(npp.ann.rel ~ exp(a + b * log(dbh.2006)), data=street[record.good==1,], start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
-# mm <- summary(mod.street.nls) ## RSE is pretty high 0.33
-# street[record.good==1, sd(npp.ann.rel)/sqrt(length(npp.ann.rel))] ### St.Err mean is 0.008!
-# 
-# plot(street[record.good==1, dbh.2006], street[record.good==1, npp.ann.rel],
-#      ylim=main.ylim, xlim=main.xlim, pch=15, col="salmon", cex=0.5, main="Street trees growth~DBH",
-#      ylab="Relative growth (kg/kg)", xlab="Stem DBH (cm)")
-# test <- seq(from=main.xlim[1], to=main.xlim[2], length.out=100)
-# lines(test, 
-#       exp(mm$coefficients[1]+(mm$coefficients[2]*log(test))),
-#       col="black", lty=2, lwd=3)
-# abline(v=street[record.good==1, median(dbh.2006)], lwd=1, col="black")
-# abline(h=street[record.good==1, median(npp.ann.rel)], lwd=1, col="black")
-# 
-# 
-# par(mfrow=c(1,1))
-# plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean), col=as.numeric(andy.bai$seg.Edge))
-# plot(street[record.good==1, log(dbh.2006)], street[record.good==1, log(npp.ann.rel)])
-# plot(live[,log(DIAM_T0)], live[,log(npp.ann.rel)])
-# 
-# ## try untransformed
-# plot(live[,DIAM_T0], live[,npp.ann.rel], xlim=c(5, 100), ylim=c(-0.2, 1))
-# points(street[record.good==1, (dbh.2006)], street[record.good==1, (npp.ann.rel)])
-# points((andy.bai$avg.dbh), (andy.bai$growth.mean), col=as.numeric(andy.bai$seg.Edge))
-# 
+png(width=8, height=3, units="in", res=600, bg="white", filename="images/Fig2A_stem-dbh-growth_dens.png")
+grid.arrange(grobs=list(fia.dens, andy.dens, street.dens),
+             widths=c(1,1,1))
+dev.off()
 
-# ## just do a plot first
-# plot(dat[,log(DIAM_T0)],  ### this is FIA data
-#      dat[,log(biom.rel)], 
-#      cex=0.2, col="gray64", pch=1, ylim=c(-9, 2), xlim=c(log(5), log(110)))
-# points(street[record.good==1, log(dbh.2006)],  ### this is street trees
-#        street[record.good==1, log(npp.ann.rel)], 
-#        pch=15, cex=0.4, col="salmon")
-# andy.cols <- c("royalblue", "skyblue")
-# points(andy.bai[,log(avg.dbh)], andy.bai[,log(growth.mean)], 
-#        col=andy.cols[as.numeric(andy.bai$seg.Edge)],
-#        pch=15, cex=0.6)
-# 
-# summary(street[record.good==1,npp.ann]) ## a tiny handful of street trees show zero growth
-
-# ### lets look untransformed
-# plot(live[,(DIAM_T0)], 
-#      live[,(npp.ann.rel)], 
-#      cex=0.2, col="gray64", pch=14, xlim=c(5, 100), ylim=c(-0.1, 1.1),
-#      xlab="Diameter (cm)", ylab="Growth rate (kg/kg)")
-# points(street[record.good==1, (dbh.2006)], 
-#        street[record.good==1, (npp.ann.rel)], 
-#        pch=15, cex=0.4, col="salmon")
-# andy.cols <- c("royalblue", "skyblue")
-# points(andy.bai[,(avg.dbh)], andy.bai[,(growth.mean)], 
-#        col=andy.cols[as.numeric(andy.bai$seg.Edge)],
-#        pch=15, cex=0.6)
-# legend(x=60, y=0.6, legend=c("FIA", "Street trees '06-'14", "Reinmann '17"), fill=c("gray64", "salmon", "royalblue"), bty="n")
-
-
-
+### draft plots, cumulative NPP by density
 ############
 ### cumulative npp~biomass graph w/ LULC stacked --- hybrid results
 npp.dat <- as.data.table(read.csv("processed/npp.estimates.V3.csv"))
@@ -921,9 +869,6 @@ for(e in 2:5){
 }
 legend(x = 20, y = 400, legend = c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other veg."), fill=col.tmp, bty="n")
 # mtext(side=1, "Biomass density, canopy basis (Mg-biomass/ha)", line=2)
-
-
-
 
 ### cumulative with ascending binned biomass density
 dog <- contain.npp
@@ -1004,10 +949,10 @@ ggplot(yup, aes(x=bin.num, y=cum.sum/1000, fill=LULC)) +
         panel.background = element_blank())+
   theme(legend.position = c(60, 1.5E04))
 
-
-
+#####
+### FIGURE 4: NPP VS BIOMASS DENSITY
 ########
-#### Try again: SUMMED NPP, BINNED BY DENSITY AND COLORED BY LULC
+#### SUMMED NPP, BINNED BY DENSITY AND COLORED BY LULC
 library(reshape2)
 npp.dat <- read.csv("processed/npp.estimates.V3.csv")
 npp.dat <- as.data.table(npp.dat)
@@ -1041,25 +986,6 @@ contain.npp[,LULC:=as.factor(lulc)]
 lulc.pal <- viridis(6)
 lulc.pal <- c(lulc.pal[5],lulc.pal[2],lulc.pal[3],lulc.pal[4],lulc.pal[6],lulc.pal[1])
 
-
-#### Biomass density in MgC/ha-canopy
-### HYBRID STACKED NPP
-# ggplot(contain.npp, aes(x=bin.num, y=hyb.npp.MgC, fill=LULC))+
-#   geom_area(position='stack')+
-#   scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
-#                     name="Land Cover",
-#                     breaks=c(1,2,3,4,5,6),
-#                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
-#   xlab("Biomass density (MgC/ha-canopy)")+
-#   ylab("Hybrid, total NPP (MgC/yr)")+
-#   theme(axis.line = element_line(colour = "black"),
-#         panel.grid.major = element_blank(),
-#         panel.grid.minor = element_blank(),
-#         panel.border = element_blank(),
-#         panel.background = element_blank())+
-#   scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
-#   ylim(0, 1400)
-
 hyb.npp.plot <- ggplot(contain.npp, aes(x=bin.num, y=hyb.npp.MgC, fill=LULC))+
   geom_area(position='stack')+
   scale_fill_manual(values = lulc.pal,
@@ -1077,24 +1003,7 @@ hyb.npp.plot <- ggplot(contain.npp, aes(x=bin.num, y=hyb.npp.MgC, fill=LULC))+
         legend.position = "none")+
   scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
   ylim(0, 1400)
-
-
-### FIA STACKED NPP
-# ggplot(contain.npp, aes(x=bin.num, y=fia.npp.MgC, fill=LULC))+
-#   geom_area(position='stack')+
-#   scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
-#                     name="Land Cover",
-#                     breaks=c(1,2,3,4,5,6),
-#                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
-#   xlab("Biomass density (MgC/ha-canopy)")+
-#   ylab("FIA, total NPP (MgC/yr)")+
-#   theme(axis.line = element_line(colour = "black"),
-#         panel.grid.major = element_blank(),
-#         panel.grid.minor = element_blank(),
-#         panel.border = element_blank(),
-#         panel.background = element_blank())+
-#   scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
-#   ylim(0, 1400)
+hyb.npp.plot
 
 fia.npp.plot <- ggplot(contain.npp, aes(x=bin.num, y=fia.npp.MgC, fill=LULC))+
   geom_area(position='stack')+
@@ -1117,6 +1026,68 @@ fia.npp.plot <- ggplot(contain.npp, aes(x=bin.num, y=fia.npp.MgC, fill=LULC))+
   ylim(0, 1400)
 fia.npp.plot
 
+biom.plot <- ggplot(contain.npp, aes(x=bin.num, y=tot.biom.MgC, fill=LULC))+
+  geom_area(position='stack')+
+  scale_fill_manual(values = lulc.pal,
+                    name="Land Cover",
+                    breaks=c(1,2,3,4,5,6),
+                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+  xlab("MgC/ha-canopy")+
+  ylab("Total biomass (MgC x 1000)")+
+  theme(axis.line = element_line(colour = "black"),
+        axis.title = element_text(face="bold"),
+        
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        legend.position = "none")+
+  scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
+  scale_y_continuous(breaks=c(0, 10000, 20000, 30000), labels=c(0, 10, 20, 30))
+biom.plot
+
+### now combine
+library(gridExtra)
+png(width=8, height=3, units="in", res=600, bg="white", filename="images/Fig4_biom-dens_NPP_comb.png")
+grid.arrange(grobs=list(biom.plot, hyb.npp.plot, fia.npp.plot),
+             widths=c(1,1,1))
+dev.off()
+
+
+### using the older manual color scheme
+#### Biomass density in MgC/ha-canopy
+### HYBRID STACKED NPP
+# ggplot(contain.npp, aes(x=bin.num, y=hyb.npp.MgC, fill=LULC))+
+#   geom_area(position='stack')+
+#   scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+#                     name="Land Cover",
+#                     breaks=c(1,2,3,4,5,6),
+#                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+#   xlab("Biomass density (MgC/ha-canopy)")+
+#   ylab("Hybrid, total NPP (MgC/yr)")+
+#   theme(axis.line = element_line(colour = "black"),
+#         panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         panel.border = element_blank(),
+#         panel.background = element_blank())+
+#   scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
+#   ylim(0, 1400)
+### FIA STACKED NPP
+# ggplot(contain.npp, aes(x=bin.num, y=fia.npp.MgC, fill=LULC))+
+#   geom_area(position='stack')+
+#   scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+#                     name="Land Cover",
+#                     breaks=c(1,2,3,4,5,6),
+#                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+#   xlab("Biomass density (MgC/ha-canopy)")+
+#   ylab("FIA, total NPP (MgC/yr)")+
+#   theme(axis.line = element_line(colour = "black"),
+#         panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         panel.border = element_blank(),
+#         panel.background = element_blank())+
+#   scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
+#   ylim(0, 1400)
 ### TOTAL BIOMASS STACKED
 # ggplot(contain.npp, aes(x=bin.num, y=tot.biom.MgC, fill=LULC))+
 #   geom_area(position='stack')+
@@ -1133,33 +1104,7 @@ fia.npp.plot
 #         panel.background = element_blank())+
 #   scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))
 
-biom.plot <- ggplot(contain.npp, aes(x=bin.num, y=tot.biom.MgC, fill=LULC))+
-  geom_area(position='stack')+
-  scale_fill_manual(values = lulc.pal,
-                    name="Land Cover",
-                    breaks=c(1,2,3,4,5,6),
-                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
-  xlab("MgC/ha-canopy")+
-  ylab("Total biomass (MgC x 1000)")+
-  theme(axis.line = element_line(colour = "black"),
-        axis.title = element_text(face="bold"),
-    
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank(),
-        legend.position = "none")+
-  scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
-  scale_y_continuous(breaks=c(0, 10000, 20000, 30000), labels=c(0, 10, 20, 30))
-biom.plot
-### now combine
-library(gridExtra)
-png(width=8, height=3, units="in", res=600, bg="white", filename="images/Fig4_biom-dens_NPP_comb.png")
-grid.arrange(grobs=list(biom.plot, hyb.npp.plot, fia.npp.plot),
-             widths=c(1,1,1))
-dev.off()
-
-###
+### GROUND BASIS FOR CALC
 ### plots ordered in bins along MgC/ha-GROUND
 contain.npp <- npp.dat2[!is.na(bos.biom30m) & !is.na(lulc), .(sum(hyb.npp.mod.cap, na.rm=T)/2000, 
                                                              sum(fia.empir.npp.kg.hw.forest, na.rm=T)/2000,
@@ -1172,7 +1117,6 @@ contain.npp[,LULC:=as.factor(lulc)]
 ### with viridis coloring
 lulc.pal <- viridis(6)
 lulc.pal <- c(lulc.pal[5],lulc.pal[2],lulc.pal[3],lulc.pal[4],lulc.pal[6],lulc.pal[1])
-
 
 ### HYBRID STACKED NPP
 # ggplot(contain.npp, aes(x=bin.num, y=hyb.npp.MgC, fill=LULC))+
