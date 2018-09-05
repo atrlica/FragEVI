@@ -167,99 +167,100 @@ bos.hdres <- raster("processed/boston/bos.hdres_only.tif")
 bos.ldres <- raster("processed/boston/bos.ldres_only.tif")
 bos.lowveg <- raster("processed/boston/bos.lowveg_only.tif")
 bos.water <- raster("processed/boston/bos.water_only.tif")
-# 
-# for.sum <- sum(getValues(bos.forest), na.rm=T)
-# dev.sum <- sum(getValues(bos.dev), na.rm=T)
-# hdres.sum <- sum(getValues(bos.hdres), na.rm=T)
-# ldres.sum <- sum(getValues(bos.ldres), na.rm=T)
-# lowveg.sum <- sum(getValues(bos.lowveg), na.rm=T)
-# water.sum <- sum(getValues(bos.water), na.rm=T)
-# bos.aoi <- raster("processed/boston/bos.AOI.1m.tif")
-# aoi.sum <- sum(getValues(bos.aoi), na.rm=T)
-# for.sum/aoi.sum ## 8.2%
-# dev.sum/aoi.sum ## 38%
-# hdres.sum/aoi.sum ## 38.7%
-# ldres.sum/aoi.sum ## 2.0%
-# lowveg.sum/aoi.sum # 10.7%
-# water.sum/aoi.sum # 2.1%
+
+for.sum <- sum(getValues(bos.forest), na.rm=T)
+dev.sum <- sum(getValues(bos.dev), na.rm=T)
+hdres.sum <- sum(getValues(bos.hdres), na.rm=T)
+ldres.sum <- sum(getValues(bos.ldres), na.rm=T)
+lowveg.sum <- sum(getValues(bos.lowveg), na.rm=T)
+water.sum <- sum(getValues(bos.water), na.rm=T)
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+aoi.sum <- sum(getValues(bos.aoi), na.rm=T)
+for.sum/aoi.sum ## 8.2%
+dev.sum/aoi.sum ## 38%
+hdres.sum/aoi.sum ## 38.7%
+ldres.sum/aoi.sum ## 2.0%
+lowveg.sum/aoi.sum # 10.7%
+water.sum/aoi.sum # 2.1%
 
 ### processing script to get cumulative area by edge distance within LULC
-# ## sum of canopy area, masked by lulc
-# can.sum.ma <- function(x,m) { # x is canopy 0/1 1m raster object, m is mask
-#   bs <- blockSize(x)
-#   y <- integer()
-#   for (i in 1:bs$n) {
-#     v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i])
-#     z <- getValues(m, row=bs$row[i], nrows=bs$nrows[i])
-#     v[v>1 | v<0] <- NA  # for some reason some of the NA's are getting labeled as 120
-#     v[z!=1] <- 0 ## cancel values outside mask area
-#     y <- c(y, sum(v, na.rm=T))
-#     print(paste("finished block", i, "of", bs$n))
-#   }
-#   return(y)
-# }
-# 
-# ### get the total area of canopy (excluding tiny canopy gaps that are filtered in buffer calculations)
-# can.buffs <- list.files("processed/boston/")
-# can.buffs <- can.buffs[grep(pattern = "bos.nocan_", x = can.buffs)]
-# can.buffs <- can.buffs[grep(pattern=".tif", x=can.buffs)]
-# can.buffs <- can.buffs[!grepl(pattern = ".vat", x=can.buffs)]
-# can.buffs <- can.buffs[!grepl(pattern = ".aux", x=can.buffs)]
-# can.buffs <- can.buffs[!grepl(pattern = ".ovr", x=can.buffs)]
+## sum of canopy area, masked by lulc
+can.sum.ma <- function(x, m) { # x is canopy 0/1 1m raster object, m is mask (LULC 1/0 map)
+  bs <- blockSize(x)
+  y <- integer()
+  for (i in 1:bs$n) {
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i])
+    z <- getValues(m, row=bs$row[i], nrows=bs$nrows[i])
+    v[v>1 | v<0] <- NA  # for some reason some of the NA's are getting labeled as 120
+    v[z!=1] <- 0 ## cancel values outside mask area
+    y <- c(y, sum(v, na.rm=T))
+    print(paste("finished block", i, "of", bs$n))
+  }
+  return(y)
+}
+
+### get the total area of canopy (excluding tiny canopy gaps that are filtered in buffer calculations)
+can.buffs <- list.files("processed/boston/")
+can.buffs <- can.buffs[grep(pattern = "bos.nocan_", x = can.buffs)]
+can.buffs <- can.buffs[grep(pattern=".tif", x=can.buffs)]
+can.buffs <- can.buffs[!grepl(pattern = ".vat", x=can.buffs)]
+can.buffs <- can.buffs[!grepl(pattern = ".aux", x=can.buffs)]
+can.buffs <- can.buffs[!grepl(pattern = ".ovr", x=can.buffs)]
 # buff.dist <- as.integer(unlist(rm_between(can.buffs, "nocan_", "mbuff", extract=TRUE)))
-# 
-# 
-# can.master <- raster("processed/boston/bos_can01_filt.tif")
+buff.dist <- sub("bos.nocan_", "", can.buffs); buff.dist <- as.integer(sub("mbuff.tif", "", buff.dist))
+can.master <- raster("processed/boston/bos_can01_filt.tif")
 # can.tot <- sum(getValues(can.master), na.rm=T) ### 31.7% of boston raster is canopy
 # aoi.master <- raster("processed/boston/bos.aoi.tif")
 # aoi.tot <- sum(getValues(aoi.master), na.rm=T)
-# ## cumulative canopy area by edge distance, for each lulc class
-# lu.classes <- c("forest", "dev", "hdres", "ldres", "lowveg")
-# for(l in 1:length(lu.classes)){
-#   print(paste("initializing", lu.classes[l]))
-#   if(exists("results")){rm(results)} ## clean up previous store file
-#   tot <- integer()
-#   dist <- 0
-#   ma <- raster(paste("processed/boston/bos.", lu.classes[l], "_only.tif", sep=""))
-#   area.tot <- sum(getValues(ma), na.rm=T) ## total size of the lulc target
-#   dog <- can.sum.ma(can.master, ma)
-#   tot <- c(tot, sum(dog, na.rm=T))
-#   
-#   for(g in 1:length(can.buffs)){
-#     print(paste("working on", can.buffs[g], "in", lu.classes[l]))
-#     r <- raster(paste("processed/boston/", can.buffs[g], sep=""))
-#     dog <- can.sum.ma(r, ma)
-#     tot <- c(tot, sum(dog, na.rm=T))
-#     dist <- c(dist, buff.dist[g])
-#   }
-#   results <- cbind(dist, tot)
-#   results <- results[order(dist),]
-#   results <- as.data.frame(results)
-#   colnames(results) <- c("dist", "pix.more.than")
-#   results$pix.less.than <- results$pix.more.than[1]-results$pix.more.than ## recall that this method completely leaves out any gap areas that are <50m2 -- neither counted as canopy nor as gap area
-#   results$less.rel <- results$pix.less.than/results$pix.more.than[1]
-#   results$frac.tot.area <- results$pix.less.than/area.tot
-#   write.csv(results, paste("processed/bos.can.cummdist.", lu.classes[l], ".csv", sep=""))
-# }
+
+## cumulative canopy area by edge distance, for each lulc class
+lu.classes <- c("forest", "dev", "hdres", "ldres", "lowveg", "water")
+for(l in 1:length(lu.classes)){
+  print(paste("initializing", lu.classes[l]))
+  if(exists("results")){rm(results)} ## clean up previous store file
+  tot <- integer()
+  dist <- 0
+  ma <- raster(paste("processed/boston/bos.", lu.classes[l], "_only.tif", sep=""))
+  area.tot <- sum(getValues(ma), na.rm=T) ## total size of the lulc target
+  dog <- can.sum.ma(can.master, ma)
+  tot <- c(tot, sum(dog, na.rm=T))
+
+  for(g in 1:length(can.buffs)){
+    print(paste("working on", can.buffs[g], "in", lu.classes[l]))
+    r <- raster(paste("processed/boston/", can.buffs[g], sep=""))
+    dog <- can.sum.ma(r, ma)
+    tot <- c(tot, sum(dog, na.rm=T))
+    dist <- c(dist, buff.dist[g])
+  }
+  results <- cbind(dist, tot)
+  results <- results[order(dist),]
+  results <- as.data.frame(results)
+  colnames(results) <- c("dist", "pix.more.than")
+  results$pix.less.than <- results$pix.more.than[1]-results$pix.more.than ## recall that this method completely leaves out any gap areas that are <50m2 -- neither counted as canopy nor as gap area
+  results$less.rel <- results$pix.less.than/results$pix.more.than[1]
+  results$frac.tot.area <- results$pix.less.than/area.tot
+  write.csv(results, paste("processed/bos.can.cummdist.", lu.classes[l], ".csv", sep=""))
+}
 
 
 ################
 ### combined plot, canopy edge area as fraction of total area (by LULC class)
 results <- read.csv("processed/bos.can.cummdist.csv")
-lu.classes <- c("forest", "dev", "hdres", "ldres", "lowveg")
+lu.classes <- c("forest", "dev", "hdres", "ldres", "lowveg", "water")
 cols=rainbow(length(lu.classes))
-cols=c("forestgreen", "gray55", "red", "yellow", "green")
+cols=c("forestgreen", "gray55", "red", "yellow", "green", "lightblue")
 par(mar=c(4.5, 5.5, 1, 1), oma=c(0,0,0, 0), xpd=F)
 
-plot(results$dist, results$frac.tot.area, pch=1, col="black", type="l", lwd=7, bty="n", lty=1, 
-     xlab="Distance from edge (m)", ylab="Cummulative area fraction",
-     ylim=c(0, 0.9), xlim=c(0, 60), yaxt="n", font.lab=2, cex.lab=2, cex.axis=2)
-axis(2, at=c(0, 0.2, 0.4, 0.6, 0.8), labels=c("0", "20%", "40%", "60%", "80%"), cex.axis=2)
-for(d in 1:length(lu.classes)){
-  dat <- read.csv(paste("processed/bos.can.cummdist.", lu.classes[d], ".csv", sep=""))
-  lines(dat$dist, dat$frac.tot.area, col=cols[d], type="l", lwd=3)
-}
-legend("right", x=40, y=0.80, cex=1, legend=c("Boston", "Forest", "Developed", "HDRes", "LDRes", "LowVeg"), fill=c("black", cols), bty="n")
+### separated cumulative area curves for each LULC
+# plot(results$dist, results$frac.tot.area, pch=1, col="black", type="l", lwd=7, bty="n", lty=1, 
+#      xlab="Distance from edge (m)", ylab="Cummulative area fraction",
+#      ylim=c(0, 0.9), xlim=c(0, 60), yaxt="n", font.lab=2, cex.lab=2, cex.axis=2)
+# axis(2, at=c(0, 0.2, 0.4, 0.6, 0.8), labels=c("0", "20%", "40%", "60%", "80%"), cex.axis=2)
+# for(d in 1:length(lu.classes)){
+#   dat <- read.csv(paste("processed/bos.can.cummdist.", lu.classes[d], ".csv", sep=""))
+#   lines(dat$dist, dat$frac.tot.area, col=cols[d], type="l", lwd=3)
+# }
+# legend("right", x=40, y=0.80, cex=1, legend=c("Boston", "Forest", "Developed", "HDRes", "LDRes", "LowVeg"), fill=c("black", cols), bty="n")
 
 
 ### Edge distance cummulative by LULC stack
@@ -280,8 +281,11 @@ colnames(contain) <- c("distance", "LULC", "pix.num")
 contain$distance <- as.integer(as.character(contain$distance))
 contain$pix.num <- as.integer(as.character(contain$pix.num))
 contain$ha <- contain$pix.num/(1E4)
+contain <- as.data.table(contain)
 # m <- contain[, sum(ha), by=distance]
-# sum(m$V1) ### ok this really is the total sum of canopy area
+# sum(m$V1) #3952 ha
+# results[results$dist==100, "pix.less.than"]/1E4 ### 3942 ha, all LULC
+# ### ok this does seem to add up to the whole area canopy cover
 # plot(contain[LULC=="hdres", ha], col="salmon")
 # points(contain[LULC=="forest", ha], col="forestgreen")
 # points(contain[LULC=="dev", ha], col="gray55")
@@ -291,11 +295,11 @@ library(ggplot2)
 contain <- as.data.table(contain)
 ggplot(contain[distance!=0,], aes(x=distance, y=ha, fill=LULC)) + 
   geom_area(aes(fill=LULC))+
-  xlim(1,50)+
-  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3"),
+  xlim(1,35)+
+  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
                     name="Land Cover",
-                    breaks=c("forest", "dev", "hdres", "ldres", "lowveg"),
-                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg."))+
+                    breaks=c("forest", "dev", "hdres", "ldres", "lowveg", "water"),
+                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
   xlab("Canopy distance from edge (m)")+
   ylab("Total canopy area (ha)")+
   theme(axis.line = element_line(colour = "black"),
@@ -303,8 +307,94 @@ ggplot(contain[distance!=0,], aes(x=distance, y=ha, fill=LULC)) +
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
         panel.background = element_blank())+
-  theme(legend.position = c(0.8, 0.2))
+  theme(legend.position = c(0.8, 0.4))
 
+### new hotness: matching viridis color scheme
+# lulc.pal <- inferno(6)
+library(viridis)
+lulc.pal <- viridis(6)
+# lulc.pal <- inferno(6)
+lulc.pal <- c(lulc.pal[5],lulc.pal[2],lulc.pal[3],lulc.pal[4],lulc.pal[6],lulc.pal[1])
+### fix artifact of naming "distance from edge"
+contain[,distance:=distance-1]
+contain <- contain[distance>=0,]
+
+png(filename="images/Can_dist_VIRIDIS_8x8in.png", width=8, height=8, units = "in", bg="white", res=600)
+par(mfrow=c(1,1), mar=c(4,4,0.5,0.5))
+ggplot(contain, aes(x=distance, y=ha, fill=LULC)) + 
+  geom_area(aes(fill=LULC))+
+  xlim(0,35)+
+  scale_fill_manual(values = lulc.pal,
+                    name="Land Cover",
+                    breaks=c("forest", "dev", "hdres", "ldres", "lowveg", "water"),
+                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+  xlab("Canopy distance from edge (m)")+
+  ylab("Total canopy area (ha)")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        legend.position = c(0.7, 0.5),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=24, face="bold"),
+        legend.text=element_text(size=20),
+        legend.title=element_text(size=20, face="bold"))
+dev.off()
+
+png(filename="images/Can_dist_VIRIDIS_3x3in.png", width=3, height=3, units = "in", bg="white", res=600)
+par(mfrow=c(1,1), mar=c(4,4,0.5,0.5))
+ggplot(contain, aes(x=distance, y=ha, fill=LULC)) + 
+  geom_area(aes(fill=LULC))+
+  xlim(0,35)+
+  scale_fill_manual(values = lulc.pal,
+                    name="Land Cover",
+                    breaks=c("forest", "dev", "hdres", "ldres", "lowveg", "water"),
+                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+  xlab("Canopy distance from edge (m)")+
+  ylab("Total canopy area (ha)")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        legend.position = c(0.7, 0.5),
+        axis.text=element_text(size=10),
+        axis.title=element_text(size=11, face="bold"),
+        legend.text=element_text(size=8),
+        legend.title=element_text(size=10, face="bold"))
+dev.off()
+
+
+### tables for example "pixel" summary cover
+library(rgeos)
+target <- readOGR("processed/boston/fenway_sample1.shp")
+inset <- readOGR("processed/boston/fenway_inset2.shp")
+cov <- raster("processed/boston/bos.cov.V2.tif")
+cov <- crop(cov, inset)
+plot(cov); plot(target, add=T)
+biom <- raster("data/dataverse_files/bostonbiomass_1m.tif")
+biom <- crop(biom, inset)
+plot(biom); plot(target, add=T)
+ed <- raster("processed/boston/bos.ed10.tif")
+ed <- crop(ed, inset)
+plot(ed); plot(target, add=T)
+ndvi <- raster("processed/boston/bos.ndvi.tif")
+ndvi <- crop(ndvi, inset)
+plot(ndvi); plot(target, add=T)
+
+d <- unlist(extract(cov, target))
+sum(d%in%c(6,5))/length(d) ## canopy fraction
+sum(d%in%c(5,4))/length(d) ## impervious fraction
+e <- unlist(extract(ed, target))
+sum(e)/sum(d%in%c(6,5)) ## canopy edge fraction
+b <- unlist(extract(biom,target))
+sum(b)/(2000) ### total biomass MgC
+(sum(b)/(2000))/(length(b)/1E4) ### MgC/ha-ground
+(sum(b)/(2000))/((length(b)*(sum(d%in%c(6,5))/length(d)))/1E4) ### MgC/ha-canopy
+(sum(b)/(2000))/((length(b)*(1-(sum(d%in%c(5,4))/length(d))))/1E4) ### MgC/ha-perv
+n <- unlist(extract(ndvi, target))
+mean(n) ## mean pixel ndvi
 
 #### FIA density plots
 library(raster)
@@ -503,7 +593,23 @@ ggplot(npp.melt, aes(x=value, fill=variable)) +
 
 
 
+
+#######
+###### FIGURE 2A: STEM LEVEL BIOMASS GROWTH 
 ### combined biomass.growth~dbh for Street, Andy, FIA
+library(MASS)
+library(ggplot2)
+library(viridis)
+get_density <- function(x, y, n = 100) {
+  dens <- MASS::kde2d(x = x, y = y, n = n) ## two dimensional kernel density estimation from MASS package
+  ix <- findInterval(x, dens$x)
+  iy <- findInterval(y, dens$y)
+  ii <- cbind(ix, iy)
+  return(dens$z[ii])
+}
+xlim.all <- c(4, 100)
+ylim.all <- c(-0.1, 1)
+
 ### individual FIA tree data from sites near Boston
 live <- read.csv("data/FIA/MA_Tree_Data_ID_NOMORT.csv")
 live <- as.data.table(live)
@@ -527,189 +633,230 @@ live[spp%in%c("P.strobus", "P.resinosa", "T.canadensis", "A.balsamea"), type:="S
 live[,type:=as.factor(type)]
 live[,biom0.spp:=biom.pred2(b0, b1, DIAM_T0)]
 live[,biom1.spp:=biom.pred2(b0, b1, DIAM_T1)]
-live[,npp.ann:=(biom1.spp-biom0.spp)/4.8]
-live[,npp.ann.rel:=npp.ann/biom0.spp]
-range(live$npp.ann.rel, na.rm=T) #-12% to 52%
+live[,growth.ann:=(biom1.spp-biom0.spp)/4.8]
+live[,growth.ann.rel:=growth.ann/biom0.spp]
+# range(live$npp.ann.rel, na.rm=T) #-12% to 52%
+mod.fia.nls <- nls(growth.ann.rel ~ exp(a + b * log(DIAM_T0)), data=live, start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
+mm <- summary(mod.fia.nls) ## all factors significant
 
-# # ## compare the models of areal biomass growth with raw data and using only hardwoods
-# live.plot <- live[,.(sum(biom1.spp-biom0.spp, na.rm=T),
-#                      sum(biom0.spp, na.rm=T),
-#                      sum(biom1-biom0, na.rm=T),
-#                      sum(biom0, na.rm=T),
-#                      length(DIAM_T0)), by=PlotID] ## we are missing one plot -- all dead?
-# names(live.plot)[2:6] <- c("biom.growth.spp", "total.biom0.spp.kg", ## species specific and default calcs
-#                            "biom.growth.def", "total.biom0.def.kg",
-#                            "num.stems")
-# # plot(live.plot$biom.growth.def, live.plot$biom.growth.spp) ## higher growth in spp
-# # abline(a=0, b=1)
-# # plot(live.plot$total.biom0.def.kg, live.plot$total.biom0.spp.kg)
-# # abline(a=0, b=1) # corresponding to somewhat more biomass with spp
-# 
-# hwood <- live[type=="H", .(sum(biom1.spp-biom0.spp, na.rm=T), 
-#                            sum(biom0.spp, na.rm=T)), 
-#               by=PlotID]
-# names(hwood)[2:3] <- c("biom.growth.spp.hw", "total.biom0.spp.kg.hw")
-# swood <- live[type=="S", .(sum(biom1.spp-biom0.spp, na.rm=T), 
-#                            sum(biom0.spp, na.rm=T)),
-#               by=PlotID]
-# names(swood)[2:3] <- c("biom.growth.spp.sw", "total.biom0.spp.kg.sw")
-# 
-# ## plot-level growth
-# ### all hard+softwood
-# live.plot[,growth.ann.rel.spp:=(biom.growth.spp/4.8)/total.biom0.spp.kg]
-# live.plot[,growth.ann.rel.def:=(biom.growth.def/4.8)/total.biom0.def.kg]
-# # plot(live.plot$growth.ann.rel.def, live.plot$growth.ann.rel.spp)
-# # abline(a=0, b=1) ## minimal effect, greater growth but greater biomass to start
-# summary(live.plot$biom.growth.spp) ## a few that decline!
-# # summary(live.plot$biom.growth.def) ## both have some decliners!
-# 
-# #### areal growth~areal biomass
-# ## model comparisons
-# mod.def <- lm(log(growth.ann.rel.def)~log(((total.biom0.def.kg/675)*1E4)), data=live.plot)
-# summary(mod.def) ## R2 0.21
-# mod.spp <- lm(log(growth.ann.rel.spp)~log(((total.biom0.spp.kg/675)*1E4)), data=live.plot)
-# summary(mod.spp) ## slightly sloppier, R2 0.19, coefficients about the same
+pred_live <- data.frame(growth.pred=predict(mod.fia.nls, newdata=data.frame(DIAM_T0=seq(live[,min(DIAM_T0, na.rm=T)],
+                                                                                     100, by=0.2))),
+                        DIAM_T0=seq(live[,min(DIAM_T0, na.rm=T)],
+                                    100, by=0.2))
+
+live$density <- get_density(live$DIAM_T0, live$growth.ann.rel)
+
+## single color, density via alpha density
+ggplot(live, aes(DIAM_T0, growth.ann.rel))+
+  geom_point(alpha=1/7, color=plasma(6)[4])+
+  # scale_colour_viridis(option="B", guide=FALSE)+
+  lims(x=xlim.all, y=ylim.all)+
+  geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color="gray55")+
+  geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color="gray55")+
+  geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color="royalblue1", linetype="longdash", size=1.3)+
+  theme(axis.text.x = element_text(face="plain",
+                                   size=14))+
+  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="FIA")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+
+### density via color gradient
+ggplot(live, aes(DIAM_T0, growth.ann.rel, color=density))+geom_point(alpha=1/5)+scale_colour_viridis(option="B", guide=FALSE)+
+  lims(x=xlim.all, y=ylim.all)+
+  geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color="gray55")+
+  geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color="gray55")+
+  geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color="royalblue1", linetype="longdash", size=1.3)+
+  theme(axis.text.x = element_text(face="plain",
+                                   size=14))+
+  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="FIA")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+
 
 ### now the andy trees
-andy.bai <- read.csv("docs/ian/Reinmann_Hutyra_2016_BAI.csv") 
-andy.bai <- as.data.table(andy.bai)
-## artifact: dbh's have hidden NA's that are marked as repeating numbers, basically when the dbh gets too small -- they are higher than the min dbh though
-cleanup <- as.matrix(andy.bai[,7:33])
-for(r in 1:nrow(cleanup)){
-  bust <- which(diff(cleanup[r,], lag = 1)>0) ## tells you where the NA's are located
-  if(length(bust)>0){
-    cleanup[r, bust:ncol(cleanup)] <- NA
-  }
-}
-cleanup <- as.data.table(cleanup)
-andy.bai <- cbind(andy.bai[,1:6], cleanup)
-names(andy.bai)[7:33] <- paste0("dbh", 2016:1990)
-andy.bai[,incr.ID:=seq(1:dim(andy.bai)[1])]
-names(andy.bai)[1:6] <- c("Plot.ID", "Tree.ID", "Spp", "X", "Y", "Can.class")
+andy.dbh <- read.csv("processed/andy.dbh.proc.results.csv")
+andy.dbh <- as.data.table(andy.dbh)
 
-### biomass change as a % of previous biomass per year from the increment data
-### the basic allometrics to get biomass
-## Jenkins, C.J., D.C. Chojnacky, L.S. Heath and R.A. Birdsey. 2003. Forest Sci 49(1):12-35.
-## Chojnacky, D.C., L.S. Heath and J.C. Jenkins. 2014. Forestry 87: 129-151.
-# Pinus rigida, Pinus strobus, both spg>0.45
-# Acer rubrum, Aceraceae <0.50 spg
-# Quercus alba, Quercus coccinea, Quercus rubra, Quercus velutina --> deciduous Fagaceae
-b0.l <- c(-3.0506, -2.0470, -2.0705)
-b1.l <- c(2.6465, 2.3852, 2.4410)
-biom.pred <- function(x, b0, b1){exp(b0+(b1*log(x)))} ## dbh in cm, biom. in kg
-taxa <- list(c("PIRI", "PIST"),
-             c("ACRU"),
-             c("QUAL", "QUCO", "QURU", "QUVE"))
-biom.rel <- list()
-bop <- data.table()
-for(sp in 1:3){
-  tmp <- andy.bai[Spp %in% taxa[[sp]],]
-  a <- tmp[, lapply(tmp[,7:33], function(x){biom.pred(x, b0.l[sp], b1.l[sp])})]
-  a <- cbind(tmp[,.(Tree.ID, incr.ID, Spp, Y, dbh2016)], a)
-  bop <- rbind(bop, a)
-}
-bop$Spp <- as.character(bop$Spp) ### bop is the biomass time series for every core
-names(bop)[6:32] <- paste0("biom", 2016:1990)
+# andy.bai <- read.csv("docs/ian/Reinmann_Hutyra_2016_BAI.csv") 
+# andy.bai <- as.data.table(andy.bai)
+# ## artifact: dbh's have hidden NA's that are marked as repeating numbers, basically when the dbh gets too small -- they are higher than the min dbh though
+# cleanup <- as.matrix(andy.bai[,7:33])
+# for(r in 1:nrow(cleanup)){
+#   bust <- which(diff(cleanup[r,], lag = 1)>0) ## tells you where the NA's are located
+#   if(length(bust)>0){
+#     cleanup[r, bust:ncol(cleanup)] <- NA
+#   }
+# }
+# cleanup <- as.data.table(cleanup)
+# andy.bai <- cbind(andy.bai[,1:6], cleanup)
+# names(andy.bai)[7:33] <- paste0("dbh", 2016:1990)
+# andy.bai[,incr.ID:=seq(1:dim(andy.bai)[1])]
+# names(andy.bai)[1:6] <- c("Plot.ID", "Tree.ID", "Spp", "X", "Y", "Can.class")
+# 
+# ### biomass change as a % of previous biomass per year from the increment data
+# ### the basic allometrics to get biomass
+# ## Jenkins, C.J., D.C. Chojnacky, L.S. Heath and R.A. Birdsey. 2003. Forest Sci 49(1):12-35.
+# ## Chojnacky, D.C., L.S. Heath and J.C. Jenkins. 2014. Forestry 87: 129-151.
+# # Pinus rigida, Pinus strobus, both spg>0.45
+# # Acer rubrum, Aceraceae <0.50 spg
+# # Quercus alba, Quercus coccinea, Quercus rubra, Quercus velutina --> deciduous Fagaceae
+# b0.l <- c(-3.0506, -2.0470, -2.0705)
+# b1.l <- c(2.6465, 2.3852, 2.4410)
+# biom.pred <- function(x, b0, b1){exp(b0+(b1*log(x)))} ## dbh in cm, biom. in kg
+# taxa <- list(c("PIRI", "PIST"),
+#              c("ACRU"),
+#              c("QUAL", "QUCO", "QURU", "QUVE"))
+# biom.rel <- list()
+# bop <- data.table()
+# for(sp in 1:3){
+#   tmp <- andy.bai[Spp %in% taxa[[sp]],]
+#   a <- tmp[, lapply(tmp[,7:33], function(x){biom.pred(x, b0.l[sp], b1.l[sp])})]
+#   a <- cbind(tmp[,.(Tree.ID, incr.ID, Spp, Y, dbh2016)], a)
+#   bop <- rbind(bop, a)
+# }
+# bop$Spp <- as.character(bop$Spp) ### bop is the biomass time series for every core
+# names(bop)[6:32] <- paste0("biom", 2016:1990)
+# 
+# ### lagged biomass gains, relative to previous year biomass
+# biom.rel <- data.frame(c(2015:1990))
+# for(i in 1:dim(bop)[1]){
+#   te <- unlist(bop[i,6:32])
+#   te.di <- (-1*diff(te, lag=1))
+#   biom.rel[,i+1] <- te.di/te[-1]
+# }
+# names(biom.rel)[-1] <- paste0("Tree", bop[,incr.ID])
+# names(biom.rel)[1] <- "Year" ## this has all the relative biomass gains by year (row) for each tree with increment (column)
+# 
+# ### figure the mean relative biomass gain per year across all years in each tree
+# mean.na <- function(x){mean(x, na.rm=T)}
+# m <- apply(biom.rel[,-1], FUN=mean.na, 2)
+# growth.mean <- data.frame(cbind(c(sub("Tree", '', colnames(biom.rel[,-1]))), m))
+# names(growth.mean) <- c("incr.ID", "growth.mean")
+# growth.mean$incr.ID <- as.integer(as.character(growth.mean$incr.ID))
+# andy.bai <- merge(andy.bai, growth.mean, by="incr.ID")
+# andy.bai[Y<10, seg:=10]
+# andy.bai[Y>=10 & Y<20, seg:=20]
+# andy.bai[Y>=20, seg:=30]
+# andy.bai[seg==10, seg.F:="A"]
+# andy.bai[seg==20, seg.F:="B"]
+# andy.bai[seg==30, seg.F:="C"]
+# andy.bai$seg.F <- as.factor(andy.bai$seg.F)
+# andy.bai$growth.mean <- as.numeric(as.character(andy.bai$growth.mean))
+# andy.bai[,avg.dbh:=apply(as.matrix(andy.bai[,8:34]), FUN=mean.na, 1)]
+# ## note: final interaction model only applies correction coefficients for the interior segments
+# andy.bai[seg.F=="A", seg.Edge:="E"]
+# andy.bai[seg.F %in% c("B", "C"), seg.Edge:="I"]
+# andy.bai[,seg.Edge:=as.factor(seg.Edge)]
 
-### lagged biomass gains, relative to previous year biomass
-biom.rel <- data.frame(c(2015:1990))
-for(i in 1:dim(bop)[1]){
-  te <- unlist(bop[i,6:32])
-  te.di <- (-1*diff(te, lag=1))
-  biom.rel[,i+1] <- te.di/te[-1]
-}
-names(biom.rel)[-1] <- paste0("Tree", bop[,incr.ID])
-names(biom.rel)[1] <- "Year" ## this has all the relative biomass gains by year (row) for each tree with increment (column)
 
-### figure the mean relative biomass gain per year across all years in each tree
-mean.na <- function(x){mean(x, na.rm=T)}
-m <- apply(biom.rel[,-1], FUN=mean.na, 2)
-growth.mean <- data.frame(cbind(c(sub("Tree", '', colnames(biom.rel[,-1]))), m))
-names(growth.mean) <- c("incr.ID", "growth.mean")
-growth.mean$incr.ID <- as.integer(as.character(growth.mean$incr.ID))
-andy.bai <- merge(andy.bai, growth.mean, by="incr.ID")
-andy.bai[Y<10, seg:=10]
-andy.bai[Y>=10 & Y<20, seg:=20]
-andy.bai[Y>=20, seg:=30]
-andy.bai[seg==10, seg.F:="A"]
-andy.bai[seg==20, seg.F:="B"]
-andy.bai[seg==30, seg.F:="C"]
-andy.bai$seg.F <- as.factor(andy.bai$seg.F)
-andy.bai$growth.mean <- as.numeric(as.character(andy.bai$growth.mean))
-andy.bai[,avg.dbh:=apply(as.matrix(andy.bai[,8:34]), FUN=mean.na, 1)]
-## note: final interaction model only applies correction coefficients for the interior segments
-andy.bai[seg.F=="A", seg.Edge:="E"]
-andy.bai[seg.F %in% c("B", "C"), seg.Edge:="I"]
-andy.bai[,seg.Edge:=as.factor(seg.Edge)]
-
-### now the street trees
-### biomass equation biom~dbh
+# ###  street trees
 b0 <- -2.48
 b1 <- 2.4835 ## these are eastern hardwood defaults
 biom.pred <- function(x){exp(b0+(b1*log(x)))}
-
-## get the street tree record prepped
 street <- read.csv("docs/ian/Boston_Street_Trees.csv") ## Street tree resurvey, biomass 2006/2014, species
 street <- as.data.table(street)
-street[is.na(Species), Species:="Unknown unknown"]
-street[Species=="Unknown", Species:="Unknown unknown"]
-street[Species=="unknown", Species:="Unknown unknown"]
-street[Species=="Purpleleaf plum", Species:="Prunus cerasifera"]
-street[Species=="Bradford pear", Species:="Pyrus calleryana"]
-street[Species=="Liriondendron tulipifera", Species:="Liriodendron tulipifera"]
-street[Species=="Thornless hawthorn", Species:="Crataegus crus-galli"]
-genspec <- strsplit(as.character(street$Species), " ")
-gen <- unlist(lapply(genspec, "[[", 1))
-street[,genus:=gen] ## 40 genera
 street[, record.good:=0] ## ID records with good data quality
 street[is.finite(dbh.2014) & is.finite(dbh.2006) & dead.by.2014==0 & Health!="Poor", record.good:=1] #2603 records good
 street[record.good==1, biom.2014:=biom.pred(dbh.2014)]
 street[record.good==1, biom.2006:=biom.pred(dbh.2006)]
-street[record.good==1, npp.ann:=(biom.2014-biom.2006)/8]
-street[record.good==1, npp.ann.rel:=npp.ann/biom.2006]
-street[record.good==1,range(dbh.2006, na.rm=T)] 
-street[record.good==1, range(npp.ann, na.rm=T)] ## 202 records show negative growth -- questionable 2006 dbh record, cull
-street[record.good==1, range(npp.ann.rel, na.rm=T)]
+street[record.good==1, growth.ann:=(biom.2014-biom.2006)/8]
+street[record.good==1, growth.ann.rel:=growth.ann/biom.2006]
 street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny trees
 
-par(mfrow=c(1,1))
-plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean), col=as.numeric(andy.bai$seg.Edge))
-plot(street[record.good==1, log(dbh.2006)], street[record.good==1, log(npp.ann.rel)])
-plot(live[,log(DIAM_T0)], live[,log(npp.ann.rel)])
+mod.street.nls <- nls(growth.ann.rel ~ exp(a + b * log(dbh.2006)), data=street[record.good==1,], start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
+mm <- summary(mod.street.nls) ## RSE is pretty high 0.33
 
-## try untransformed
-plot(live[,DIAM_T0], live[,npp.ann.rel], xlim=c(5, 100), ylim=c(-0.2, 1))
-points(street[record.good==1, (dbh.2006)], street[record.good==1, (npp.ann.rel)])
-points((andy.bai$avg.dbh), (andy.bai$growth.mean), col=as.numeric(andy.bai$seg.Edge))
+### note here that though log-transform of dbh.2006 is not specified, predict() is generating predictions consistent with log-tranforming prior to inserting
+pred_street <- data.frame(growth.pred=predict(mod.street.nls, newdata=data.frame(dbh.2006=seq(street[,min(dbh.2006, na.rm=T)],
+                                                                                        100, by=0.2))),
+                        dbh.2006=seq(street[,min(dbh.2006, na.rm=T)],
+                                    100, by=0.2))
+street[record.good==1, density:=get_density(street[record.good==1, dbh.2006], street[record.good==1, growth.ann.rel])]
+
+## single color, density via alpha
+ggplot(street[record.good==1], aes(dbh.2006, growth.ann.rel))+
+  geom_point(alpha=1/7, color=plasma(6)[3])+
+  # scale_colour_viridis(option="B", guide=FALSE)+
+  lims(x=xlim.all, y=ylim.all)+
+  geom_vline(xintercept=street[,median(dbh.2006, na.rm=T)], color="gray55")+
+  geom_hline(yintercept=street[,median(growth.ann.rel, na.rm=T)], color="gray55")+
+  geom_line(data = pred_street, aes(x=dbh.2006, y=growth.pred), color="royalblue1", linetype="longdash", size=1.3)+
+  theme(axis.text.x = element_text(face="plain",
+                                   size=14))+
+  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Boston street trees '06-'14")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+
+## density via color shading
+ggplot(street[record.good==1], aes(dbh.2006, growth.ann.rel, color=density))+
+  geom_point(alpha=1/7)+
+  scale_colour_viridis(option="B", guide=FALSE)+
+  lims(x=xlim.all, y=ylim.all)+
+  geom_vline(xintercept=street[,median(dbh.2006, na.rm=T)], color="gray55")+
+  geom_hline(yintercept=street[,median(growth.ann.rel, na.rm=T)], color="gray55")+
+  geom_line(data = pred_street, aes(x=dbh.2006, y=growth.pred), color="royalblue1", linetype="longdash", size=1.3)+
+  theme(axis.text.x = element_text(face="plain",
+                                   size=14))+
+  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Boston street trees '06-'14")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))
 
 
-## just do a plot first
-plot(dat[,log(DIAM_T0)],  ### this is FIA data
-     dat[,log(biom.rel)], 
-     cex=0.2, col="gray64", pch=1, ylim=c(-9, 2), xlim=c(log(5), log(110)))
-points(street[record.good==1, log(dbh.2006)],  ### this is street trees
-       street[record.good==1, log(npp.ann.rel)], 
-       pch=15, cex=0.4, col="salmon")
-andy.cols <- c("royalblue", "skyblue")
-points(andy.bai[,log(avg.dbh)], andy.bai[,log(growth.mean)], 
-       col=andy.cols[as.numeric(andy.bai$seg.Edge)],
-       pch=15, cex=0.6)
+# 
+# # plot(street[record.good==1, dbh.2006],street[record.good==1, npp.ann.rel])
+# mod.street.nls <- nls(npp.ann.rel ~ exp(a + b * log(dbh.2006)), data=street[record.good==1,], start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
+# mm <- summary(mod.street.nls) ## RSE is pretty high 0.33
+# street[record.good==1, sd(npp.ann.rel)/sqrt(length(npp.ann.rel))] ### St.Err mean is 0.008!
+# 
+# plot(street[record.good==1, dbh.2006], street[record.good==1, npp.ann.rel],
+#      ylim=main.ylim, xlim=main.xlim, pch=15, col="salmon", cex=0.5, main="Street trees growth~DBH",
+#      ylab="Relative growth (kg/kg)", xlab="Stem DBH (cm)")
+# test <- seq(from=main.xlim[1], to=main.xlim[2], length.out=100)
+# lines(test, 
+#       exp(mm$coefficients[1]+(mm$coefficients[2]*log(test))),
+#       col="black", lty=2, lwd=3)
+# abline(v=street[record.good==1, median(dbh.2006)], lwd=1, col="black")
+# abline(h=street[record.good==1, median(npp.ann.rel)], lwd=1, col="black")
+# 
+# 
+# par(mfrow=c(1,1))
+# plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean), col=as.numeric(andy.bai$seg.Edge))
+# plot(street[record.good==1, log(dbh.2006)], street[record.good==1, log(npp.ann.rel)])
+# plot(live[,log(DIAM_T0)], live[,log(npp.ann.rel)])
+# 
+# ## try untransformed
+# plot(live[,DIAM_T0], live[,npp.ann.rel], xlim=c(5, 100), ylim=c(-0.2, 1))
+# points(street[record.good==1, (dbh.2006)], street[record.good==1, (npp.ann.rel)])
+# points((andy.bai$avg.dbh), (andy.bai$growth.mean), col=as.numeric(andy.bai$seg.Edge))
+# 
 
-summary(street[record.good==1,npp.ann]) ## a tiny handful of street trees show zero growth
+# ## just do a plot first
+# plot(dat[,log(DIAM_T0)],  ### this is FIA data
+#      dat[,log(biom.rel)], 
+#      cex=0.2, col="gray64", pch=1, ylim=c(-9, 2), xlim=c(log(5), log(110)))
+# points(street[record.good==1, log(dbh.2006)],  ### this is street trees
+#        street[record.good==1, log(npp.ann.rel)], 
+#        pch=15, cex=0.4, col="salmon")
+# andy.cols <- c("royalblue", "skyblue")
+# points(andy.bai[,log(avg.dbh)], andy.bai[,log(growth.mean)], 
+#        col=andy.cols[as.numeric(andy.bai$seg.Edge)],
+#        pch=15, cex=0.6)
+# 
+# summary(street[record.good==1,npp.ann]) ## a tiny handful of street trees show zero growth
 
-### lets look untransformed
-plot(live[,(DIAM_T0)], 
-     live[,(npp.ann.rel)], 
-     cex=0.2, col="gray64", pch=14, xlim=c(5, 100), ylim=c(-0.1, 1.1),
-     xlab="Diameter (cm)", ylab="Growth rate (kg/kg)")
-points(street[record.good==1, (dbh.2006)], 
-       street[record.good==1, (npp.ann.rel)], 
-       pch=15, cex=0.4, col="salmon")
-andy.cols <- c("royalblue", "skyblue")
-points(andy.bai[,(avg.dbh)], andy.bai[,(growth.mean)], 
-       col=andy.cols[as.numeric(andy.bai$seg.Edge)],
-       pch=15, cex=0.6)
-legend(x=60, y=0.6, legend=c("FIA", "Street trees '06-'14", "Reinmann '17"), fill=c("gray64", "salmon", "royalblue"), bty="n")
+# ### lets look untransformed
+# plot(live[,(DIAM_T0)], 
+#      live[,(npp.ann.rel)], 
+#      cex=0.2, col="gray64", pch=14, xlim=c(5, 100), ylim=c(-0.1, 1.1),
+#      xlab="Diameter (cm)", ylab="Growth rate (kg/kg)")
+# points(street[record.good==1, (dbh.2006)], 
+#        street[record.good==1, (npp.ann.rel)], 
+#        pch=15, cex=0.4, col="salmon")
+# andy.cols <- c("royalblue", "skyblue")
+# points(andy.bai[,(avg.dbh)], andy.bai[,(growth.mean)], 
+#        col=andy.cols[as.numeric(andy.bai$seg.Edge)],
+#        pch=15, cex=0.6)
+# legend(x=60, y=0.6, legend=c("FIA", "Street trees '06-'14", "Reinmann '17"), fill=c("gray64", "salmon", "royalblue"), bty="n")
 
 
 
@@ -890,57 +1037,127 @@ contain.npp[, bin.num:=as.numeric(biom.bin)]
 names(contain.npp)[3:5] <- c("hyb.npp.MgC", "fia.npp.MgC", "tot.biom.MgC")
 contain.npp[,LULC:=as.factor(lulc)]
 
+### for viridis coloring
+lulc.pal <- viridis(6)
+lulc.pal <- c(lulc.pal[5],lulc.pal[2],lulc.pal[3],lulc.pal[4],lulc.pal[6],lulc.pal[1])
+
+
+#### Biomass density in MgC/ha-canopy
 ### HYBRID STACKED NPP
-ggplot(contain.npp, aes(x=bin.num, y=hyb.npp.MgC, fill=LULC))+
+# ggplot(contain.npp, aes(x=bin.num, y=hyb.npp.MgC, fill=LULC))+
+#   geom_area(position='stack')+
+#   scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+#                     name="Land Cover",
+#                     breaks=c(1,2,3,4,5,6),
+#                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+#   xlab("Biomass density (MgC/ha-canopy)")+
+#   ylab("Hybrid, total NPP (MgC/yr)")+
+#   theme(axis.line = element_line(colour = "black"),
+#         panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         panel.border = element_blank(),
+#         panel.background = element_blank())+
+#   scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
+#   ylim(0, 1400)
+
+hyb.npp.plot <- ggplot(contain.npp, aes(x=bin.num, y=hyb.npp.MgC, fill=LULC))+
   geom_area(position='stack')+
-  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+  scale_fill_manual(values = lulc.pal,
                     name="Land Cover",
                     breaks=c(1,2,3,4,5,6),
                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
-  xlab("Biomass density (MgC/ha-canopy)")+
+  xlab("MgC/ha-canopy")+
   ylab("Hybrid, total NPP (MgC/yr)")+
   theme(axis.line = element_line(colour = "black"),
+        axis.title = element_text(face="bold"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
-        panel.background = element_blank())+
+        panel.background = element_blank(),
+        legend.position = "none")+
   scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
   ylim(0, 1400)
 
 
 ### FIA STACKED NPP
-ggplot(contain.npp, aes(x=bin.num, y=fia.npp.MgC, fill=LULC))+
+# ggplot(contain.npp, aes(x=bin.num, y=fia.npp.MgC, fill=LULC))+
+#   geom_area(position='stack')+
+#   scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+#                     name="Land Cover",
+#                     breaks=c(1,2,3,4,5,6),
+#                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+#   xlab("Biomass density (MgC/ha-canopy)")+
+#   ylab("FIA, total NPP (MgC/yr)")+
+#   theme(axis.line = element_line(colour = "black"),
+#         panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         panel.border = element_blank(),
+#         panel.background = element_blank())+
+#   scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
+#   ylim(0, 1400)
+
+fia.npp.plot <- ggplot(contain.npp, aes(x=bin.num, y=fia.npp.MgC, fill=LULC))+
   geom_area(position='stack')+
-  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+  scale_fill_manual(values = lulc.pal,
                     name="Land Cover",
                     breaks=c(1,2,3,4,5,6),
                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
-  xlab("Biomass density (MgC/ha-canopy)")+
+  xlab("MgC/ha-canopy")+
   ylab("FIA, total NPP (MgC/yr)")+
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
+        axis.title = element_text(face="bold"),
         panel.border = element_blank(),
-        panel.background = element_blank())+
+        panel.background = element_blank(),
+        legend.position=c(0.8, 0.6),
+        legend.title=element_text(size=10), 
+        legend.text=element_text(size=9))+
   scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
   ylim(0, 1400)
+fia.npp.plot
 
 ### TOTAL BIOMASS STACKED
-ggplot(contain.npp, aes(x=bin.num, y=tot.biom.MgC, fill=LULC))+
+# ggplot(contain.npp, aes(x=bin.num, y=tot.biom.MgC, fill=LULC))+
+#   geom_area(position='stack')+
+#   scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+#                     name="Land Cover",
+#                     breaks=c(1,2,3,4,5,6),
+#                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+#   xlab("Biomass density (MgC/ha-canopy)")+
+#   ylab("Total biomass (MgC)")+
+#   theme(axis.line = element_line(colour = "black"),
+#         panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         panel.border = element_blank(),
+#         panel.background = element_blank())+
+#   scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))
+
+biom.plot <- ggplot(contain.npp, aes(x=bin.num, y=tot.biom.MgC, fill=LULC))+
   geom_area(position='stack')+
-  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+  scale_fill_manual(values = lulc.pal,
                     name="Land Cover",
                     breaks=c(1,2,3,4,5,6),
                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
-  xlab("Biomass density (MgC/ha-canopy)")+
-  ylab("Total biomass (MgC)")+
+  xlab("MgC/ha-canopy")+
+  ylab("Total biomass (MgC x 1000)")+
   theme(axis.line = element_line(colour = "black"),
+        axis.title = element_text(face="bold"),
+    
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
-        panel.background = element_blank())+
-  scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))
-
+        panel.background = element_blank(),
+        legend.position = "none")+
+  scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
+  scale_y_continuous(breaks=c(0, 10000, 20000, 30000), labels=c(0, 10, 20, 30))
+biom.plot
+### now combine
+library(gridExtra)
+png(width=8, height=3, units="in", res=600, bg="white", filename="images/Fig4_biom-dens_NPP_comb.png")
+grid.arrange(grobs=list(biom.plot, hyb.npp.plot, fia.npp.plot),
+             widths=c(1,1,1))
+dev.off()
 
 ###
 ### plots ordered in bins along MgC/ha-GROUND
@@ -952,10 +1169,32 @@ contain.npp[, bin.num:=as.numeric(biom.bin.ground)]
 names(contain.npp)[3:5] <- c("hyb.npp.MgC", "fia.npp.MgC", "tot.biom.MgC")
 contain.npp[,LULC:=as.factor(lulc)]
 
+### with viridis coloring
+lulc.pal <- viridis(6)
+lulc.pal <- c(lulc.pal[5],lulc.pal[2],lulc.pal[3],lulc.pal[4],lulc.pal[6],lulc.pal[1])
+
+
 ### HYBRID STACKED NPP
+# ggplot(contain.npp, aes(x=bin.num, y=hyb.npp.MgC, fill=LULC))+
+#   geom_area(position='stack')+
+#   scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+#                     name="Land Cover",
+#                     breaks=c(1,2,3,4,5,6),
+#                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+#   xlab("Biomass density (MgC/ha-ground)")+
+#   ylab("Hybrid, total NPP (MgC/yr)")+
+#   theme(axis.line = element_line(colour = "black"),
+#         panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         panel.border = element_blank(),
+#         panel.background = element_blank())+
+#   scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
+#   ylim(0, 1400)
+
+## viridis
 ggplot(contain.npp, aes(x=bin.num, y=hyb.npp.MgC, fill=LULC))+
   geom_area(position='stack')+
-  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+  scale_fill_manual(values = lulc.pal,
                     name="Land Cover",
                     breaks=c(1,2,3,4,5,6),
                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
@@ -970,10 +1209,28 @@ ggplot(contain.npp, aes(x=bin.num, y=hyb.npp.MgC, fill=LULC))+
   ylim(0, 1400)
 
 
+
 ### FIA STACKED NPP
+# ggplot(contain.npp, aes(x=bin.num, y=fia.npp.MgC, fill=LULC))+
+#   geom_area(position='stack')+
+#   scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+#                     name="Land Cover",
+#                     breaks=c(1,2,3,4,5,6),
+#                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+#   xlab("Biomass density (MgC/ha-ground)")+
+#   ylab("FIA, total NPP (MgC/yr)")+
+#   theme(axis.line = element_line(colour = "black"),
+#         panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         panel.border = element_blank(),
+#         panel.background = element_blank())+
+#   scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
+#   ylim(0, 1400)
+
+## viridis
 ggplot(contain.npp, aes(x=bin.num, y=fia.npp.MgC, fill=LULC))+
   geom_area(position='stack')+
-  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+  scale_fill_manual(values = lulc.pal,
                     name="Land Cover",
                     breaks=c(1,2,3,4,5,6),
                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
@@ -987,10 +1244,27 @@ ggplot(contain.npp, aes(x=bin.num, y=fia.npp.MgC, fill=LULC))+
   scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))+
   ylim(0, 1400)
 
+
 ### TOTAL BIOMASS STACKED
+# ggplot(contain.npp, aes(x=bin.num, y=tot.biom.MgC, fill=LULC))+
+#   geom_area(position='stack')+
+#   scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+#                     name="Land Cover",
+#                     breaks=c(1,2,3,4,5,6),
+#                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
+#   xlab("Biomass density (MgC/ha-canopy)")+
+#   ylab("Total biomass (MgC)")+
+#   theme(axis.line = element_line(colour = "black"),
+#         panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         panel.border = element_blank(),
+#         panel.background = element_blank())+
+#   scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))
+
+## viridis
 ggplot(contain.npp, aes(x=bin.num, y=tot.biom.MgC, fill=LULC))+
   geom_area(position='stack')+
-  scale_fill_manual(values = c("forestgreen", "gray55", "salmon", "gold", "chartreuse3", "lightblue"),
+  scale_fill_manual(values = lulc.pal,
                     name="Land Cover",
                     breaks=c(1,2,3,4,5,6),
                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"))+
@@ -1003,3 +1277,26 @@ ggplot(contain.npp, aes(x=bin.num, y=tot.biom.MgC, fill=LULC))+
         panel.background = element_blank())+
   scale_x_continuous(breaks=c(0, 5, 10, 15, 20, 25), labels=c(0, 50, 100, 150, 200, 250))
 
+
+
+### experimenting with some of the viridis color pallettes
+biom <- raster("processed/boston/bos.biom.tif")
+lulc <- raster("processed/boston/bos.lulc.lumped.tif")
+plot(biom)
+image(biom)
+library(viridis)
+image(biom, col=inferno(256))
+image(biom, col=inferno(64))
+image(biom, col=viridis(64))
+image(biom, col=magma(5))
+image(lulc, col=magma(6))
+magma(5)
+image(lulc, col=inferno(6))
+#order: otherveg(5)=6, forest(1)=5, water(6)=1, dev(2)=2, hdres(3)=3, ldres(4)=4
+lulc.pal <- inferno(6)
+lulc.pal <- viridis(6)
+lulc.pal <- c(lulc.pal[5],lulc.pal[2],lulc.pal[3],lulc.pal[4],lulc.pal[6],lulc.pal[1])
+image(lulc, col=lulc.pal) ## very nice
+
+lulc.pal
+col2rgb(lulc.pal) ## how to enter these assholes into arc RGB

@@ -8,6 +8,8 @@ library(qdapRegex)
 library(zoo)
 
 
+
+
 #########
 ### Boston high-res data
 ### combine 2.4m NDVI and canopy map to produce 1m veg classification map
@@ -52,6 +54,99 @@ library(zoo)
 # }
 # bos.cov <- cover.bl(bos.can, bos.ndvi, filename="processed/bos.cov.tif")
 
+### V2 cover mapping
+### THIS VERSION splits canopy by edge position
+bos.isa <- raster("processed/boston/bos.isa.tif")
+bos.ndvi <- raster("processed/boston/bos.ndvi.tif")
+bos.can <- raster("processed/boston/bos.can.tif")
+bos.lulc <- raster("processed/boston/bos.lulc.lumped.tif")
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+bos.ed <- raster("processed/boston/bos.ed10.tif")
+
+#### this function spits out a single 6 class raster
+veg.class <- function(can, isa, ed, ndvi, lulc, aoi, filename) {
+  out <- raster(can)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    target <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) ## dummy raster chunk
+    check <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) 
+    target[check==1] <- 999 ### to flag any pixels that escape classification
+    w <- getValues(can, row=bs$row[i], nrows=bs$nrows[i]) ## canopy
+    x <- getValues(isa, row=bs$row[i], nrows=bs$nrows[i]) ## isa
+    y <- getValues(ndvi, row=bs$row[i], nrows=bs$nrows[i]) ## ndvi
+    z <- getValues(lulc, row=bs$row[i], nrows=bs$nrows[i]) ## lulc
+    e <- getValues(ed, row=bs$row[i], nrows=bs$nrows[i]) ## edge
+    target[w==1 & e==1] <- 6 # canopy edge
+    target[w==1 & e==0] <- 5 # canopy interior
+    target[w==0 & x==1] <- 4 # non-veg impervious
+    target[w==0 & x==0 & y>=0.25] <- 2 # grass
+    target[w==0 & x==0 & y<0.25 & z!=6] <- 3 # non-veg pervious
+    target[w==0 & x==0 & y<0.25 & z==6] <- 1 # water
+    target[is.na(check) | is.na(w) | is.na(x) | is.na(y) | is.na(z)] <- NA ## cancel missing values
+    out <- writeValues(out, target, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+cl <- veg.class(bos.can, bos.isa, bos.ed, bos.ndvi, bos.lulc, bos.aoi, "processed/boston/bos.cov.V2-ed.tif")
+plot(cl)
+
+
+### alternate V2 cover mapping
+### THIS VERSION splits canopy according to position over impervious vs. pervious
+### which allows for a nice see-through effect if colors are wisely chosen
+bos.isa <- raster("processed/boston/bos.isa.tif")
+bos.ndvi <- raster("processed/boston/bos.ndvi.tif")
+bos.can <- raster("processed/boston/bos.can.tif")
+bos.lulc <- raster("processed/boston/bos.lulc.lumped.tif")
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+
+#### this function spits out a single 6 class raster
+veg.class <- function(can, isa, ndvi, lulc, aoi, filename) { # x is edge class, y is cover class
+  out <- raster(can)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    target <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) ## dummy raster chunk
+    check <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) 
+    target[check==1] <- 999 ### to flag any pixels that escape classification
+    w <- getValues(can, row=bs$row[i], nrows=bs$nrows[i]) ## canopy
+    x <- getValues(isa, row=bs$row[i], nrows=bs$nrows[i]) ## isa
+    y <- getValues(ndvi, row=bs$row[i], nrows=bs$nrows[i]) ## ndvi
+    z <- getValues(lulc, row=bs$row[i], nrows=bs$nrows[i]) ## canopy
+    target[w==1 & x==0] <- 6 # canopy over pervious
+    target[w==1 & x==1] <- 5 # canopy over impervious
+    target[w==0 & x==1] <- 4 # non-veg impervious
+    target[w==0 & x==0 & y>=0.25] <- 2 # grass
+    target[w==0 & x==0 & y<0.25 & z!=6] <- 3 # non-veg pervious
+    target[w==0 & x==0 & y<0.25 & z==6] <- 1 # water
+    target[is.na(check) | is.na(w) | is.na(x) | is.na(y) | is.na(z)] <- NA ## cancel missing values
+    out <- writeValues(out, target, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+cl <- veg.class(bos.can, bos.isa, bos.ndvi, bos.lulc, bos.aoi, "processed/boston/bos.cov.V2.tif")
+plot(cl)
+
+library(viridis)
+image(cl, col=magma(6))
+image(cl, col=plasma(6))
+image(cl, col=viridis(6))
+image(cl, col=cividis(6))
+cov.pal <- magma(6)
+cov.pal <- plasma(6)
+cov.pal <- cividis(6)
+cov.pal <- c(cov.pal[1],cov.pal[6],cov.pal[3],cov.pal[2],cov.pal[4],cov.pal[5]) ## this seems like an intuitive structuring
+image(cl, col=cov.pal)
+col2rgb(cov.pal) ## how to enter these assholes into arc RGB
+
+
+
+###########
 # ### Processing 1m canopy map for edge class
 # ### call python scripbt for identifying canopy edge distance (desktop only)
 # pyth.path = './Rscripts/canopy_process.py'
@@ -325,8 +420,6 @@ for(d in 1:length(lu.classes)){
 legend("right", x=40, y=0.80, cex=2, legend=c("Boston", "Forest", "Developed", "Residential"), fill=c("black", cols), bty="n")
 
 
-
-
 lu.classes <- c("forest", "dev", "hd.res", "med.res", "low.res", "lowveg", "other")
 for.dat <- read.csv(paste("processed/bos.can.cummdist.", lu.classes[1], ".csv", sep=""))
 hd.dat <-  read.csv(paste("processed/bos.can.cummdist.", lu.classes[3], ".csv", sep=""))
@@ -429,8 +522,6 @@ bos.ndvi <- crop(bos.ndvi, bos.can)
 ed10 <- extend(ed10, bos.cov)
 ed20 <- extend(ed20, bos.cov)
 ed30 <- extend(ed30, bos.cov)
-
-
 
 ### Compare canopy map from 2006 to map from 2014
 bos.can06 <- raster("data/dataverse_files/bostoncanopy_1m.tif")
@@ -560,6 +651,14 @@ names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
 ### get separate layers for each with cover=0/1 (vs. cover=0,1,2)
 bos.stack <- stack("processed/boston/bos.stack.1m.tif")
 names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
+
+aoi <- raster("processed/boston/bos.aoi.tif")
+bos.stack.c <- extend(bos.stack, extent(aoi))
+bos.stack.c <- crop(bos.stack, extent(aoi))
+
+isa.rereg <- raster("processed/boston/bos.isa.rereg.tif")
+isa.rereg <- extend(isa.rereg, extent(aoi))
+isa.rereg <- resample(isa.rereg, aoi, res=1, method="ngb")
 
 grass.find <- function(x){
   x[x!=1] <- 0
@@ -767,12 +866,13 @@ bos.nonveg <- raster("processed/boston/bos.nonveg.tif")
 # output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
 # print(output)
 
-bos.lulc <- raster("processed/boston/LU_bos_r1m.tif")
-bos.aoi <- raster("processed/boston/bos.aoi.tif")
-bos.lulc <- crop(bos.lulc, bos.aoi)
-bos.lulc <- mask(bos.lulc, bos.aoi)
-writeRaster(bos.lulc, filename="processed/boston/bos.lulc_only.tif", format="GTiff", overwrite=T)
-bos.lulc <- raster("processed/boston/bos.lulc_only.tif")
+### get a clean copy of the LULC 1m raster
+# bos.lulc <- raster("processed/boston/LU_bos_r1m.tif")
+# bos.aoi <- raster("processed/boston/bos.aoi.tif")
+# # bos.lulc <- crop(bos.lulc, bos.aoi)
+# # bos.lulc <- mask(bos.lulc, bos.aoi)
+# # writeRaster(bos.lulc, filename="processed/boston/bos.lulc_only.tif", format="GTiff", overwrite=T)
+# bos.lulc <- raster("processed/boston/bos.lulc_only.tif")
 
 ## decide on a collapsed LULC scheme to flag for area fraction
 lu.classnames <- c("forest", "dev", "hdres", "ldres", "lowveg", "water")
@@ -784,29 +884,12 @@ lu.lowveg <- c(1,2,4,6,7,9,14,25,26,34,40) # Crop, pasture, open, part-rec, wate
 lu.water <- c(20)
 lulc.tot <- list(lu.forest, lu.dev, lu.hdres, lu.ldres, lu.lowveg, lu.water)
 
-## create single 30m raster with collapsed LULC classes
-## used arc for poly-->raster at 30m EVI grid
-bos.lulc30m <- raster("processed/boston/bos_lulc30m.tif")
-bos.aoi <- raster("processed/boston/bos.aoi30m.tif")
-bos.lulc30m <- extend(bos.lulc30m, bos.aoi)
-bos.lulc30m <- crop(bos.lulc30m, bos.aoi)
-bos.lulc30m <- mask(bos.lulc30m, bos.aoi)
-lu.classnames <- c("forest", "dev", "hdres", "ldres", "lowveg", "water")
-lu.forest <- c(3,37) # Forest, FWet
-lu.dev <- c(5,8,15,16,17,18,19,29,31,36,39) #Mining, Spect-rec, Comm, Ind, Transitional, Transp, Waste Disp, Marina, Urb Pub/Inst., Nursery, Junkyard
-lu.hdres <- c(10,11) # HDResid., MFResid.,
-lu.ldres <- c(12,13,38) # MDResid., LDResid, VLDResid
-lu.lowveg <- c(1,2,4,6,7,9,14,25,26,34,40) # Crop, pasture, open, part-rec, water-rec, SWwet, SWbeach, Golf, Cemetery, Brushland
-lu.water <- c(20)
-lulc.tot <- list(lu.forest, lu.dev, lu.hdres, lu.ldres, lu.lowveg, lu.water)
-# names(lulc.tot) <- lu.classnames
-
-lulc.lump <- function(x, lu.defs, filename) { # x is 30m lulc, lu.defs is the list of collapsed classes, filename=output
+lulc.lump <- function(x, lu.defs, filename) { # x is lulc, lu.defs is the list of collapsed classes, filename=output
   out <- raster(x)
   bs <- blockSize(out)
   out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
   for (i in 1:bs$n) {
-    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## 30m LULC raster raw LUCODES
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ##  LULC raster raw LUCODES
     o <- v
     o[v%in%lu.defs[[1]]] <- 1 ## forest
     o[v%in%lu.defs[[2]]] <- 2 ## dev
@@ -820,7 +903,23 @@ lulc.lump <- function(x, lu.defs, filename) { # x is 30m lulc, lu.defs is the li
   out <- writeStop(out)
   return(out)
 }
+## 1m lumped LULC raster
+bos.lulc <- raster("processed/boston/bos.lulc_only.tif")
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+lulc.lump(bos.lulc, lulc.tot, "processed/boston/bos.lulc.lumped.tif")
+
+bos.lulc <- raster("processed/boston/bos.lulc.lumped.tif")
+plot(bos.lulc)
+
+## create comparable single 30m raster with collapsed LULC classes
+## used arc for poly-->raster at 30m EVI grid
+bos.lulc30m <- raster("processed/boston/bos_lulc30m.tif")
+bos.aoi <- raster("processed/boston/bos.aoi30m.tif")
+bos.lulc30m <- extend(bos.lulc30m, bos.aoi)
+bos.lulc30m <- crop(bos.lulc30m, bos.aoi)
+bos.lulc30m <- mask(bos.lulc30m, bos.aoi)
 lulc.lump(bos.lulc30m, lulc.tot, "processed/boston/bos.lulc30m.lumped.tif")
+
 bos.lulc30m <- raster("processed/boston/bos.lulc30m.lumped.tif")
 plot(bos.lulc30m)
 
