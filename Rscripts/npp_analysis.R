@@ -76,7 +76,7 @@ npp.dat[,fia.empir.isa.frac:=NULL]
 npp.dat <- cbind(npp.dat, getValues(lulc))
 names(npp.dat)[c(1:5, dim(npp.dat)[2])] <- c("pix.ID", "bos.biom30m", "aoi", "can.frac", "isa.frac", "lulc")
 
-## why do this? fuck it, tiny biomass is going to come out with tiny values of npp anyway
+## One could argue to manually set low biomass cells to 0 NPP, but better to restrict analysis to nearly complete cells to avoid v. weird artifacts due to area alone
 # ### set all npp estimates to 0 in tiny biomass cells
 # npp.dat[bos.biom30m<10 & is.finite(aoi), c(16:23):=0, with=F] ## FIA npp and derivatives thereof
 # npp.dat[bos.biom30m<10 & is.finite(aoi), c(30,31):=0, with=F] ## andy total npps
@@ -128,30 +128,33 @@ names(npp.dat)[c(1:5, dim(npp.dat)[2])] <- c("pix.ID", "bos.biom30m", "aoi", "ca
 ### median npp is higher in the forest fragments (but these are full of no-sim holes), but there's some anomalies of high npp like the fenway, river valleys, whole southern part is hot
 
 ### how many successful estimates do we have for each approach?
+npp.dat[!is.na(bos.biom30m) & aoi>800, length(bos.biom30m)] ## 135705 biomass records in relatively complete pixels
+
+npp.dat[is.finite(fia.npp.ann.forest.MgC.ha) & aoi>800, length(fia.npp.ann.forest.MgC.ha)] #135705 c.p. fia retrievals
+npp.dat[is.finite(andy.npp.tot.MgC.ha) & aoi>800, length(andy.npp.tot.MgC.ha)] ## 135705 c.p. andy retreivals
+npp.dat[is.finite(andy.npp.tot.mod.lin.MgC.ha) & aoi>800, length(andy.npp.tot.mod.lin.MgC.ha)] ## 135705 for final andy model version
+npp.dat[is.finite(fia.empir.npp.kg.hw.forest) & aoi>800, length(fia.empir.live.Mgbiom.ha.forest)] ## 135705 for empirical FIA model
 npp.dat[is.finite(st.med.ann.npp.MgC.ha) & aoi>800,length(st.med.ann.npp.MgC.ha)] # 103850 complete pixel street tree retrievals
 npp.dat[bos.biom30m<10, st.med.ann.npp.all:=0] ## manually fix the negligible biomass retreivals did not simulate to begin with
 npp.dat[bos.biom30m<10, st.med.ann.npp.MgC.ha:=0]
 npp.dat[is.finite(st.med.ann.npp.MgC.ha) & aoi>800,length(st.med.ann.npp.MgC.ha)] # up to 132896 retrievals
-npp.dat[is.finite(fia.npp.ann.forest.MgC.ha) & aoi>800, length(fia.npp.ann.forest.MgC.ha)] #135705 c.p. fia retrievals
-npp.dat[is.finite(andy.npp.tot.MgC.ha) & aoi>800, length(andy.npp.tot.MgC.ha)] ## 135705 c.p. andy retreivals
-npp.dat[is.finite(fia.empir.npp.kg.hw.forest) & aoi>800, length(fia.empir.live.Mgbiom.ha.forest)] ## 135705
-npp.dat[!is.na(bos.biom30m) & aoi>800, length(bos.biom30m)] ## 135705 biomass records in relatively complete pixels
-## get more retreivals in the forests for the street tree sim than for FIA (can't retrieve a good age using the equation approach)
 
 
 ## comparison: how much npp do we see by these different methods
 hist(npp.dat[aoi>800, st.med.ann.npp.MgC.ha]) ## 0-5 MgC/ha/yr
 hist(npp.dat[aoi>800, fia.npp.ann.forest.MgC.ha]) ## 0-2.5 MgC/ha/yr
 hist(npp.dat[aoi>800, andy.npp.tot.MgC.ha]) ## 0-8 MgC/ha/yr
-hist(npp.dat[aoi>800, fia.empir.npp.kg.hw.forest*(1E4/aoi)/2000]) ## up to~5 MgC/ha/yr
+hist(npp.dat[aoi>800, fia.empir.npp.kg.hw.forest*(1E4/aoi)/2000]) ## up to ~3 MgC/ha/yr
+hist(npp.dat[aoi>800, andy.npp.tot.mod.lin.MgC.ha]) ## up to ~4 MgC/ha/yr
 
 sum(npp.dat[, st.med.ann.npp.MgC.ha*(aoi/1E4)], na.rm=T) ## 13.2k tC/yr street tree sim (missing a bunch of high-value pixels)
 sum(npp.dat[, fia.npp.ann.forest.MgC.ha*(aoi/1E4)], na.rm=T) ## 4.6k tC/yr ## fia forest method
 sum(npp.dat[, andy.npp.tot.MgC.ha*(aoi/1E4)], na.rm=T) ## 13.8k tC/yr ## andy trees, avg. dbh, static
 sum(npp.dat[, andy.npp.tot.ps.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.1k tC/yr ## andy trees with pseudoreps, static
 sum(npp.dat[, fia.empir.npp.kg.hw.forest/2000], na.rm=T) ## 7.8k tC/yr for fia empirical(forest) method
-sum(npp.dat[, andy.npp.tot.mod.MgC.ha*(aoi/1E4)], na.rm=T) ## 12.2k tC/yr ## andy trees with pseudoreps, modeled
-sum(npp.dat[, andy.npp.tot.mod.cap.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.8k tC/yr ## andy trees with pseudoreps, modeled
+sum(npp.dat[, andy.npp.tot.mod.MgC.ha*(aoi/1E4)], na.rm=T) ## 12.2k tC/yr ## andy trees with pseudoreps, exp modeled
+sum(npp.dat[, andy.npp.tot.mod.cap.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.8k tC/yr ## andy trees with pseudoreps, exp modeled, capped at low end
+sum(npp.dat[, andy.npp.tot.mod.lin.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.6k tC/yr ## andy trees with pseudoreps, lin modeled
 
 
 ### some very close reading of how these estimates differ on a spatial basis
@@ -206,18 +209,25 @@ npp.dat[st.sim.incomp==1, length(pix.ID), by=lulc]
 ## bulk are forest (2k), but significant numbers in dev and hdres
 npp.dat[st.sim.incomp==1 & aoi>800, mean(bos.biom30m, na.rm=T), by=lulc]
 ## failures are all hella high biomass except lowveg and dev
-## how do andy FOREST compare to street FOREST
-plot(npp.dat[lulc==1 & aoi>800, andy.npp.tot], npp.dat[lulc==1 & aoi>800, st.med.ann.npp.all])
-abline(a=0, b=1) ## street trees trend higher except above about 800 kg/yr npp
-## big kink at high biomass where the samples get weighted up
-plot(npp.dat[lulc==1 & aoi>800, bos.biom30m], npp.dat[lulc==1 & aoi>800, andy.npp.tot])
-## can see the different slopes
-plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, andy.npp.tot])
-## same across all pixels
+
+### compare to how the andy models look
+plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, andy.npp.tot], main="andy.static.avgDBH")
+plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, andy.npp.tot.ps], main="andy.static.pseudoreps") ### linear, narrower envelope
+plot(npp.dat[lulc==1 & aoi>800, bos.biom30m], npp.dat[lulc==1 & aoi>800, andy.npp.tot.mod]) ## linear in all-interior, fast increase in the low biomass edge
+plot(npp.dat[lulc==1 & aoi>800, bos.biom30m], npp.dat[lulc==1 & aoi>800, andy.npp.tot.mod.cap]) ## similar, cuts low-biomass edge increase back
+plot(npp.dat[lulc==1 & aoi>800, bos.biom30m], npp.dat[lulc==1 & aoi>800, andy.npp.tot.mod.lin]) ## humped over in the all-interior high biomass pixels, somewhat lower than street tree max
+
+## compare to the street tree estimates
 plot(npp.dat[lulc==1 & aoi>800, bos.biom30m], npp.dat[lulc==1 & aoi>800, st.med.ann.npp.all])
 ## classic kink
 
-### let's make a hybrid
+## how do andy FOREST compare to street FOREST
+plot(npp.dat[lulc==1 & aoi>800, andy.npp.tot.mod.lin], npp.dat[lulc==1 & aoi>800, st.med.ann.npp.all])
+abline(a=0, b=1) ## street trees trend higher in general, but kink downward above 20000 kg/pix due to high weighting towards big trees (also lots of sim failures above 20k kg)
+
+
+######
+### let's make a hybrid ANDY + STREET TREE (ANDY for forest and pix >20k kg, street for all else)
 ### version using growth based on avg.dbh, static
 npp.dat[,hyb.npp:=andy.npp.tot]
 npp.dat[lulc!=1, hyb.npp:=st.med.ann.npp.all]
@@ -233,20 +243,28 @@ npp.dat[aoi>800 & is.finite(hyb.npp.ps), length(hyb.npp.ps)] #134643
 plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.ps], 
      col=npp.dat[aoi>800, lulc], main="with pseudoreps, static")
 
-## version using the pseudoreps, modeled
+par(mfrow=c(1,3))
+## version using the pseudoreps, exp modeled
 npp.dat[,hyb.npp.mod:=andy.npp.tot.mod] ## 
 npp.dat[lulc!=1, hyb.npp.mod:=st.med.ann.npp.all]
 npp.dat[aoi>800 & is.finite(hyb.npp.mod), length(hyb.npp.mod)] #134643
 plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.mod], 
      col=npp.dat[aoi>800, lulc], main="with pseudoreps, modeled")
 
-## version using the pseudoreps, modeled, capped low end
+## version using the pseudoreps, exp modeled, capped low end
 npp.dat[,hyb.npp.mod.cap:=andy.npp.tot.mod.cap] ## 
 npp.dat[lulc!=1, hyb.npp.mod.cap:=st.med.ann.npp.all]
 npp.dat[aoi>800 & is.finite(hyb.npp.mod.cap), length(hyb.npp.mod.cap)] #134643
 plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.mod.cap], 
      col=npp.dat[aoi>800, lulc], main="with pseudoreps, modeled, capped")
 
+## version using pseudoreps, linear modeled
+npp.dat[,hyb.npp.mod.lin:=andy.npp.tot.mod.lin] ## 
+npp.dat[lulc!=1, hyb.npp.mod.lin:=st.med.ann.npp.all]
+npp.dat[aoi>800 & is.finite(hyb.npp.mod.lin), length(hyb.npp.mod.lin)] #134643
+plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.mod.cap], 
+     col=npp.dat[aoi>800, lulc], main="with pseudoreps, modeled, linear")
+### ok, all  have two clear populations of street tree and forest
 
 
 # ### how can we reduce the artifacts in the street tree sim results, especially over 20k kg pixels?
@@ -272,33 +290,46 @@ plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.mod.cap],
 # duur[bos.biom30m>20000,] ## 8041 pix over 20k -- let's just swap the fuckers out
 # 
 npp.dat[aoi>800 & bos.biom30m>20000, length(bos.biom30m)]/npp.dat[aoi>800, length(bos.biom30m)] ## 6% of pixels are over 20k
+
 ### swap the >20000kg biomass pixels with the andy forest npp estimates irrespective of lulc class; 20k/pix is 111 MgC/ha, about what a mature forest would be
 npp.dat[bos.biom30m>20000, hyb.npp:=andy.npp.tot]
 npp.dat[bos.biom30m>20000, hyb.npp.ps:=andy.npp.tot.ps]
 npp.dat[bos.biom30m>20000, hyb.npp.mod:=andy.npp.tot.mod]
 npp.dat[bos.biom30m>20000, hyb.npp.mod.cap:=andy.npp.tot.mod.cap]
+npp.dat[bos.biom30m>20000, hyb.npp.mod.lin:=andy.npp.tot.mod.lin]
 
 ### how's the new future look?
 npp.dat[aoi>800, (sum(hyb.npp, na.rm=T)/2000)] ## 14.4 kMgC/yr
 npp.dat[aoi>800, (sum(hyb.npp.ps, na.rm=T)/2000)] ## 13.2 kMgC/yr
 npp.dat[aoi>800, (sum(hyb.npp.mod, na.rm=T)/2000)] ## 13.0 kMgC/yr
 npp.dat[aoi>800, (sum(hyb.npp.mod.cap, na.rm=T)/2000)] ## 13.0 kMgC/yr
+npp.dat[aoi>800, (sum(hyb.npp.mod.lin, na.rm=T)/2000)] ## 12.9 kMgC/yr
+
+
+### check this shit out
+par(mfrow=c(1,2))
+plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.mod.lin], col="darkgreen", ylim=c(0,900), main="Hybrid")
+plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.empir.npp.kg.hw.forest], col="blue", pch=12, ylim=c(0,900), main="FIA-empirical")
+hist(npp.dat[aoi>800 & lulc==1, ((bos.biom30m/2000)/(aoi*can.frac))*1E4]) ## forest biomass density is a nice normal curve mean ~120 MgC/ha
+hist(npp.dat[aoi>800 & lulc==3, ((bos.biom30m/2000)/(aoi*can.frac))*1E4]) ## skewed, more like 50 -- SMALLER TREES DAWG!!!
+
 
 ### export the collated results
 # write.csv(npp.dat, "processed/npp.estimates.V1.csv")
 # write.csv(npp.dat, "processed/npp.estimates.V2.csv") ## with pseudorep based andy trees
-write.csv(npp.dat, "processed/npp.estimates.V3.csv") ## with pseudorep/model-capped based andy trees
+# write.csv(npp.dat, "processed/npp.estimates.V3.csv") ## with pseudorep/model-capped based andy trees
+write.csv(npp.dat, "processed/npp.estimates.V4.csv") ## with pesudorep/model-linear based andy trees
 
 # npp.dat <- read.csv("processed/npp.estimates.V1.csv")
 # npp.dat <- read.csv("processed/npp.estimates.V2.csv")
-npp.dat <- read.csv("processed/npp.estimates.V3.csv")
-npp.dat <- as.data.table(npp.dat)
+# npp.dat <- read.csv("processed/npp.estimates.V3.csv")
+npp.dat <- as.data.table(read.csv("processed/npp.estimates.V4.csv"))
 
 ## contrast (avg.dbh)
-plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp], col=as.numeric(npp.dat[aoi>800,lulc]))
-points(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.npp.ann.ground], col="goldenrod", pch=5)
-points(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.npp.ann.forest], col="lightgreen", pch=7)
-points(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.npp.ann.perv], col="gray55", pch=9)
+plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.mod.lin], col=as.numeric(npp.dat[aoi>800,lulc]))
+# points(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.npp.ann.ground], col="goldenrod", pch=5)
+# points(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.npp.ann.forest], col="lightgreen", pch=7)
+# points(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.npp.ann.perv], col="gray55", pch=9)
 points(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.empir.npp.kg.hw.forest], col="lightblue", pch=11)
 ## all the fia estimates are forced into a low hump at the bottom end of the scale, below 500 kg-biomass/yr
 ## fia empirical estimates are a lower arc below the hybrid output
@@ -306,19 +337,20 @@ points(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.empir.npp.kg.hw.fores
 ### make a proper plot -- per pixel NPP 
 par(mfrow=c(1,1), mar=c(4,4,1,1))
 col.lulc <- c("forestgreen", "grey55", "salmon", "gold2", "lawngreen", "cadetblue3")
-plot(npp.dat[aoi>800, (bos.biom30m/aoi)*1E4/2000], npp.dat[aoi>800, (hyb.npp/aoi)*1E4/2000], 
+plot(npp.dat[aoi>800, (bos.biom30m/aoi)*1E4/2000], npp.dat[aoi>800, (hyb.npp.mod.lin/aoi)*1E4/2000], 
      col=col.lulc[npp.dat[aoi>800, lulc]], pch=14, cex=0.1, 
-     xlab="biomass MgC/ha", ylab="NPP MgC/ha/yr")
+     xlab="biomass MgC/ha", ylab="Hybrid NPP MgC/ha/yr (linear model)")
 legend(fill=col.lulc, legend=c("Forest", "Developed", "HDResid", "LDResid", "Other Veg", "Water"), x=200, y=4)
 abline(v=111, lwd=2, lty=2)
 # points(npp.dat[aoi>800, (bos.biom30m/aoi)*1E4/2000], npp.dat[aoi>800, (st.med.ann.npp.all/aoi)*1E4/2000],
 #        col="purple", cex=0.2)
-
+hist(npp.dat[aoi>800, ((hyb.npp.mod.lin/2000)/(aoi*can.frac))*1E4]) ## most below 5 MgC/ha/yr, besides outliers nothing over 10 MgC/ha/yr
+### it is going to be necessary to note that grass turf might be upwards of this high too, but is a fairly small fraction of total cover, and we'll handle the shit later
 
 ## contrast overlay the fia results
 par(mfrow=c(1,1), mar=c(4,4,1,1))
 col.lulc <- c("forestgreen", "grey55", "salmon", "gold2", "lawngreen", "cadetblue3")
-plot(npp.dat[aoi>800, (bos.biom30m/aoi)*1E4/2000], npp.dat[aoi>800, (hyb.npp/aoi)*1E4/2000], 
+plot(npp.dat[aoi>800, (bos.biom30m/aoi)*1E4/2000], npp.dat[aoi>800, (hyb.npp.mod.lin/aoi)*1E4/2000], 
      col="grey65", cex=0.1, 
      xlab="biomass MgC/ha", ylab="NPP MgC/ha/yr")
 points(npp.dat[aoi>800, (bos.biom30m/aoi)*1E4/2000], npp.dat[aoi>800, (fia.npp.ann.forest/aoi)*1E4/2000],
@@ -328,15 +360,26 @@ points(npp.dat[aoi>800, (bos.biom30m/aoi)*1E4/2000], npp.dat[aoi>800, (fia.npp.a
 legend(fill=c("red", "forestgreen"), legend=c("FIA.ground", "FIA.canopy"), x=200, y=4)
 abline(v=123, lwd=2, lty=4)
 
+## compare to fia empirical
+plot(npp.dat[aoi>800, (bos.biom30m/aoi)*1E4/2000], npp.dat[aoi>800, (hyb.npp.mod.lin/aoi)*1E4/2000], 
+     col="grey65", cex=0.1, 
+     xlab="biomass MgC/ha", ylab="NPP MgC/ha/yr")
+points(npp.dat[aoi>800, (bos.biom30m/aoi)*1E4/2000], npp.dat[aoi>800, (fia.empir.npp.kg.hw.forest/aoi)*1E4/2000],
+       pch=14, col="forestgreen", cex=0.3)
+points(npp.dat[aoi>800, (bos.biom30m/aoi)*1E4/2000], npp.dat[aoi>800, (fia.empir.npp.kg.hw.ground/aoi)*1E4/2000],
+       pch=14, col="red", cex=0.3)
+legend(fill=c("red", "forestgreen"), legend=c("FIA.ground", "FIA.canopy"), x=200, y=4)
+abline(v=123, lwd=2, lty=4)
+
 
 ## how do it compare?
 options(scipen=999)
-npp.dat[aoi>800, .((sum(hyb.npp, na.rm=T)/1000),
+npp.dat[aoi>800, .((sum(hyb.npp.mod.lin, na.rm=T)/1000),
                    (sum(fia.npp.ann.ground, na.rm=T)/1000),
                    (sum(fia.npp.ann.forest, na.rm=T)/1000), 
                    (sum(fia.npp.ann.perv, na.rm=T)/1000),
                    (sum(fia.empir.npp.kg.hw.forest, na.rm=T)/1000)), by=lulc] ## Mg-biomass per LULC
-npp.dat[aoi>800, .((sum(hyb.npp, na.rm=T)/1000), 
+npp.dat[aoi>800, .((sum(hyb.npp.mod.lin, na.rm=T)/1000), 
                    sum(andy.npp.tot, na.rm=T)/1000, 
                    sum(fia.npp.ann.ground, na.rm=T)/1000, 
                    sum(fia.npp.ann.forest, na.rm=T)/1000, 
@@ -346,114 +389,134 @@ npp.dat[aoi>800, .((sum(hyb.npp, na.rm=T)/1000),
 ## hybrid vs. ground (otherwise beats)
 ## lower in dev hdres lowveg, but beats by a lot in forest (i.e. the most comparable parts)
 
+### random bullshit trying to summarize and compare results of different approaches
+###### 
+# ### summary table by lulc
+# tot.area <- npp.dat[aoi>800 & !is.na(lulc), sum(aoi)]
+# fox <- npp.dat[aoi>800 & !is.na(lulc), 
+#                .((sum(aoi)/tot.area), 
+#                  (median(can.frac, na.rm=T)), 
+#                  (sum(bos.biom30m, na.rm=T)/1000), 
+#                  (sum(bos.biom30m, na.rm=T)/1000)/(sum(aoi)/1E4)), by=lulc]
+# names(fox) <- c("lulc", "area.frac", "med.can.frac", "tot.biomass.Mg", "biomass.Mg.ha")
+# npp.dat[aoi>800 & !is.na(lulc), ## whole area
+#                .((sum(aoi)/tot.area), 
+#                  (median(can.frac, na.rm=T)), 
+#                  (sum(bos.biom30m, na.rm=T)/1000), 
+#                  (sum(bos.biom30m, na.rm=T)/1000)/(sum(aoi)/1E4))]
+# 
 
-### summary table by lulc
-tot.area <- npp.dat[aoi>800 & !is.na(lulc), sum(aoi)]
-fox <- npp.dat[aoi>800 & !is.na(lulc), 
-               .((sum(aoi)/tot.area), 
-                 (median(can.frac, na.rm=T)), 
-                 (sum(bos.biom30m, na.rm=T)/1000), 
-                 (sum(bos.biom30m, na.rm=T)/1000)/(sum(aoi)/1E4)), by=lulc]
-names(fox) <- c("lulc", "area.frac", "med.can.frac", "tot.biomass.Mg", "biomass.Mg.ha")
-npp.dat[aoi>800 & !is.na(lulc), ## whole area
-               .((sum(aoi)/tot.area), 
-                 (median(can.frac, na.rm=T)), 
-                 (sum(bos.biom30m, na.rm=T)/1000), 
-                 (sum(bos.biom30m, na.rm=T)/1000)/(sum(aoi)/1E4))]
 
-
-
-## productivity summaries
-hyb.tot <- npp.dat[aoi>800 & !is.na(lulc), sum(hyb.npp, na.rm=T)/(1000*2)]
-hen <- npp.dat[aoi>800 & !is.na(lulc),
-               .((sum(hyb.npp, na.rm=T)/2000),
-                 (sum(hyb.npp, na.rm=T)/2000)/(sum(aoi, na.rm=T)/1E4),
-                 (sum(hyb.npp, na.rm=T)/2000)/hyb.tot), by=lulc]
-names(hen) <- c("lulc", "hyb.npp.MgC", "hyb.npp.MgC.ha", "hyb.npp.frac.tot")
-house <- merge(fox, hen, by="lulc")
-
-flop.tot <- npp.dat[aoi>800 & !is.na(lulc), sum(fia.npp.ann.forest, na.rm=T)/(1000*2)]
-flop <- npp.dat[aoi>800 & !is.na(lulc), 
-                .((sum(fia.npp.ann.forest, na.rm=T)/2000),
-                  (sum(fia.npp.ann.forest, na.rm=T)/2000)/(sum(aoi, na.rm=T)/1E4),
-                  (sum(fia.npp.ann.forest, na.rm=T)/2000)/flop.tot), by=lulc]
-names(flop) <- c("lulc", "fia.npp.MgC", "fia.npp.MgC.ha", "fia.npp.frac.tot")
-house <- merge(house, flop, by="lulc")
-write.csv(house, "processed/boston/results/summary.hybrid.fia.npp.csv")
+# ## productivity summaries
+# hyb.tot <- npp.dat[aoi>800 & !is.na(lulc), sum(hyb.npp, na.rm=T)/(1000*2)]
+# hen <- npp.dat[aoi>800 & !is.na(lulc),
+#                .((sum(hyb.npp, na.rm=T)/2000),
+#                  (sum(hyb.npp, na.rm=T)/2000)/(sum(aoi, na.rm=T)/1E4),
+#                  (sum(hyb.npp, na.rm=T)/2000)/hyb.tot), by=lulc]
+# names(hen) <- c("lulc", "hyb.npp.MgC", "hyb.npp.MgC.ha", "hyb.npp.frac.tot")
+# house <- merge(fox, hen, by="lulc")
+# 
+# flop.tot <- npp.dat[aoi>800 & !is.na(lulc), sum(fia.npp.ann.forest, na.rm=T)/(1000*2)]
+# flop <- npp.dat[aoi>800 & !is.na(lulc), 
+#                 .((sum(fia.npp.ann.forest, na.rm=T)/2000),
+#                   (sum(fia.npp.ann.forest, na.rm=T)/2000)/(sum(aoi, na.rm=T)/1E4),
+#                   (sum(fia.npp.ann.forest, na.rm=T)/2000)/flop.tot), by=lulc]
+# names(flop) <- c("lulc", "fia.npp.MgC", "fia.npp.MgC.ha", "fia.npp.frac.tot")
+# house <- merge(house, flop, by="lulc")
+# write.csv(house, "processed/boston/results/summary.hybrid.fia.npp.csv")
 
 ## productivity across all lulc
-npp.dat[aoi>800, (sum(fia.npp.ann.ground, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 1.11 MgC/ha
-npp.dat[aoi>800, (sum(fia.npp.ann.forest, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 0.37 MgC/ha
-npp.dat[aoi>800, (sum(fia.npp.ann.perv, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 0.43 MgC/ha
-npp.dat[aoi>800, (sum(fia.empir.npp.kg.hw.forest, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 0.7 MgC/ha
-npp.dat[aoi>800, (sum(andy.npp.tot, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 1.11 MgC/ha
-npp.dat[aoi>800, (sum(st.med.ann.npp.all, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 1.07 MgC/ha (excluding non-retrieves)
-npp.dat[aoi>800, (sum(hyb.npp, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 1.17 MgC/ha
-npp.dat[aoi>800, (sum(hyb.npp, na.rm=T)/(1000*2))] ### 14,393
-
+# npp.dat[aoi>800, (sum(fia.npp.ann.ground, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 1.11 MgC/ha
+# npp.dat[aoi>800, (sum(fia.npp.ann.forest, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 0.37 MgC/ha
+# npp.dat[aoi>800, (sum(fia.npp.ann.perv, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 0.43 MgC/ha
+# npp.dat[aoi>800, (sum(fia.empir.npp.kg.hw.forest, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 0.7 MgC/ha
+# npp.dat[aoi>800, (sum(andy.npp.tot, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 1.11 MgC/ha
+# npp.dat[aoi>800, (sum(st.med.ann.npp.all, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 1.07 MgC/ha (excluding non-retrieves)
+# npp.dat[aoi>800, (sum(hyb.npp, na.rm=T)/(1000*2))/sum(aoi, na.rm=T)]*1E4 ### 1.17 MgC/ha
+# npp.dat[aoi>800, (sum(hyb.npp, na.rm=T)/(1000*2))] ### 14,393
+# 
 
 
 ### only thing is to decide whether or not to swap the high-biomass non-forest sim results with the andy forest equivalents
 ## I thikn this is a yes: Anything >20000 kg/pix is a "forest" in the andy sense
-
-#### BRING IN NPP estimates based on the FIA empirical records
-npp.dat <- as.data.table(read.csv("processed/npp.estimates.V1.csv"))
-npp.tab <- npp.dat[aoi>800 & !is.na(lulc), .(round(sum(fia.empir.npp.kg.hw.ground, na.rm=T)/(1000*2), digits=0),
-                              round(sum(fia.empir.npp.kg.hw.forest, na.rm=T)/(1000*2), digits=0),
-                              round(sum(fia.empir.npp.kg.hw.perv, na.rm=T)/(1000*2), digits=0),
-                              round(sum(hyb.npp, na.rm=T)/(1000*2), digits=0)), by=lulc]
-npp.tab$lulc.name <- c("Dev", "Other Veg", "Forest", "Water", "HD Resid", "LD Resid")
-names(npp.tab) <- c("lulc", "FIA (Ground)", "FIA (canopy)", "FIA (pervious)", "Street+Urban Forest", "Type")
-npp.tab <- cbind(npp.tab[,2:5, with=F], npp.tab$Type)
-npp.tot <- apply(npp.tab[,1:4, with=F], 2, sum)
-npp.tot <- matrix(nrow=1, ncol=5, c(npp.tot, "Total"))
-npp.tab <- as.matrix(npp.tab)
-npp.tab <- rbind(npp.tab, npp.tot)
-npp.tab <- as.data.frame(cbind(npp.tab[,5], npp.tab[,1:4]))
-names(npp.tab)[1] <- "Type"
-
+# 
+# #### BRING IN NPP estimates based on the FIA empirical records
+# npp.dat <- as.data.table(read.csv("processed/npp.estimates.V1.csv"))
+# npp.tab <- npp.dat[aoi>800 & !is.na(lulc), .(round(sum(fia.empir.npp.kg.hw.ground, na.rm=T)/(1000*2), digits=0),
+#                               round(sum(fia.empir.npp.kg.hw.forest, na.rm=T)/(1000*2), digits=0),
+#                               round(sum(fia.empir.npp.kg.hw.perv, na.rm=T)/(1000*2), digits=0),
+#                               round(sum(hyb.npp, na.rm=T)/(1000*2), digits=0)), by=lulc]
+# npp.tab$lulc.name <- c("Dev", "Other Veg", "Forest", "Water", "HD Resid", "LD Resid")
+# names(npp.tab) <- c("lulc", "FIA (Ground)", "FIA (canopy)", "FIA (pervious)", "Street+Urban Forest", "Type")
+# npp.tab <- cbind(npp.tab[,2:5, with=F], npp.tab$Type)
+# npp.tot <- apply(npp.tab[,1:4, with=F], 2, sum)
+# npp.tot <- matrix(nrow=1, ncol=5, c(npp.tot, "Total"))
+# npp.tab <- as.matrix(npp.tab)
+# npp.tab <- rbind(npp.tab, npp.tot)
+# npp.tab <- as.data.frame(cbind(npp.tab[,5], npp.tab[,1:4]))
+# names(npp.tab)[1] <- "Type"
+# 
 
 #########
 ### summary table (TABLE 1)
-npp.dat <- read.csv("processed/npp.estimates.V3.csv")
-npp.dat <- as.data.table(npp.dat)
+npp.dat <- as.data.table(read.csv("processed/npp.estimates.V4.csv"))
 npp.dat[,biom.MgC.ha.ground:=((bos.biom30m/2000)/aoi)*1E4] ## per-pixel ground biomass density
 npp.dat[,biom.MgC.ha.can:=((bos.biom30m/2000)/(aoi*can.frac))*1E4] ## per-pixel canopy biomass density
 npp.dat[,fia.empir.npp.MgC.ha.ground:=((fia.empir.npp.kg.hw.forest/2000)/aoi)*1E4] 
 npp.dat[,fia.empir.npp.MgC.ha.can:=((fia.empir.npp.kg.hw.forest/2000)/(aoi*can.frac))*1E4]
-npp.dat[,hyb.npp.MgC.ha.ground:=((hyb.npp.mod.cap/2000)/aoi)*1E4]
-npp.dat[,hyb.npp.MgC.ha.can:=((hyb.npp.mod.cap/2000)/(aoi*can.frac))*1E4]
+npp.dat[,hyb.npp.MgC.ha.ground:=((hyb.npp.mod.lin/2000)/aoi)*1E4]
+npp.dat[,hyb.npp.MgC.ha.can:=((hyb.npp.mod.lin/2000)/(aoi*can.frac))*1E4]
 
 
 ## basic by-LULC summary table
-tab1 <- npp.dat[aoi>800,.(sum(aoi, na.rm=T)/1E4, ## area
-                         median(can.frac, na.rm=T), ## % canopy
-                         (sum(bos.biom30m, na.rm=T)/2000)/1000, ## biomass total
-                         median(biom.MgC.ha.ground, na.rm=T), ## biom MgC/ha-ground
-                         median(biom.MgC.ha.can, na.rm=T), ## biom MgC/ha-canopy
-                         (sum(fia.empir.npp.kg.hw.forest/2000, na.rm=T)),
-                         sum(hyb.npp.mod.cap/2000, na.rm=T),
-                         median(fia.empir.npp.MgC.ha.ground, na.rm=T),
-                         median(fia.empir.npp.MgC.ha.can, na.rm=T),
-                         median(hyb.npp.MgC.ha.ground, na.rm=T),
-                         median(hyb.npp.MgC.ha.can, na.rm=T)), by=lulc]
+tab1 <- npp.dat[aoi>800,.(round((sum(aoi, na.rm=T)/1E4), 0), ## tot area
+                         round(median(can.frac, na.rm=T),2)*100, ## % canopy
+                         round((sum(bos.biom30m, na.rm=T)/2000)/1000,0), ## biomass total
+                         round(median(biom.MgC.ha.ground, na.rm=T),1), ## biom MgC/ha-ground
+                         round(median(biom.MgC.ha.can, na.rm=T),1), ## biom MgC/ha-canopy
+                         round(sum(fia.empir.npp.kg.hw.forest/2000, na.rm=T),0), ## Tot NPP FIA
+                         round(sum(hyb.npp.mod.lin/2000, na.rm=T),0), ## tot NPP HYBRID
+                         round(median(fia.empir.npp.MgC.ha.ground, na.rm=T),1), ## FIA NPP MgC/ha-ground
+                         round(median(fia.empir.npp.MgC.ha.can, na.rm=T),1), ### FIA NPP MgC/ha-can
+                         round(median(hyb.npp.MgC.ha.ground, na.rm=T),1), ## HYBRID NPP MgC/ha-ground
+                         round(median(hyb.npp.MgC.ha.can, na.rm=T),1)), by=lulc] ## HYBRID NPP MgC/ha-can
 
-names(tab1)[2:12] <- c("area.ha", "med.can", "Tbiom.kMgC", 
-                      "biom.MgC.ha.ground", "biom.MgC.ha.can", "fia.empir.npp.MgC", "hyb.npp.mod.cap.MgC",
+names(tab1)[2:12] <- c("area.ha", "med.can", "Tbiom.kMgC", "biom.MgC.ha.ground", "biom.MgC.ha.can", 
+                      "fia.empir.npp.MgC", "hyb.npp.mod.lin.MgC",
                       "fia.npp.MgC.ha.ground", "fia.npp.MgC.ha.can", "hyb.npp.MgC.ha.ground", "hyb.npp.MgC.ha.can")
-tab1[, area.ha:=round(area.ha, 0)]
-tab1[, med.can:=round(med.can, 3)*100]
-tab1[, Tbiom.kMgC:=round(Tbiom.kMgC, 1)]
-tab1[, biom.MgC.ha.ground:=round(biom.MgC.ha.ground, 1)]
-tab1[, biom.MgC.ha.can:=round(biom.MgC.ha.can, 1)]
-tab1[, fia.empir.npp.MgC:=round(fia.empir.npp.MgC, 1)]
-tab1[, hyb.npp.mod.cap.MgC:=round(hyb.npp.mod.cap.MgC, 1)]
 
 area.tot <- npp.dat[aoi>800, sum(aoi, na.rm=T)/1E4] ## total area in ha
 biom.tot <- npp.dat[aoi>800, (sum(bos.biom30m, na.rm=T)/2000)/1000] ## total biomass in 1000 MgC
-hyb.tot <- npp.dat[aoi>800, sum(hyb.npp.mod.cap, na.rm=T)/2000]
+hyb.tot <- npp.dat[aoi>800, sum(hyb.npp.mod.lin, na.rm=T)/2000]
 fia.empir.tot <- npp.dat[aoi>800, sum(fia.empir.npp.kg.hw.forest, na.rm=T)/2000]
+npp.dat[aoi>800, median(can.frac, na.rm=T)] ## whole-city median canopy
+npp.dat[aoi>800, median(fia.empir.npp.MgC.ha.ground, na.rm=T)]
+npp.dat[aoi>800, median(fia.empir.npp.MgC.ha.can, na.rm=T)]
+npp.dat[aoi>800, median(hyb.npp.MgC.ha.ground, na.rm=T)]
+npp.dat[aoi>800, median(hyb.npp.MgC.ha.can, na.rm=T)]
 
+### new layout: LULC, AREA, CANOPY, TOTAL BIOM | FIA(ground), HYBRID(ground) | FIA(can), HYBRID(can) | Tot.FIA, Tot.HYBRID
+tab1.f <- data.frame(cbind(tab1$lulc,
+                     paste(tab1$area.ha, " (", round((tab1$area/area.tot)*100,0), "%)", sep=""),
+                     paste(tab1$med.can, "%", sep=""),
+                     paste(tab1$Tbiom.kMgC, " (", round((tab1$Tbiom.kMgC/biom.tot)*100,0), "%)", sep=""),
+                     tab1$fia.npp.MgC.ha.ground, tab1$hyb.npp.MgC.ha.ground,
+                     tab1$fia.npp.MgC.ha.can, tab1$hyb.npp.MgC.ha.can,
+                     paste(tab1$fia.empir.npp.MgC, " (", round((tab1$fia.empir.npp.MgC/fia.empir.tot)*100,0), "%)", sep=""),
+                     paste(tab1$hyb.npp.mod.lin.MgC, " (", round((tab1$hyb.npp.mod.lin.MgC/hyb.tot)*100,0), "%)", sep="")
+                     ))
+names(tab1.f) <- c("LULC",
+                   "area.ha(%)",
+                   "med.can",
+                   "Tot.biom.kMgC(%)",
+                   "FIA.MgC.ha.gnd",
+                   "HYB.MgC.ha.gnd",
+                   "FIA.MgC.ha.can",
+                   "HYB.MgC.ha.can",
+                   "FIA.tot.MgC(%)",
+                   "HYB.tot.MgC(%)")
+
+write.csv(tab1.f, "processed/boston/results/lulc_NPP_summary_simp1.csv")
 ## final layout: LULC, area, med.can, total biomass, biomass density | FIA NPP results | HYB NPP RESULTS
 tab1.f <- data.frame(cbind(tab1$lulc, 
                            paste(tab1$area.ha, " (", 
