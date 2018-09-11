@@ -171,6 +171,7 @@ andy.bai <- read.csv("processed/andy.bai.dbh.avg.csv")
 andy.bai <- as.data.table(andy.bai)
 ps.contain <- read.csv("processed/andy.bai.dbh.pseudo.csv")
 ps.contain <- as.data.table(ps.contain)
+ps.contain <- merge(x=ps.contain, y=andy.bai[,.(incr.ID, Plot.ID)], by="incr.ID", all.x=T, all.y=F) ## put the plot IDs in
 
 ## avg.dbh~avg.growth
 par(mfrow=c(1,2))
@@ -211,6 +212,24 @@ b1.bai.ps <- mod.int.edge.fin.ps$coefficients[2]
 b2.bai.ps <- mod.int.edge.fin.ps$coefficients[3]
 mod.int.edge.fin.ps$coefficients
 
+#### Try to do some mixed effects modeling to handle the pseudoreplication issue
+library(lme4)
+par(mfrow=c(1,1))
+ps.contain[, incr.ID:=as.factor(incr.ID)]
+boxplot(biom.rel.ann~interval, ps.contain, ylim=c(0, 0.4))
+boxplot(biom.rel.ann~incr.ID, ps.contain, ylim=c(0,0.4))
+boxplot(biom.rel.ann~Plot.ID, ps.contain, ylim=c(0,0.4))
+
+## Edge intercept, random intercepts on plot increment interval
+mmod <- lmer(log(biom.rel.ann)~log(dbh.start)+seg.Edge + (1|Plot.ID) + (1|incr.ID) + (1|interval), data=ps.contain[dbh.start>=5,])
+summary(mmod)
+## edge slope, random intercepts on plot increment interval
+mmod2 <- lmer(log(biom.rel.ann)~log(dbh.start)*seg.Edge + (1|Plot.ID) + (1|incr.ID) + (1|interval), data=ps.contain[dbh.start>=5,])
+summary(mmod2)
+## edge slope, random slopes on plot increment interval
+mmod3 <- lmer(log(biom.rel.ann)~log(dbh.start)+seg.Edge + (log(dbh.start)|Plot.ID) + (log(dbh.start)|incr.ID) + (log(dbh.start)|interval), data=ps.contain[dbh.start>=5,])
+summary(mmod3) ## not largely different from the dumb fixed effects model
+coef(mod.int.edge.fin.ps)
 ### at individual stem growth level the effect of dbh and edge position are similar but looks like avg.dbh/growth is a bit higher overall
 
 plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean), pch=13)
