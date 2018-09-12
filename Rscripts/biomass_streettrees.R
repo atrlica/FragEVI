@@ -23,6 +23,51 @@ library(rgeos)
 b0 <- -2.48
 b1 <- 2.4835 ## these are eastern hardwood defaults, Jenkins et al., 2003 (following approach of Smith et al. 2018)
 biom.pred <- function(x){exp(b0+(b1*log(x)))}
+biom.inv <- function(x){exp((log(x)-b0)/b1)}
+
+### Some ground truthing using the street trees at corner of Granby and Bay State
+## dbh measurements made 9/12/2018 (contrast biomass based on 2006/2007 data)
+biom1m <- raster("data/dataverse_files/bostonbiomass_1m.tif")
+bs1 <- readOGR("processed/boston/BayState1.shp")
+bs1.biom <- sum(unlist(extract(biom1m, bs1)))
+bs1.biom # 162 kg
+biom.inv(162) # 21cm dbh predicted, actual = 36
+
+bs2 <- readOGR("processed/boston/BayState2.shp")
+bs2.biom <- sum(unlist(extract(biom1m, bs2)))
+biom.inv(bs2.biom) ##32 cm predicted, actual 38.4
+
+bs3 <- readOGR("processed/boston/BayState3.shp")
+bs3.biom <- sum(unlist(extract(biom1m, bs3)))
+biom.inv(bs3.biom) #48 cm predicted, actual 46.5
+
+bs4 <- readOGR("processed/boston/BayState4.shp")
+bs4.biom <- sum(unlist(extract(biom1m, bs4)))
+biom.inv(bs4.biom) #46 cm predited, actual 41.9
+
+bs5 <- readOGR("processed/boston/BayState5.shp")
+bs5.biom <- sum(unlist(extract(biom1m, bs5)))
+biom.inv(bs5.biom) ## 21 cm predicted, actual 30
+
+bs6 <- readOGR("processed/boston/BayState6.shp")
+bs6.biom <- sum(unlist(extract(biom1m, bs6)))
+biom.inv(bs6.biom) ## 20cm predicted, actual 33.8
+
+bs7 <- readOGR("processed/boston/BayState7.shp")
+bs7.biom <- sum(unlist(extract(biom1m, bs7)))
+biom.inv(bs7.biom) ##22 cm predicted, actual 29.5
+
+bs8 <- readOGR("processed/boston/BayState8.shp")
+bs8.biom <- sum(unlist(extract(biom1m, bs8)))
+biom.inv(bs8.biom) ## 14 cm predicted, 20.4cm actual
+
+park1 <- readOGR("processed/boston/Park1.shp")
+park1.biom <- sum(unlist(extract(biom1m,park1)))
+biom.inv(park1.biom) ## 40 cm predcited, 50.3 cm actual
+
+g1 <- readOGR("processed/boston/Granby1.shp")
+g1.biom <- sum(unlist(extract(biom1m, g1)))
+biom.inv(g1.biom) ## 40cm predicted, 52.5 cm actual
 
 ## get the street tree record prepped
 street <- read.csv("docs/ian/Boston_Street_Trees.csv") ## Street tree resurvey, biomass 2006/2014, species
@@ -43,9 +88,18 @@ street[record.good==1, biom.2014:=biom.pred(dbh.2014)]
 street[record.good==1, biom.2006:=biom.pred(dbh.2006)]
 street[record.good==1, npp.ann:=(biom.2014-biom.2006)/8]
 street[record.good==1, npp.ann.rel:=npp.ann/biom.2006]
-street[record.good==1, range(dbh.2006, na.rm=T)] 
-street[record.good==1, range(npp.ann, na.rm=T)] ## 202 records show negative growth -- questionable 2006 dbh record?
+# street[record.good==1, range(dbh.2006, na.rm=T)] 
+# street[record.good==1, range(npp.ann, na.rm=T)] ## 202 records show negative growth -- questionable 2006 dbh record?
 # street[record.good==1 & npp.ann<0, record.good:=0] ## 2401 ## fuck this, keep the healthy mass losers in
+qqnorm(street[record.good==1, log(dbh.2006)])
+qqline(street[record.good==1, log(dbh.2006)])
+qqnorm(street[record.good==1, dbh.2006])
+qqline(street[record.good==1, (dbh.2006)])
+muf <- ecdf(street[record.good==1, dbh.2006])
+muf(40)
+muf(50)
+muf(60)
+
 
 ### biomass increment model based on dbh (exponential function)
 # mod.biom.rel <- summary(lm(log(npp.ann.rel)~log(dbh.2006), data=street[record.good==1 & npp.ann!=0])) ## exclude 4 no-growth records
@@ -395,6 +449,7 @@ container <- cbind(container, pixM.ba, pixM.dbh, pixM.tree.num)
 sum(duplicated(container$pix.ID)) ## some duplicated pixels, remove
 container <- container[!(duplicated(container$pix.ID)),]
 
+
 ## raster reconstruction
 biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel
 aoi <- raster("processed/boston/bos.aoi30m.tif")
@@ -409,8 +464,13 @@ map <- merge(x=biom.dat, y=container, by="pix.ID", all.x=T, all.y=T)
 
 write.csv(map, paste("processed/streettrees.npp.simulator.v", vers, ".results.csv", sep=""))
 
-
+plot(map[,med.tree.num.all], map[,pixM.tree.num])
+abline(a=0,b=1)
 # ### export the tifs
+# 
+# r <- biom
+# r <- setValues(r, map[,pixM.tree.num])
+# writeRaster(r, "processed/boston/bos.medNPP.tree.num.tif", format="GTiff", overwrite=T)
 # for(j in 1:4){
 #   r <- biom
 #   r <- setValues(r, map[[(j+5)]])
@@ -418,7 +478,7 @@ write.csv(map, paste("processed/streettrees.npp.simulator.v", vers, ".results.cs
 #               format="GTiff", overwrite=T)
 # }
 # 
-
+# 
 ## brief exploratory
 ### do simulations track cell biomass well enough?
 vers=4

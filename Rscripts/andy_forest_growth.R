@@ -220,20 +220,96 @@ boxplot(biom.rel.ann~interval, ps.contain, ylim=c(0, 0.4))
 boxplot(biom.rel.ann~incr.ID, ps.contain, ylim=c(0,0.4))
 boxplot(biom.rel.ann~Plot.ID, ps.contain, ylim=c(0,0.4))
 
-## Edge intercept, random intercepts on plot increment interval
-mmod <- lmer(log(biom.rel.ann)~log(dbh.start)+seg.Edge + (1|Plot.ID) + (1|incr.ID) + (1|interval), data=ps.contain[dbh.start>=5,])
-summary(mmod)
+
 ## edge slope, random intercepts on plot increment interval
-mmod2 <- lmer(log(biom.rel.ann)~log(dbh.start)*seg.Edge + (1|Plot.ID) + (1|incr.ID) + (1|interval), data=ps.contain[dbh.start>=5,])
+mmod2 <- lmer(log(biom.rel.ann)~log(dbh.start)*seg.Edge + (1|Plot.ID) + (1|incr.ID) + (1|interval), 
+              data=ps.contain[dbh.start>=5,],
+              REML=FALSE)
 summary(mmod2)
 ## edge slope, random slopes on plot increment interval
-mmod3 <- lmer(log(biom.rel.ann)~log(dbh.start)+seg.Edge + (log(dbh.start)|Plot.ID) + (log(dbh.start)|incr.ID) + (log(dbh.start)|interval), data=ps.contain[dbh.start>=5,])
-summary(mmod3) ## not largely different from the dumb fixed effects model
+mmod.Rslopes.Finteract <- lmer(log(biom.rel.ann)~log(dbh.start)*seg.Edge + (1+log(dbh.start)|Plot.ID) + (1+log(dbh.start)|incr.ID) + (1+log(dbh.start)|interval), 
+              data=ps.contain[dbh.start>=5,],
+              REML=FALSE)
+summary(mmod.Rslopes.Finteract) 
+
+## edge intercept, random slopes on plot increment interval
+mmod.Rslopes.Fadd <- lmer(log(biom.rel.ann)~log(dbh.start)+seg.Edge + (1+log(dbh.start)|Plot.ID) + (1+log(dbh.start)|incr.ID) + (1+log(dbh.start)|interval), 
+                               data=ps.contain[dbh.start>=5,],
+                               REML=FALSE)
+summary(mmod.Rslopes.Fadd)
+coef(mod.int.edge.fin.ps) ## not particularly different from the fixed effects model
+
+### significance of dbh*Edge
+anova(mmod.Rslopes.Fadd, mmod.Rslopes.Finteract) ## p>0.33, dbh:Edge not significant
+
+mmod.Rslopes.Fnull <- lmer(log(biom.rel.ann)~log(dbh.start) + (1+log(dbh.start)|Plot.ID) + (1+log(dbh.start)|incr.ID) + (1+log(dbh.start)|interval), 
+                           data=ps.contain[dbh.start>=5,],
+                           REML=FALSE)
+summary(mmod.Rslopes.Fnull)
+### significance of Edge
+anova(mmod.Rslopes.Fnull, mmod.Rslopes.Fadd) ## p < 0.001, edge factor is significant
+
+mmod.Rslopes.null <- lmer(log(biom.rel.ann)~1 + (1+log(dbh.start)|Plot.ID) + (1+log(dbh.start)|incr.ID) + (1+log(dbh.start)|interval), 
+                          data=ps.contain[dbh.start>=5,],
+                          REML=FALSE)
+summary(mmod.Rslopes.null)
+### significance of dbh
+anova(mmod.Rslopes.null, mmod.Rslopes.Fnull) ## p < 0.01, dbh is significant
+
+boxplot(biom.rel.ann~seg.Edge*Plot.ID, data=ps.contain[dbh.start>=5,])
+### Mungo model, random effects on both edge and dbh, full dbh*Edge
+mmod.Mungo.Finteract <- lmer(log(biom.rel.ann)~log(dbh.start)*seg.Edge + 
+                               (1+log(dbh.start)|Plot.ID) + 
+                               (1+log(dbh.start)|incr.ID) + 
+                               (1+log(dbh.start)|interval) +
+                               (1+seg.Edge|Plot.ID) +
+                               # (1+seg.Edge|incr.ID) + ## there are no individual stems that are in both an edge and interior
+                               (1+seg.Edge|interval), 
+                               data=ps.contain[dbh.start>=5,],
+                               REML=FALSE)
+summary(mmod.Mungo.Finteract)
+summary(mmod.Rslopes.Finteract) ## pretty similar
+anova(mmod.Rslopes.Finteract, mmod.Mungo.Finteract) ### Mungo seems a bit better, p<0.02
+
+mmod.Mungo.Fadd <- lmer(log(biom.rel.ann)~log(dbh.start)+seg.Edge + 
+                          (1+log(dbh.start)|Plot.ID) + 
+                          (1+log(dbh.start)|incr.ID) + 
+                          (1+log(dbh.start)|interval) +
+                          (1+seg.Edge|Plot.ID) +
+                          # (1+seg.Edge|incr.ID) + ## there are no individual stems that are in both an edge and interior
+                          (1+seg.Edge|interval), 
+                        data=ps.contain[dbh.start>=5,],
+                        REML=FALSE)
+
+summary(mmod.Mungo.Fadd)
+summary(mmod.Rslopes.Fadd) ### similar coefficients
 coef(mod.int.edge.fin.ps)
-### at individual stem growth level the effect of dbh and edge position are similar but looks like avg.dbh/growth is a bit higher overall
+### does Mungo do better than random effects on dbh?
+anova(mmod.Rslopes.Fadd, mmod.Mungo.Fadd) ## bit better, p<0.03
+### is dbh*edge significant in Mungo?
+anova(mmod.Mungo.Fadd, mmod.Mungo.Finteract) ### not sig, p>0.22
+## model diagnostics
+plot(ps.contain[dbh.start>=5, log(dbh.start)], residuals(mmod.Mungo.Fadd)) ## homoskedastic
+hist(residuals(mmod.Mungo.Fadd)) ### looks normal
+qqnorm(residuals(mmod.Mungo.Fadd)); qqline (residuals(mmod.Mungo.Fadd), col=2) ## light tailed
+
+
+
+### let's try the non-linear model version of this
+## this is fucking harder
+library(nlme)
+pray <- nlme(biom.rel.ann~exp(a+b*log(dbh.start)), data=ps.contain[dbh.start>=5,],
+         random = a ~ 1|incr.ID, fixed=list(a~1, b~1), start=c(0,0))
+summary(pray)
+t=1:100
+plot(t, exp(1.24+(-1.54*log(t))))
 
 plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean), pch=13)
 plot(log(ps.contain$dbh.start), log(ps.contain$biom.rel.ann), col="blue", pch=15, cex=0.6)
+
+library(lme4)
+pray <- nlmer(biom.rel.ann ~ exp(a+b*log(dbh.start)) ~ a|incr.ID,
+              data=ps.contain[dbh.start>=5,], start=c(0,0))
 
 ### generalized growth coefficients for edge/interior, based on andy.bai
 par(mfrow=c(1,1), mar=c(4,4,2,1))
