@@ -609,6 +609,23 @@ get_density <- function(x, y, n = 100) { ## two dimensional kernel density estim
   return(dens$z[ii])
 }
 
+### scale tranformation function for -1 to 1 log scaling
+library(scales)
+stemg.xform <- function(x){
+  log(x+0.5)
+}
+I.stemg.xform <- function(x){
+  exp(x)-0.5
+}
+stemg_trans <- function(){trans_new(name="stemg",
+                                    transform=stemg.xform,
+                                    inverse=I.stemg.xform)
+}
+
+# stemg.xform(5)
+# I.stemg.xform(5)
+# I.stemg.xform(stemg.xform(5)) ## it works
+
 ## set up common visual parameters
 xlim.all <- c(4, 100)
 ylim.all <- c(-0.1, 1)
@@ -673,121 +690,54 @@ live$density <- get_density(live$DIAM_T0, live$growth.ann.rel)
 live[is.na(density), density:=0]
 
 ## single color, density via alpha density
-fia.mono <- ggplot(live, aes(DIAM_T0, growth.ann.rel))+
+# fia.mono <- ggplot(live, aes(DIAM_T0, growth.ann.rel))+
+#   geom_point(alpha=alpha.master, color=plasma(6)[1], size=pt.size)+
+#   lims(x=xlim.all, y=ylim.all)+
+#   # geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   # geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color=fit.col, linetype=fit.type, size=fit.width)+
+#   labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="FIA.linear")+
+#   theme.master
+
+
+## log+a transformed
+fia.mono.log <- ggplot(live, aes(DIAM_T0, growth.ann.rel))+
   geom_point(alpha=alpha.master, color=plasma(6)[1], size=pt.size)+
-  lims(x=xlim.all, y=ylim.all)+
+  scale_y_continuous(trans="stemg", breaks=c(-0.1, 0, 0.2, 0.5, 1.0), limits=ylim.all)+
+  scale_x_continuous(trans="log", limits=xlim.all, breaks=c(5, 10, 30, 60, 100))+
   # geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color=med.lines.col, size=med.lines.width)+
   # geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
   geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color=fit.col, linetype=fit.type, size=fit.width)+
-  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="FIA.linear")+
+  labs(x = "Stem DBH (cm)", y="Stem Growth (kg/kg)", title="Rural Forest '08-'16")+
   theme.master
 
-## log transformed
-ggplot(live, aes(DIAM_T0, log(growth.ann.rel+0.5)))+
-  geom_point(alpha=alpha.master, color=plasma(6)[1], size=pt.size)+
-  # lims(x=xlim.all, y=ylim.all)+
-  # geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  # geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color=fit.col, linetype=fit.type, size=fit.width)+
-  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="FIA.log+1")+
-  theme.master
+# ## asinh transform
+# library(scales)
+# asinh_trans <- function(){
+#   trans_new(name = 'asinh', transform= function(x) asinh(x),
+#             inverse=function(x) sinh(x))
+# }
+# 
+# ggplot(live, aes((DIAM_T0), (growth.ann.rel)))+
+#   geom_point(alpha=alpha.master, color=plasma(6)[1], size=pt.size)+
+#   scale_y_continuous(trans='asinh', breaks=c(-0.2, 0, 0.2, 0.5, 1.0), limits=ylim.all)+
+#   lims(x=xlim.all)+
+#   # geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   # geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   # geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color=fit.col, linetype=fit.type, size=fit.width)+
+#   labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="FIA.asinh")+
+#   theme.master
 
-ttt <- data.frame(raw=seq(-0.25, 1, length.out=50))
-ttt$xform <- log(ttt$raw)
-ttt$xform[ttt$raw<=0] <- ttt$raw[ttt$raw<=0]
-ttt$xform[ttt$raw>0] <- ttt$xform[ttt$raw>0]+abs(min(ttt$xform))
-ttt$asinh <- asinh(ttt$raw)
-ttt$simple <- log(ttt$raw+abs(min(ttt$raw))+0.001)
-par(mfrow=c(1,3))
-plot(ttt$raw, ttt$xform)
-plot(ttt$raw, ttt$asinh, col="red")
-plot(ttt$raw, ttt$simple, col="blue")
-plot(live$DIAM_T0, live$growth.ann.rel)
-plot(live$DIAM_T0, log(live$growth.ann.rel))
-plot(live$DIAM_T0, live[,log(growth.ann.rel+abs(min(growth.ann.rel))+1)])
-plot(live$DIAM_T0, live[,log(growth.ann.rel/(1-growth.ann.rel))])
-
-
-library(scales)
-S_log <- function(x){
-  log(x+(-1*min(x, na.rm=T)))
-}
-
-logee <- function(x){
-  if(x>0){return(log(x))
-    } else{
-    return(x)
-  }
-}
-IS_log <- function(x){exp(x+1)}
-S_log_trans <- function() {trans_new(name="S_log", 
-                                     transform=S_log, 
-                                     inverse=IS_log)
-  }
-
-
-CRoot <- function(x){x^(1/3)}
-CRoot(ttt)
-fuck <- function(x){
-  flo <- min(log(x[x>0]), na.rm=T); print(flo)
-  x[x>0] <- log(x)+(-1*flo); return(x)
-  }
-data.frame(raw=ttt, cook=fuck(ttt))
-
-plot(live$DIAM_T0, log(live$growth.ann.rel))
-plot(live$DIAM_T0, logee(live$growth.ann.rel))
-ttt <- seq(-0.25, 1, length.out=50)
-rrr <- data.frame(raw=ttt, xform=S_log(ttt))
-plot(rrr$raw, rrr$xform)
-
-ggplot(live, aes(DIAM_T0, growth.ann.rel))+
-  geom_point(alpha=alpha.master, color=plasma(6)[1], size=pt.size)+
-  # scale_y_continuous(trans="S_log", breaks=c(-0.2, 0, 0.2, 0.5, 1.0))+
-  lims(x=xlim.all, y=ylim.all)+
-  # geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  # geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  # geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color=fit.col, linetype=fit.type, size=fit.width)+
-  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="FIA")+
-  theme.master
-
-## asinh transform
-library(scales)
-asinh_trans <- function(){
-  trans_new(name = 'asinh', transform= function(x) asinh(x),
-            inverse=function(x) sinh(x))
-}
-
-ggplot(live, aes((DIAM_T0), (growth.ann.rel)))+
-  geom_point(alpha=alpha.master, color=plasma(6)[1], size=pt.size)+
-  scale_y_continuous(trans='asinh', breaks=c(-0.2, 0, 0.2, 0.5, 1.0), limits=ylim.all)+
-  lims(x=xlim.all)+
-  # geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  # geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  # geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color=fit.col, linetype=fit.type, size=fit.width)+
-  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="FIA.asinh")+
-  theme.master
-
-### density via color gradient
-fia.dens <- ggplot(live, aes(DIAM_T0, growth.ann.rel, color=density))+
-  geom_point(alpha=alpha.master, size=pt.size)+
-  scale_colour_viridis(option="B", guide=FALSE)+
-  lims(x=xlim.all, y=ylim.all)+
-  geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color=fit.col, linetype=fit.type, size=fit.width)+
-  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="FIA")+
-  theme.master
-
-### log transformed
-ggplot(live, aes(log(DIAM_T0), log(growth.ann.rel), color=density))+
-  geom_point(alpha=alpha.master, size=pt.size)+
-  scale_colour_viridis(option="B", guide=FALSE)+
-  lims(x=xlim.all.log, y=ylim.all.log)+
-  # geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  # geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  # geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color=fit.col, linetype=fit.type, size=fit.width)+
-  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="FIA")+
-  theme.master
+# ### density via color gradient
+# fia.dens <- ggplot(live, aes(DIAM_T0, growth.ann.rel, color=density))+
+#   geom_point(alpha=alpha.master, size=pt.size)+
+#   scale_colour_viridis(option="B", guide=FALSE)+
+#   lims(x=xlim.all, y=ylim.all)+
+#   geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color=fit.col, linetype=fit.type, size=fit.width)+
+#   labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="FIA")+
+#   theme.master
 
 
 ####
@@ -813,77 +763,47 @@ names(andy.col) <- levels(andy.bai$seg.Edge)
 col.map <- scale_color_manual(name="Tree position", values=andy.col, labels=c("Edge <10m", "Interior"))
 shape.map <- scale_shape_manual(name="Tree position", values=c(16,17), labels=c("Edge <10m", "Interior"))
 
-andy.mono <- ggplot(andy.bai[dbh.start>=5], aes(dbh.start, biom.rel.ann, colour=seg.Edge))+
-  geom_point(aes(shape=seg.Edge), alpha=alpha.master*1.6, size=pt.size)+
-  col.map+
-  shape.map+
-  lims(x=xlim.all, y=ylim.all)+
-  geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(dbh.start, na.rm=T)], color="gray55", size=med.lines.width)+
-  geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(biom.rel.ann, na.rm=T)], color="gray55", size=med.lines.width)+
-  geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(dbh.start, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(biom.rel.ann, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  geom_line(data = pred_andy.edge, aes(x=dbh.start, y=growth.pred), color="darkmagenta", linetype=fit.type, size=fit.width)+
-  geom_line(data = pred_andy.int, aes(x=dbh.start, y=growth.pred), color="chocolate3", linetype=fit.type, size=fit.width)+
-  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Urban Forest '90-'16")+
-  theme.master+
-  theme(legend.position = c(0.6, 0.5),
-        legend.title = element_text(size=legend.title.size, face="bold"),
-        legend.background = element_rect(fill = "white"),
-        legend.key =  element_blank(),
-        legend.key.size = unit(0.6, "lines"),
-        legend.text = element_text(size=legend.title.size-1, face="plain"),
-        legend.justification = "center")+
-  guides(shape = guide_legend(override.aes = list(size=pt.size*1.7,
-                                                  alpha=0.8,
-                                                  color=c("darkmagenta",
-                                                          "chocolate3"))))
+# andy.mono <- ggplot(andy.bai[dbh.start>=5], aes(dbh.start, biom.rel.ann, colour=seg.Edge))+
+#   geom_point(aes(shape=seg.Edge), alpha=alpha.master*1.6, size=pt.size)+
+#   col.map+
+#   shape.map+
+#   lims(x=xlim.all, y=ylim.all)+
+#   geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(dbh.start, na.rm=T)], color="gray55", size=med.lines.width)+
+#   geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(biom.rel.ann, na.rm=T)], color="gray55", size=med.lines.width)+
+#   geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(dbh.start, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(biom.rel.ann, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   geom_line(data = pred_andy.edge, aes(x=dbh.start, y=growth.pred), color="darkmagenta", linetype=fit.type, size=fit.width)+
+#   geom_line(data = pred_andy.int, aes(x=dbh.start, y=growth.pred), color="chocolate3", linetype=fit.type, size=fit.width)+
+#   labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Urban Forest '90-'16")+
+#   theme.master+
+#   theme(legend.position = c(0.5, 0.65),
+#         legend.title = element_text(size=legend.title.size, face="bold"),
+#         legend.background = element_rect(fill = "white"),
+#         legend.key =  element_blank(),
+#         legend.key.size = unit(0.6, "lines"),
+#         legend.text = element_text(size=legend.title.size-1, face="plain"),
+#         legend.justification = "center")+
+#   guides(shape = guide_legend(override.aes = list(size=pt.size*1.7,
+#                                                   alpha=0.8,
+#                                                   color=c("darkmagenta",
+#                                                           "chocolate3"))))
 
-### log transformed
-andy.mono.log <- ggplot(andy.bai[dbh.start>=5], aes(log(dbh.start), log(biom.rel.ann), colour=seg.Edge))+
+### log+a transformed
+  andy.mono.log <- ggplot(andy.bai[dbh.start>=5], aes(dbh.start, biom.rel.ann, colour=seg.Edge))+
   geom_point(aes(shape=seg.Edge), alpha=alpha.master*1.6, size=pt.size)+
   col.map+
   shape.map+
-  lims(x=xlim.all.log, y=ylim.all.log)+
+  scale_y_continuous(trans="stemg", breaks=c(-0.1, 0, 0.2, 0.5, 1.0), limits=ylim.all)+
+  scale_x_continuous(trans="log", limits=xlim.all, breaks=c(5, 10, 30, 60, 100))+
   # geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(dbh.start, na.rm=T)], color="gray55", size=med.lines.width)+
   # geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(biom.rel.ann, na.rm=T)], color="gray55", size=med.lines.width)+
   # geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(dbh.start, na.rm=T)], color=med.lines.col, size=med.lines.width)+
   # geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(biom.rel.ann, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  # geom_line(data = pred_andy.edge, aes(x=dbh.start, y=growth.pred), color="darkmagenta", linetype=fit.type, size=fit.width)+
-  # geom_line(data = pred_andy.int, aes(x=dbh.start, y=growth.pred), color="chocolate3", linetype=fit.type, size=fit.width)+
-  # labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Urban Forest '90-'16")+
-  theme.master+
-  theme(legend.position = c(0.6, 0.5),
-        legend.title = element_text(size=legend.title.size, face="bold"),
-        legend.background = element_rect(fill = "white"),
-        legend.key =  element_blank(),
-        legend.key.size = unit(0.6, "lines"),
-        legend.text = element_text(size=legend.title.size-1, face="plain"),
-        legend.justification = "center")+
-  guides(shape = guide_legend(override.aes = list(size=pt.size*1.7,
-                                                  alpha=0.8,
-                                                  color=c("darkmagenta",
-                                                          "chocolate3"))))
-
-
-
-
-## density via color shading
-shape.map <- scale_shape_manual(name="Tree position", values=c(16,17), labels=c("Edge <10m", "Interior"))
-
-andy.dens <- ggplot(andy.bai[dbh.start>=5], aes(dbh.start, biom.rel.ann, color=density))+
-  geom_point(aes(shape=seg.Edge), alpha=alpha.master*1.6, size=pt.size)+
-  shape.map+
-  scale_colour_viridis(option="B", guide=FALSE)+
-  lims(x=xlim.all, y=ylim.all)+
-  geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(dbh.start, na.rm=T)], color="gray55", size=med.lines.width)+
-  geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(biom.rel.ann, na.rm=T)], color="gray55", size=med.lines.width)+
-  geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(dbh.start, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(biom.rel.ann, na.rm=T)], color=med.lines.col, size=med.lines.width)+
   geom_line(data = pred_andy.edge, aes(x=dbh.start, y=growth.pred), color="darkmagenta", linetype=fit.type, size=fit.width)+
   geom_line(data = pred_andy.int, aes(x=dbh.start, y=growth.pred), color="chocolate3", linetype=fit.type, size=fit.width)+
-  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Urban Forest '90-'15")+
-  theme.master+  
-  theme(legend.position = c(0.6, 0.5),
+  labs(x = "Stem DBH (cm)", y="Stem Growth (kg/kg)", title="Urban Forest '90-'16")+
+  theme.master+
+  theme(legend.position = c(0.55, 0.65),
         legend.title = element_text(size=legend.title.size, face="bold"),
         legend.background = element_rect(fill = "white"),
         legend.key =  element_blank(),
@@ -895,8 +815,37 @@ andy.dens <- ggplot(andy.bai[dbh.start>=5], aes(dbh.start, biom.rel.ann, color=d
                                                   color=c("darkmagenta",
                                                           "chocolate3"))))
 
+
+# ## density via color shading
+# shape.map <- scale_shape_manual(name="Tree position", values=c(16,17), labels=c("Edge <10m", "Interior"))
+# 
+# andy.dens <- ggplot(andy.bai[dbh.start>=5], aes(dbh.start, biom.rel.ann, color=density))+
+#   geom_point(aes(shape=seg.Edge), alpha=alpha.master*1.6, size=pt.size)+
+#   shape.map+
+#   scale_colour_viridis(option="B", guide=FALSE)+
+#   lims(x=xlim.all, y=ylim.all)+
+#   geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(dbh.start, na.rm=T)], color="gray55", size=med.lines.width)+
+#   geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(biom.rel.ann, na.rm=T)], color="gray55", size=med.lines.width)+
+#   geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(dbh.start, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(biom.rel.ann, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   geom_line(data = pred_andy.edge, aes(x=dbh.start, y=growth.pred), color="darkmagenta", linetype=fit.type, size=fit.width)+
+#   geom_line(data = pred_andy.int, aes(x=dbh.start, y=growth.pred), color="chocolate3", linetype=fit.type, size=fit.width)+
+#   labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Urban Forest '90-'15")+
+#   theme.master+  
+#   theme(legend.position = c(0.6, 0.5),
+#         legend.title = element_text(size=legend.title.size, face="bold"),
+#         legend.background = element_rect(fill = "white"),
+#         legend.key =  element_blank(),
+#         legend.key.size = unit(0.6, "lines"),
+#         legend.text = element_text(size=legend.title.size-1, face="plain"),
+#         legend.justification = "center")+
+#   guides(shape = guide_legend(override.aes = list(size=pt.size*1.7,
+#                                                   alpha=0.8,
+#                                                   color=c("darkmagenta",
+#                                                           "chocolate3"))))
+
 ####
-# ###  street trees
+###  street trees
 b0 <- -2.48
 b1 <- 2.4835 ## these are eastern hardwood defaults
 biom.pred <- function(x){exp(b0+(b1*log(x)))}
@@ -920,39 +869,71 @@ pred_street <- data.frame(growth.pred=predict(mod.street.nls, newdata=data.frame
                                     100, by=0.2))
 street[record.good==1, density:=get_density(street[record.good==1, dbh.2006], street[record.good==1, growth.ann.rel])]
 
-## single color, density via alpha
-street.mono <- ggplot(street[record.good==1], aes(dbh.2006, growth.ann.rel))+
+# ## single color, density via alpha
+# street.mono <- ggplot(street[record.good==1], aes(dbh.2006, growth.ann.rel))+
+#   geom_point(alpha=alpha.master, color=plasma(6)[4], size=pt.size)+
+#   lims(x=xlim.all, y=ylim.all)+
+#   geom_vline(xintercept=street[record.good==1, median(dbh.2006, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   geom_hline(yintercept=street[record.good==1, median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   geom_line(data = pred_street, aes(x=dbh.2006, y=growth.pred), color="gray40", linetype=fit.type, size=fit.width)+
+#   labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Street trees '06-'14")+
+#   theme.master
+
+
+## log x+a transform
+street.mono.log <- ggplot(street[record.good==1], aes(dbh.2006, growth.ann.rel))+
   geom_point(alpha=alpha.master, color=plasma(6)[4], size=pt.size)+
-  lims(x=xlim.all, y=ylim.all)+
-  geom_vline(xintercept=street[record.good==1, median(dbh.2006, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  geom_hline(yintercept=street[record.good==1, median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  scale_y_continuous(trans="stemg", breaks=c(-0.1, 0, 0.2, 0.5, 1.0), limits=ylim.all)+
+  scale_x_continuous(trans="log", limits=xlim.all, breaks=c(5, 10, 30, 60, 100))+
+  # geom_vline(xintercept=street[record.good==1, median(dbh.2006, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  # geom_hline(yintercept=street[record.good==1, median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
   geom_line(data = pred_street, aes(x=dbh.2006, y=growth.pred), color="gray40", linetype=fit.type, size=fit.width)+
-  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Street trees '06-'14")+
+  labs(x = "Stem DBH (cm)", y="Stem Growth (kg/kg)", title="Street Trees '06-'14")+
   theme.master
 
-## density via color shading
-street.dens <- ggplot(street[record.good==1], aes(dbh.2006, growth.ann.rel, color=density))+
-  geom_point(alpha=alpha.master, size=pt.size)+
-  scale_colour_viridis(option="B", guide=FALSE)+
-  lims(x=xlim.all, y=ylim.all)+
-  geom_vline(xintercept=street[record.good==1, median(dbh.2006, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  geom_hline(yintercept=street[record.good==1, median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  geom_line(data = pred_street, aes(x=dbh.2006, y=growth.pred), color="black", linetype=fit.type, size=fit.width)+
-  labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Street trees '06-'14")+
-  theme.master
+### test -- does log transforming either scale differently fuck something up with the way the fit line is shown?
+# plot(street[record.good==1, dbh.2006], street[record.good==1, growth.ann.rel])
+# test <- seq(5, 100, by=1)
+# 
+# ## standard log transform on both axes
+# plot(street[record.good==1, log(dbh.2006)], street[record.good==1, log(growth.ann.rel)])
+# points(log(test), log((exp(mm$coefficients[1]+(mm$coefficients[2]*log(test))))), pch=15, col="blue") ## linear fit
+# 
+# ### with two slightly different log transforms on either scale
+# plot(street[record.good==1, log(dbh.2006)], street[record.good==1, log(growth.ann.rel+1)], ylim=c(-0.2, 1))
+# points(log(test), log((exp(mm$coefficients[1]+(mm$coefficients[2]*log(test))))+1), pch=15, col="blue") ## a bent linear line of best fit
+# points(log(test), log((exp(mm$coefficients[1]+(mm$coefficients[2]*log(test))))+0), pch=15, col="red") ## barely in the same range
 
-### collate monocolored plots
+# ## density via color shading
+# street.dens <- ggplot(street[record.good==1], aes(dbh.2006, growth.ann.rel, color=density))+
+#   geom_point(alpha=alpha.master, size=pt.size)+
+#   scale_colour_viridis(option="B", guide=FALSE)+
+#   lims(x=xlim.all, y=ylim.all)+
+#   geom_vline(xintercept=street[record.good==1, median(dbh.2006, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   geom_hline(yintercept=street[record.good==1, median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   geom_line(data = pred_street, aes(x=dbh.2006, y=growth.pred), color="black", linetype=fit.type, size=fit.width)+
+#   labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Street trees '06-'14")+
+#   theme.master
+
+# ### collate monocolored plots
+# library(gridExtra)
+# png(width=8, height=3, units="in", res=600, bg="white", filename="images/Fig2A_stem-dbh-growth_mono.png")
+# grid.arrange(grobs=list(fia.mono, andy.mono, street.mono),
+#              widths=c(1,1,1))
+# dev.off()
+
+### collate monocolored log-transformed plots
 library(gridExtra)
-png(width=8, height=3, units="in", res=600, bg="white", filename="images/Fig2A_stem-dbh-growth_mono.png")
-grid.arrange(grobs=list(fia.mono, andy.mono, street.mono),
+png(width=8, height=3, units="in", res=600, bg="white", filename="images/Fig2A_stem-dbh-growth_mono_logxform.png")
+grid.arrange(grobs=list(fia.mono.log, andy.mono.log, street.mono.log),
              widths=c(1,1,1))
 dev.off()
 
-### collate density colored plots
-png(width=8, height=3, units="in", res=600, bg="white", filename="images/Fig2A_stem-dbh-growth_dens.png")
-grid.arrange(grobs=list(fia.dens, andy.dens, street.dens),
-             widths=c(1,1,1))
-dev.off()
+# ### collate density colored plots
+# png(width=8, height=3, units="in", res=600, bg="white", filename="images/Fig2A_stem-dbh-growth_dens.png")
+# grid.arrange(grobs=list(fia.dens, andy.dens, street.dens),
+#              widths=c(1,1,1))
+# dev.off()
 
 ### draft plots, cumulative NPP by density
 ############
