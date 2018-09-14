@@ -9,9 +9,34 @@ library(zoo)
 
 
 
+##### Boston high-res data -- where are the "forests"?
+## have used a rough threshold of 20k kg per pixel (equiv) as a cutoff for where it not longer
+## makes sense to treat things as a mixed urban/tree pixel and more like a forest (about 100 MgC/ha)
+((20000/2000)/900)*1E4 ### 111 MgC/ha
+
+## would like to know what sort of pixels are ovetr 20k kg
+# bos.biom <- raster("processed/boston/bos.biom30m.tif")
+# #### this function reclasses everything along 20k kg threshold
+# big.biom <- function(biom, filename) {
+#   out <- raster(biom)
+#   bs <- blockSize(biom)
+#   out <- writeStart(biom, filename, overwrite=TRUE, format="GTiff")
+#   for (i in 1:bs$n) {
+#     target <- getValues(biom, row=bs$row[i], nrows=bs$nrows[i])
+#     target[target<20000] <- 0
+#     target[target>=20000] <- 1
+#     out <- writeValues(out, target, bs$row[i])
+#     print(paste("finished block", i, "of", bs$n))
+#   }
+#   out <- writeStop(out)
+#   return(out)
+# }
+# big.biom(bos.biom, "processed/boston/bos.biom20k.tif")
+# big <- raster("processed/boston/bos.biom20k.tif")
+# plot(big)
 
 #########
-### Boston high-res data
+### Boston high-res data -- vegetation character map
 ### combine 2.4m NDVI and canopy map to produce 1m veg classification map
 ### use Arcmap to resample + snap to 1m grid (bilinear) for NDVI 2.4m -- get good alignment with original data and features in canopy map
 
