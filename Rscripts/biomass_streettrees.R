@@ -69,6 +69,18 @@ g1 <- readOGR("processed/boston/Granby1.shp")
 g1.biom <- sum(unlist(extract(biom1m, g1)))
 biom.inv(g1.biom) ## 40cm predicted, 52.5 cm actual
 
+# ### get tree survey coordinates and translate to UTM
+# pts <- readOGR("processed/boston/street_trees_06_coords.shp")
+# pts <- pts[pts@data$V1!=0,] ## remove bad coords
+# pts <- spTransform(pts, crs(biom1m))
+# # plot(biom1m)
+# # plot(pts, add=T) ### tight tight tight they overlay
+# writeOGR(pts, "processed/boston/street_trees_06_coords_UTM.shp", 
+#          layer="pts",
+#          driver="ESRI Shapefile")
+### visually, I'm not sure how knowing the street trees in 30m pixel will get us to a numerical check. 
+## Not all trees in any pixel are street trees, not clear that survey is exhaustive in any pixel
+
 ## get the street tree record prepped
 street <- read.csv("docs/ian/Boston_Street_Trees.csv") ## Street tree resurvey, biomass 2006/2014, species
 street <- as.data.table(street)
