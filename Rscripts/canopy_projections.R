@@ -192,18 +192,10 @@ for(s in 1:length(scenario)){
                           replace=T) ## determine initial replanting delays
           
           ## diagnostic trackers
-          track <- tree.samp[1]
-          del <- delay[1]
-          de <- 0 ### death ID
+          # track <- tree.samp[1]
+          # del <- delay[1]
+          # de <- 0 ### death ID
           for(e in 1:36){ ## test each tree for 36 years (2006-2040)
-            ## resample delay time
-            # ring <- delay==0 ## which clocks have worn down
-            # delay[ring] <- sample(seq(delay.factor[1],
-            #                           delay.factor[2]), 
-            #                       size = length(delay[ring]), 
-            #                       replace=T)
-            # delay[!ring] <- delay[!ring]-1 ## count down on clocks with time remaining
-            
             ### figure mortality and determine a kill list
             deathwatch <- mort(tree.samp)*mort.mod ## standard mortality probabilities
             deathwatch[tree.samp>=dbh.big] <- deathwatch[tree.samp>=dbh.big]*largemort.mod ## adjust mortality in larger trees
@@ -218,7 +210,6 @@ for(s in 1:length(scenario)){
                                           size = length(delay[kill.list==1]),
                                           replace=T) # start a clock for any tree killed
             delay[kill.list==0 & delay>0] <- delay[kill.list==0 & delay>0]-1 ## count down the delay clocks that had been set before
-            de <- c(de, kill.list[1])
             
             ## grow up the survivors
             tree.samp[tree.samp>0] <- tree.samp[tree.samp>0]*(1+dbhg.pred(tree.samp[tree.samp>0]))
@@ -226,22 +217,20 @@ for(s in 1:length(scenario)){
             ### now to determine which of the (previously) dead are replanted this year
             replanted <- rbinom(length(tree.samp[tree.samp==0]), 1, replant.factor) ## randoly replace only some of the dead trees
             tree.samp[replanted==1 & delay==0 & tree.samp==0] <- 5 ## for trees selected and without a delay
-            del <- c(del, delay[1])
             ### the logic of this scheme is that delay indicates the number of years *after the death year* that there is 0 productivity
             ### trees lose all NPP in death year (growth calc happens before replant calc)
             ### delay range of 0-2 years implies a wait-out of 1-3 years before productivity happens again
 
             deaths <- deaths+sum(kill.list) ## count the dead
-            track <- c(track, tree.samp[1]) ## record dbh history
-            
+            # track <- c(track, tree.samp[1]) ## record dbh history
+            # de <- c(de, kill.list[1]) ## record death history
+            # del <- c(del, delay[1]) ## record delay history
           } ## end of loop for 36 year projector
-          par(mfrow=c(1,3))
-          plot(track, main="dbh")
-          plot(de, main="death")
-          plot(del, main="delay")
-          data.frame(track, de, del, seq(0,36))
-          deaths
-          del
+          # par(mfrow=c(1,3))
+          # plot(track, main="dbh")
+          # plot(de, main="death")
+          # plot(del, main="delay")
+          # data.frame(track, de, del, seq(0,36))
           deaths.track <- c(deaths.track, deaths) ## tally of total deaths in each pixel simulation
           dbh.sav[[pix]][[a]] <- tree.samp ## updated tree sample after morts + growth
         } # loop for number of resims in this pixel
