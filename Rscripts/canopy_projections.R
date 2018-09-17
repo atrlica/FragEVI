@@ -60,23 +60,35 @@ dbhg.pred <- function(x){exp(mm.a+(mm.b*log(x)))} ## function for predicting nex
 ######
 ### set some scenario options
 ## available options: BAU, oldies, lowmort, highmort, lowreplant, 
-scenario <- c("BAU", "highmort", "lowreplant", "oldies", "lowmort")
-scen.l <- c("BAU", "highmort", "lowreplant", "oldies", "lowmort")
-scen.num <- which(scen.l==scenario) ## apply a scenario number
+scenario <- c("BAU", "highmort", "lowreplant", "oldies", "lowmort", "slowreplant")
+# scen.l <- c("BAU", "highmort", "lowreplant", "oldies", "lowmort")
+# scen.num <- which(scen.l==scenario) ## apply a scenario number
 ## record specific parameter sets
 resim.vers <- 1 ## what are we labeling this round of resims?
 vers <- 4 ## what simulator results version are we dealing with?
+### BAU/default factors
+npp.quant.range <- c(0.25, 0.75) ## what dbh samples to draw from
+mort.mod <- 1 ## modification to mortality rate (scenario specific)
+default.sizecutoff <- 10000 ## nothing is this big
+largemort.mod <- 1
+replant.factor <- 1 ## rate of replanting
+delay.factor <- c(0,0) ## low/hi on years of delay from death to replanting
+dbg.big <- default.sizecutoff
+
+## set options for scenario processing
 highmort.mortfactor <- 1.25
 lowmort.mortfactor <- 0.5
-npp.quant.range <- c(0.25, 0.75)
 lowreplant.factor <- 0.5 ## what fraction of morts are replanted in "lowreplant"
-oldies.sizecutoff <- 40 ## how big a cutoff for protection in "oldies"
-oldies.mortfactor <- 0.5
+oldies.mortfactor <- 0.5 ## how much to reduce mortalities in large trees
+oldies.sizecutoff <- 40 ## how to define "big" trees
+slowreplant.delay <- c(0,2) ## 1 to 3 year delay between death and regrowth starting
+
+
+# record run parameters to text file
 params.list <- list(c(scenario, resim.vers, vers,
                     highmort.mortfactor, lowmort.mortfactor, 
                     npp.quant.range, lowreplant.factor, oldies.sizecutoff, 
                     oldies.mortfactor))
-# dump run parameters to text file
 sink(paste0("processed/boston/biom_street/resim_params_list_V", resim.vers, ".txt"))
 cat(c("Resimulation version ", resim.vers), "\n")
 cat(c("Simulator results version ", vers), "\n")
@@ -98,6 +110,43 @@ obj.list <- (sub('\\..*', '', obj.list))
 
 ## loop the simulated pixel chunks
 for(s in 1:length(scenario)){
+  ### modify simulator factors according to scenario construction
+  if(scenario=="highmort"){
+    mort.mod <- highmort.mortfactor
+    dbh.big <- default.sizecutoff 
+    largemort.mod <- 1
+    replant.factor <- 1 ## rate of replanting
+    delay.factor <- c(0,0) ## low/hi on years of delay from death to replanting
+  }
+  if(scenario=="lowmort"){
+    mort.mod <- lowmort.mortfactor
+    dbh.big <- default.sizecutoff 
+    largemort.mod <- 1
+    replant.factor <- 1 ## rate of replanting
+    delay.factor <- c(0,0) ## low/hi on years of delay from death to replanting
+  }
+  if(scenario=="oldies"){
+    mort.mod <- 1
+    dbh.big <- oldies.sizecutoff 
+    largemort.mod <- oldies.mortfactor
+    replant.factor <- 1 ## rate of replanting
+    delay.factor <- c(0,0) ## low/hi on years of delay from death to replanting
+  }
+  if(scenario=="lowreplant"){
+    replant.factor=0.5
+    mort.mod <- 1
+    dbh.big <- default.sizecutoff 
+    largemort.mod <- 1
+    delay.factor <- c(0,0) ## low/hi on years of delay from death to replanting
+    
+  }
+  if(scenario=="slowreplant"){
+    delay.factor <- slowreplant.delay
+    mort.mod <- 1
+    dbh.big <- default.sizecutoff 
+    largemort.mod <- 1
+    replant.factor <- 1 ## rate of replanting
+  }
   print(paste("starting resim run scenario", scenario[s]))
   ### avoid processing shit that's already done
   already <- list.files("processed/boston/biom_street")
@@ -137,26 +186,62 @@ for(s in 1:length(scenario)){
           #### load up a dbh sample and resimulate each tree for 36 consecutive years
           tree.samp <- cage.dbh[[pix]][[j]] ## what initial trees are present in this simulator result
           deaths <- 0 ## keep track of how many times trees die in this resim
+          delay <- sample(seq(delay.factor[1],
+                              delay.factor[2]), 
+                          size = length(tree.samp), 
+                          replace=T) ## determine initial replanting delays
           
+          ## diagnostic trackers
+          track <- tree.samp[1]
+          del <- delay[1]
+          de <- 0 ### death ID
           for(e in 1:36){ ## test each tree for 36 years (2006-2040)
-            deathwatch <- mort(tree.samp) ## vector or mortality probabilities
-            if(scenario[s]=="oldies"){deathwatch[tree.samp>=oldies.sizecutoff] <- deathwatch[tree.samp>=oldies.sizecutoff]*oldies.mortfactor} ## in "oldies" scenario, cut mortality on large trees by 50%
-            if(scenario[s]=="highmort"){deathwatch <- deathwatch*highmort.mortfactor} ## higher mortalities in general
-            if(scenario[s]=="lowmort"){deathwatch  <-  deathwatch*lowmort.mortfactor} ## lower mortalities in general
-            kill.list <- rbinom(length(tree.samp), 1, deathwatch/100) ## death list
-#             kill.list <- rep(1,length(tree.samp)) ## test: kill everything
+            ## resample delay time
+            # ring <- delay==0 ## which clocks have worn down
+            # delay[ring] <- sample(seq(delay.factor[1],
+            #                           delay.factor[2]), 
+            #                       size = length(delay[ring]), 
+            #                       replace=T)
+            # delay[!ring] <- delay[!ring]-1 ## count down on clocks with time remaining
+            
+            ### figure mortality and determine a kill list
+            deathwatch <- mort(tree.samp)*mort.mod ## standard mortality probabilities
+            deathwatch[tree.samp>=dbh.big] <- deathwatch[tree.samp>=dbh.big]*largemort.mod ## adjust mortality in larger trees
+            kill.list <- rbinom(length(tree.samp), 1, deathwatch/100) ## randomly kill based on mortality rate
+            # kill.list <- rep(1,length(tree.samp)) ## test: kill everything
+
             kill.list[tree.samp==0] <- 0 ## do not rekill the previously dead
             tree.samp[kill.list==1] <- 0 ## the dead are erased
-            if(scenario[s]=="lowreplant"){
-              replanted <- rbinom(length(kill.list), 1, kill.list*lowreplant.factor) ## probability of replanting dead trees
-              tree.samp[replanted==1] <- 5 ## revive those that are replanted
-              
-            }else{
-              tree.samp[kill.list==1] <- 5 ## replant all the dead
-            }
+            ## update delay clock for this cycle
+            delay[kill.list==1] <- sample(seq(delay.factor[1],
+                                              delay.factor[2]), 
+                                          size = length(delay[kill.list==1]),
+                                          replace=T) # start a clock for any tree killed
+            delay[kill.list==0 & delay>0] <- delay[kill.list==0 & delay>0]-1 ## count down the delay clocks that had been set before
+            de <- c(de, kill.list[1])
+            
+            ## grow up the survivors
+            tree.samp[tree.samp>0] <- tree.samp[tree.samp>0]*(1+dbhg.pred(tree.samp[tree.samp>0]))
+            
+            ### now to determine which of the (previously) dead are replanted this year
+            replanted <- rbinom(length(tree.samp[tree.samp==0]), 1, replant.factor) ## randoly replace only some of the dead trees
+            tree.samp[replanted==1 & delay==0 & tree.samp==0] <- 5 ## for trees selected and without a delay
+            del <- c(del, delay[1])
+            ### the logic of this scheme is that delay indicates the number of years *after the death year* that there is 0 productivity
+            ### trees lose all NPP in death year (growth calc happens before replant calc)
+            ### delay range of 0-2 years implies a wait-out of 1-3 years before productivity happens again
+
             deaths <- deaths+sum(kill.list) ## count the dead
-            tree.samp[!as.logical(kill.list) & tree.samp>0] <- tree.samp[!as.logical(kill.list) & tree.samp>0]*(1+dbhg.pred(tree.samp[!as.logical(kill.list) & tree.samp>0])) # grow the ones that survived
-          } ## loop for 36 year projector
+            track <- c(track, tree.samp[1]) ## record dbh history
+            
+          } ## end of loop for 36 year projector
+          par(mfrow=c(1,3))
+          plot(track, main="dbh")
+          plot(de, main="death")
+          plot(del, main="delay")
+          data.frame(track, de, del, seq(0,36))
+          deaths
+          del
           deaths.track <- c(deaths.track, deaths) ## tally of total deaths in each pixel simulation
           dbh.sav[[pix]][[a]] <- tree.samp ## updated tree sample after morts + growth
         } # loop for number of resims in this pixel
