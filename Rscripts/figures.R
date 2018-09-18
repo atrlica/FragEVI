@@ -161,6 +161,8 @@ legend(x=60, y=0.4, bty = "n", legend=c("Boston", hoods), fill=c("black", cols))
 
 ######
 ### canopy edge area cumulative, extract by LULC collapsed classes
+library(data.table)
+library(raster)
 bos.forest <- raster("processed/boston/bos.forest_only.tif")
 bos.dev <- raster("processed/boston/bos.dev_only.tif")
 bos.hdres <- raster("processed/boston/bos.hdres_only.tif")
@@ -213,6 +215,14 @@ can.master <- raster("processed/boston/bos_can01_filt.tif")
 # aoi.master <- raster("processed/boston/bos.aoi.tif")
 # aoi.tot <- sum(getValues(aoi.master), na.rm=T)
 
+## make a data table of edge pixels by lulc
+can.master <- as.data.table(as.data.frame(raster("processed/boston/bos_can01_filt.tif")))
+can.10mbuff <- as.data.table(as.data.frame(raster("processed/boston/bos.ed10.tif")))
+lulc <- as.data.table(as.data.frame(raster("processed/boston/bos.lulc.lumped.tif")))
+fat <- fwrite(cbind((can.master),
+             (can.10mbuff),
+             (lulc)), "processed/boston/bos.lulc_candist.csv")
+write.csv(fat, "processed/boston/bos.lulc_candist.csv")
 ## cumulative canopy area by edge distance, for each lulc class
 lu.classes <- c("forest", "dev", "hdres", "ldres", "lowveg", "water")
 for(l in 1:length(lu.classes)){
