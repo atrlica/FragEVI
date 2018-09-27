@@ -1,6 +1,122 @@
 library(raster)
 library(data.table)
+library(tidyverse)
 
+### final stem growth and areal growth equations
+live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv"))
+andy <- as.data.table(read.csv("processed/andy.bai.dbh.pseudo.csv"))
+street <- as.data.table(read.csv("processed/boston/street.trees.dbh.csv"))
+
+## this handles the non-linear fit and includes hard/softwood factor, but no potential random effects
+mod.fia.final <- nls(growth.ann.rel~exp(a+b*log(DIAM_T0)+as.numeric(type=="S")*c), data=live, start=list(a=0, b=0, c=0)) ## tiny upward correction for softwoods
+summary(mod.fia.final)
+save(mod.fia.final, file="processed/mod.fia.final.sav")
+
+### this approach handles the random effects but has the unfortunate property of being log-transformed in the response and the predictor
+mod.andy.final<- lmer(log(biom.rel.ann)~log(dbh.start)+seg.Edge + 
+                          (1+log(dbh.start)|Plot.ID) + 
+                          (1+log(dbh.start)|incr.ID) + 
+                          (1+log(dbh.start)|interval) +
+                          (1+seg.Edge|Plot.ID) +
+                          # (1+seg.Edge|incr.ID) + ## there are no individual stems that are in both an edge and interior
+                          (1+seg.Edge|interval), 
+                        data=ps.contain[dbh.start>=5,],
+                        REML=FALSE)
+drop1(mod.andy.final, test="Chisq") ## sig in dbh and in edge class (E vs I)
+save(mod.andy.final, file="processed/mod.andy.final.sav")
+
+### non-linear street trees -- does not account for any potential random effects
+mod.street.final <- nls(npp.ann.rel ~ exp(a + b * log(dbh.2006)), data=street[record.good==1,], start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
+summary(mod.street.final) ## RSE is pretty high 0.33
+save(mod.street.final, file="processed/mod.street.final.sav")
+
+###
+## resultant areal-basis growth regressions
+live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomed.csv"))
+mod.live.plot.final <- nls(biom.growth.ann.hw ~ exp(a + b * log(total.biom0.Mg.ha)),
+                       data=live.plot[hw.frac>0.25,], start=list(a=0, b=0))
+summary(mod.live.plot.final)
+save(mod.live.plot.final, file="processed/mod.live.plot.final.sav")
+
+andy.plot <- 
+
+# ### just for context -- are the stem growth equations really indicated to be different depending on context?
+# 
+# dbh <- c(street[record.good==1, dbh.2006],
+#          andy[,dbh.start],
+#          live[,DIAM_T0])
+# growth <- c(street[record.good==1, npp.ann.rel],
+#             andy[, biom.rel.ann],
+#             live[, growth.ann.rel])
+# dat <- cbind(dbh, growth, 
+#              c(rep("street", nrow(street[record.good==1,])),
+#                rep("urban", nrow(andy)),
+#                rep("fia", nrow(live))))
+# dat <- as.data.frame(dat)
+# dat$dbh <- as.numeric(as.character(dat$dbh))
+# dat$growth <- as.numeric(as.character(dat$growth))
+# dat <- as.data.table(dat)
+# plot(dat$dbh, dat$growth)
+# plot(dat[,log(dbh)], dat[,log(growth)], col=as.numeric(dat[,V3]))
+# a <- lm(log(growth)~log(dbh), data=dat[growth>0,]) 
+# summary(a) ## R2 0.18
+# b <- lm(log(growth)~log(dbh)*V3, data=dat[growth>0,])
+# summary(b) ## R2 0.52 -- all context factors significant!!!
+
+
+
+
+
+########### Canopy configuration across study area
+## canopy and biomass configurations in this beast -- 1m data
+a <- Sys.time()
+aoi <- raster("processed/boston/bos.aoi.tif") 
+lulc <- raster("processed/boston/bos.lulc.lumped.tif") %>% crop(aoi) %>% as.vector()
+can <- raster("data/dataverse_files/bostoncanopy_1m.tif") %>% crop(aoi) %>% as.vector()
+biom <- raster("data/dataverse_files/bostonbiomass_1m.tif") %>% crop(aoi) %>% as.vector()
+ed10 <- raster("processed/boston/bos.ed10.tif") %>% crop(aoi) %>% as.vector()
+isa <- raster("processed/boston/bos.isa.tif") %>% crop(aoi) %>% as.vector()
+# aoi <-  as.vector(aoi)
+Sys.time()-a ## this chunk takes 7 min to load
+
+# aoi.tot <- sum(aoi[!is.na(aoi)])/1E4 ## 12k ha
+aoi.tot <- length(lulc[!is.na(lulc)])/1E4 ## 12.4k ha *** more restrictive boundary of AOI
+can.area.tot <- sum(can[!is.na(lulc)], na.rm=T)/1E4 # 3.9k ha
+can.area.tot/aoi.tot ## 31.8% canopy area
+ed.area.tot <- sum(ed10[!is.na(lulc)], na.rm=T)/1E4 ## 3.2k ha
+ed.area.tot/can.area.tot ## 80.9% edge canopy in total area
+biom.tot <- sum(biom[!is.na(lulc)], na.rm=T)/(2*1E6) ### 357 MgCx1000
+isa.tot <- sum(isa[!is.na(lulc)], na.rm=T)/1E4
+
+### land cover by lulc
+lulc.area.tot <- numeric()
+lulc.can.tot <- numeric()
+lulc.ed.tot <- numeric()
+lulc.biom.tot <- numeric()
+lulc.isa.tot <- numeric()
+for(i in 1:6){
+  tmp <- length(lulc[lulc==i & !is.na(lulc)])/1E4
+  lulc.area.tot <- c(lulc.area.tot, tmp)
+  
+  tmp <- sum(can[lulc==i & !is.na(lulc)], na.rm=T)/1E4
+  lulc.can.tot <- c(lulc.can.tot, tmp)
+  
+  tmp <- sum(ed10[lulc==i & !is.na(lulc)], na.rm=T)/1E4
+  lulc.ed.tot <- c(lulc.ed.tot, tmp)
+  
+  tmp <- sum(biom[lulc==i & !is.na(lulc)], na.rm=T)/(2*1E6) ## in MgC x 1000
+  lulc.biom.tot <- c(lulc.biom.tot, tmp)
+  
+  tmp <- sum(isa[lulc==i & !is.na(lulc)], na.rm=T)/1E4 ## ha
+  lulc.isa.tot <- c(lulc.isa.tot, tmp)
+}
+fat <- cbind(c(1:6), lulc.area.tot, lulc.can.tot, lulc.ed.tot, lulc.biom.tot, lulc.isa.tot)
+
+write.csv(fat, "processed/boston/bos.lulc.1mcover.summary.csv")
+
+
+
+### bringing together NPP estimates
 #### all NPP will be dealt with in MgC/ha/yr, all biomass in kg-biomass/ha
 
 ## maybe look at how this sorts re. lulc

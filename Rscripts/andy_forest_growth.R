@@ -172,6 +172,7 @@ andy.bai <- as.data.table(andy.bai)
 ps.contain <- read.csv("processed/andy.bai.dbh.pseudo.csv")
 ps.contain <- as.data.table(ps.contain)
 ps.contain <- merge(x=ps.contain, y=andy.bai[,.(incr.ID, Plot.ID)], by="incr.ID", all.x=T, all.y=F) ## put the plot IDs in
+write.csv(ps.contain, "processed/andy.bai.dbh.pseudo.csv")
 
 ## avg.dbh~avg.growth
 par(mfrow=c(1,2))
@@ -179,6 +180,7 @@ col.edge <- c("black", "red")
 plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean),
      col=as.numeric(andy.bai$seg.Edge), main="Andy trees, avg. dbh")
 summary(andy.bai$growth.mean) ### around 4%
+summary(andy.bai$avg.dbh) ## about 19cm
 table(andy.bai$seg.Edge) ## 64 edge: 131 interior
 
 ## vs. pseudoreps
@@ -189,6 +191,7 @@ plot(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, log(dbh.start)],
 table(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, seg.Edge]) ## 270 edge:633 interior
 
 summary(ps.contain$biom.rel.ann) ## comparable in the middle, pseudos a bit lower and have greater range
+summary(ps.contain$dbh.start) ## about 19cm
 plot(ps.contain[incr.ID==1, dbh.start], ps.contain[incr.ID==1, biom.rel.ann])
 plot(ps.contain[incr.ID==4, dbh.start], ps.contain[incr.ID==4, biom.rel.ann])
 plot(ps.contain[incr.ID==11, dbh.start], ps.contain[incr.ID==11, biom.rel.ann])
@@ -280,6 +283,7 @@ mmod.Mungo.Fadd <- lmer(log(biom.rel.ann)~log(dbh.start)+seg.Edge +
                           (1+seg.Edge|interval), 
                         data=ps.contain[dbh.start>=5,],
                         REML=FALSE)
+
 
 summary(mmod.Mungo.Fadd)
 summary(mmod.Rslopes.Fadd) ### similar coefficients

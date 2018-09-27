@@ -77,19 +77,23 @@ write.csv(live, "processed/fia.live.stem.dbh.growth.csv")
 
 ##### Modeling growth~dbh (individual stem level)
 ## log model, growth>0, no hard/soft designation
-live <- read.csv("processed/fia.live.stem.dbh.growth.csv")
-live <- as.data.table(live) ## 6875 records
+live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv"))
 summary(live$growth.ann.rel) ## 0.9-3.4%, (-13-53%) -- so looks lower generally than Andy or Street trees
 mod.fia.stem.log <- lm(log(growth.ann.rel)~log(DIAM_T0), data=live[growth.ann.rel>0])
 m1 <- summary(mod.fia.stem.log) #R2 0.03, signficant
 mod.fia.stem.type.log <- lm(log(growth.ann.rel)~log(DIAM_T0)*type, data=live[growth.ann.rel>0])
 m2 <- summary(mod.fia.stem.type.log) # R2 0.04, type H/S not significant
+m3 <- lm(log(growth.ann.rel)~log(DIAM_T0)+type, data=live[growth.ann.rel>0]) ## it IS significant as a categorical factor!
+summary(m3)
 plot(log(live$DIAM_T0), log(live$growth.ann.rel), col=as.numeric(live$type)+1) #S=2, H=1
 abline(a=m2$coefficients[1], b=m2$coefficients[2], lty=2, col="gray55")
 abline(a=m1$coefficients[1], b=m1$coefficients[2], lty=1, col="black")
 ## work in untransformed space (exponential model)
 mod1.nls <- nls(growth.ann.rel ~ exp(a + b * log(DIAM_T0)), data=live, start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
 mm <- summary(mod1.nls) ## all factors significant
+mod2.nls <- nls(growth.ann.rel~exp(a+b*log(DIAM_T0)+as.numeric(type=="S")*c), data=live, start=list(a=0, b=0, c=0)) ## tiny upward correction for softwoods
+summary(mod2.nls)
+
 col.type <- c("green", "forestgreen")
 plot(live$DIAM_T0, live$growth.ann.rel, col=col.type[as.numeric(live$type)], pch=15, cex=0.3,
      xlab="Stem diameter (cm)", ylab="Growth rate (kg/kg)", main="FIA stems")
@@ -159,22 +163,23 @@ abline(h=live[, median(growth.ann.rel)])
 #####
 #### Plot-level assessment of growth~biomass.density
 ### equivalent plot-level assessment in live-only data ## 331 plots have at least one subplot dense enough to bother with
-live <- read.csv("processed/fia.live.stem.dbh.growth.csv")
+live <- read.csv("processed/fia.live.stem.dbh.growth.csv") ## this is groomed to remove subplots with <5 stems
 live <- as.data.table(live)
-
+ba.pred <- function(x){(x/2)^2*pi*0.0001} ## get BA per stump from dbh
 live.plot <- live[,
                   .(length(unique(SubID)),
+                    sum(ba.pred(DIAM_T0)),
                     sum(biom.delt.spp, na.rm=T), 
                     sum(biom0.spp, na.rm=T),
                     length(DIAM_T0)),
                   by=PlotID]
 dim(live.plot) ## 221 plots with at least one valid subplot
-names(live.plot) <- c("PlotID", "num.subplots", "biom.growth", "total.biom0.kg", "num.stems")
+names(live.plot) <- c("PlotID", "num.subplots", "BA.plot", "biom.growth", "total.biom0.kg", "num.stems")
 plot(live.plot[,total.biom0.kg], live.plot[,num.stems]) ## linear but gets unconstrained above ~20 stems/plot
 cor(live.plot[, total.biom0.kg], live.plot[, num.stems]) ## rho 0.60
+
 ## the "fully forested" plots sample 0 to 25k kg/plot 
 live.plot[total.biom0.kg<5000,] ## mostly single-subplot plots (ie plot is mostly non-forest)
-
 
 ## plot-level growth
 subplot.area <- (7.3152^2)*pi ## subplots are 24ft in radius
@@ -186,10 +191,15 @@ summary(live.plot$biom.growth.ann.rel) ## -1% to 14%
 
 ## plot level density
 live.plot[,stems.ha:=(num.stems/(subplot.area*num.subplots))*1E4]
+live.plot[,ba.ha:=BA.plot/((num.subplots*subplot.area)/1E4)] 
+hist(live.plot$ba.ha)## peak below 40m2/ha, a few up to 80
+summary(live.plot$ba.ha)
 hist(live.plot$stems.ha) # 400-500 peak
 hist(live.plot[, total.biom0.kg], breaks=10) ## peak 5-10k kg
 hist((live.plot[, total.biom0.kg]/675)*1E4/2000, breaks=10) ## i.e. peaking 50-100 MgC/ha, up to 200
 summary(live.plot[, total.biom0.kg/(subplot.area*num.subplots)*1E4]/2000) ## 90 MgC/ha, 34-307 -- so a forest
+hist(live.plot$num.stems)
+hist(live.plot$num.subplots) ## pretty even distribution, about 1/4 in each class from 1 to 4 subplots available
 
 ## growth~biomass modeling
 plot(live.plot$total.biom0.kg, live.plot$biom.growth.ann.rel) ## exponential negative, the super productive ones were very low biomass to begin
@@ -218,6 +228,7 @@ live.plot <- merge(live.plot, swood, by="PlotID")
 live.plot[,biom.growth.ann.hw:=(biom.growth.spp.hw/4.8)/total.biom0.spp.kg.hw]
 live.plot[,biom.growth.ann.sw:=(biom.growth.spp.sw/4.8)/total.biom0.spp.kg.sw]
 live.plot[,hw.frac:=total.biom0.spp.kg.hw/total.biom0.kg] ## get fraction of hardwood in total biomass
+write.csv(live.plot, "processed/fia.live.plot.groomed.csv")
 
 ### comparative models in hardwoods and softwoods in isolation
 hw <- lm(live.plot[biom.growth.ann.hw>0,log(biom.growth.ann.hw)]~live.plot[biom.growth.ann.hw>0,log(total.biom0.Mg.ha)])
@@ -265,7 +276,7 @@ q <- summary(hw.mod.exp) ## b is not even close to significant
 exp(q$coefficients[1]) ## ie. about 3% boyo
 
 tot.mod.exp <- nls(biom.growth.ann.rel ~ exp(a + b * log(total.biom0.Mg.ha)),
-                   data=live.plot, start=list(a=0, b=0))
+                   data=live.plot, start=list(a=0, b=0)) ### not terrifically differfent from final HW-frac filtered model below
 r <- summary(tot.mod.exp) ## definitely significant
 
 ## visual comparison of the plot-level models

@@ -82,6 +82,12 @@ biom.inv(g1.biom) ## 40cm predicted, 52.5 cm actual
 ## Not all trees in any pixel are street trees, not clear that survey is exhaustive in any pixel
 
 ## get the street tree record prepped
+## biomass prediction
+b0 <- -2.48
+b1 <- 2.4835 ## these are eastern hardwood defaults
+biom.pred <- function(x){exp(b0+(b1*log(x)))}
+
+## read data and clean up
 street <- read.csv("docs/ian/Boston_Street_Trees.csv") ## Street tree resurvey, biomass 2006/2014, species
 street <- as.data.table(street)
 street[is.na(Species), Species:="Unknown unknown"]
@@ -102,7 +108,8 @@ street[record.good==1, npp.ann:=(biom.2014-biom.2006)/8]
 street[record.good==1, npp.ann.rel:=npp.ann/biom.2006]
 # street[record.good==1, range(dbh.2006, na.rm=T)] 
 # street[record.good==1, range(npp.ann, na.rm=T)] ## 202 records show negative growth -- questionable 2006 dbh record?
-# street[record.good==1 & npp.ann<0, record.good:=0] ## 2401 ## fuck this, keep the healthy mass losers in
+write.csv(street, "processed/boston/street.trees.dbh.csv")
+hist(street[record.good==1, log(dbh.2006)])
 qqnorm(street[record.good==1, log(dbh.2006)])
 qqline(street[record.good==1, log(dbh.2006)])
 qqnorm(street[record.good==1, dbh.2006])
