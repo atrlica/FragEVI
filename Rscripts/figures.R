@@ -945,6 +945,8 @@ dev.off()
 #              widths=c(1,1,1))
 # dev.off()
 
+
+
 ### draft plots, cumulative NPP by density
 ############
 ### cumulative npp~biomass graph w/ LULC stacked --- hybrid results
@@ -1382,3 +1384,192 @@ image(lulc, col=lulc.pal) ## very nice
 
 lulc.pal
 col2rgb(lulc.pal) ## how to enter these assholes into arc RGB
+
+
+
+
+##### 
+### SUPPLEMENTAL FIGURES
+
+## Plot-basis biomass-gain vs. biomass density
+
+## live plot basis growth
+live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomed.csv"))
+hw.mod.exp.filt <- nls(biom.growth.ann.hw ~ exp(a + b * log(total.biom0.MgC.ha)),
+                       data=live.plot[hw.frac>0.25,], start=list(a=0, b=0))
+y <- summary(hw.mod.exp.filt) ## all significant
+plot(live.plot[,total.biom0.MgC.ha], live.plot[,biom.growth.ann.hw], pch=17, col="red", cex=0.6)
+points(live.plot[hw.frac<0.25, total.biom0.MgC.ha], live.plot[hw.frac<0.25, biom.growth.ann.hw], pch=5, col="seagreen", cex=0.8)
+test <- seq(min(live.plot$total.biom0.MgC.ha), max(live.plot$total.biom0.MgC.ha, length.out=100))
+lines(test, exp(y$coefficients[1]+(y$coefficients[2]*log(test))),
+      lwd=3, lty=2, col="black")
+legend(x=100, y=0.01, legend=c("Hardwoods", "Low HW frac.", "All"), 
+       fill=c("red",  "seagreen", "black"), bty="n")
+
+## any plot basis growth
+andy.plot <- read.csv("processed/andy.plot.groomed.csv")
+andy.plot.mod <- summary(lm(rel.gain.ps~biom.MgC.ha+seg.F, data=g)) #R2 0.67, only biom*edge not significant
+par(mar=c(4,4,1,1), mfrow=c(1,1))
+# plot(g$biom, g$rel.gain, col=as.numeric(g$seg), xlab="total plot biomass", main="avg.dbh")
+col.edge <- c("steelblue3", "orchid")
+andy.ylim <- c(-0.015, 0.083) ## trying to match up roughly with the range of the FIA plots
+andy.xlim <- c(0, 350)
+plot(g$biom.MgC.ha, g$rel.gain.ps, main="Urban Forest, plot growth",
+     col=col.edge[as.numeric(g$seg.F)], pch=15, cex=0.9, ylim=andy.ylim, xlim=andy.xlim,
+     xlab="Biomass density (Mg/ha)", ylab="Relative growth (Mg/Mg/ha)")
+test <- seq(from=g[,min(biom.MgC.ha)], to = g[,max(biom.MgC.ha)], length.out=100)
+lines(test, exp(andy.plot.mod$coefficients[1]+(andy.plot.mod$coefficients[2]*log(test))),
+      col="blue", lty=2, lwd=2)
+lines(test, exp(andy.plot.mod$coefficients[1]+(andy.plot.mod$coefficients[2]*log(test))+andy.plot.mod$coefficients[3]+(andy.plot.mod$coefficients[4]*log(test))),
+      col="purple",  lty=2, lwd=2)
+legend(fill=c("steelblue3", "orchid"), legend=c("Edge (<10m)", "Interior"), x=50, y=0.05, bty="n")
+abline(v=250, col="steelblue3") ## 90th percentile upper
+abline(v=329, col="purple")## 90th percentile upper
+abline(v=524, col="steelblue3", lty=3)
+abline(v=597, col="purple", lty=3)
+
+# ### compare to linear model
+# lines(test, andy.plot.mod.lin$coefficients[1]+(andy.plot.mod.lin$coefficients[2]*test), 
+#       col="blue", lty=3, lwd=2)
+# lines(test, andy.plot.mod.lin$coefficients[1]+andy.plot.mod.lin$coefficients[3]+(andy.plot.mod.lin$coefficients[2]*test), 
+#       col="purple", lty=3, lwd=2)
+
+### FIGURE S2 -- PLOT LEVEL GROWTH RATES
+library(MASS)
+library(ggplot2)
+library(viridis)
+get_density <- function(x, y, n = 100) { ## two dimensional kernel density estimation from MASS package
+  dens <- MASS::kde2d(x = x, y = y, n = n) 
+  ix <- findInterval(x, dens$x)
+  iy <- findInterval(y, dens$y)
+  ii <- cbind(ix, iy)
+  return(dens$z[ii])
+}
+
+### scale tranformation function for -1 to 1 log scaling
+library(scales)
+stemg.xform <- function(x){
+  log(x+0.5)
+}
+I.stemg.xform <- function(x){
+  exp(x)-0.5
+}
+stemg_trans <- function(){trans_new(name="stemg",
+                                    transform=stemg.xform,
+                                    inverse=I.stemg.xform)
+}
+
+## set up common visual parameters
+xlim.all <- c(20, 330)
+ylim.all <- c(-0.02, 0.083)
+xlim.all.log <- log(xlim.all)
+ylim.all.log <- log(ylim.all)
+title.size <- 10
+axis.marks <- 9
+axis.titles <- 9
+pt.size <- 0.95
+theme.master <-   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                        panel.background = element_blank(), axis.line = element_line(colour = "black"),
+                        axis.title.x = element_text(face="bold", size=axis.titles),
+                        axis.title.y = element_text(face="bold", size=axis.titles),
+                        axis.text.x = element_text(face="plain", size=axis.marks),
+                        axis.text.y = element_text(face="plain", size=axis.marks),
+                        plot.title = element_text(face="bold", size=title.size))
+med.lines.col <- "gray75"
+med.lines.width <- 0.4
+fit.col <- "gray50"
+fit.width <- 0.8
+fit.type <- "4121"
+legend.title.size=8
+legend.text.size=7
+alpha.master <- 0.7
+
+####
+### FIA rural plots
+live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomed.csv"))
+load("processed/mod.live.plot.final.sav")
+pred_live <- data.frame(growth.pred=predict(mod.live.plot.final, newdata=data.frame(total.biom0.MgC.ha=seq(live.plot[,min(total.biom0.MgC.ha, na.rm=T)],
+                                                                                                           live.plot[,max(total.biom0.MgC.ha, na.rm=T)], length.out=100))),
+                        total.biom0.MgC.ha=seq(live.plot[,min(total.biom0.MgC.ha, na.rm=T)],
+                                               live.plot[,max(total.biom0.MgC.ha, na.rm=T)], length.out=100))
+
+col.map <- scale_color_manual(name="Hardwood fraction", values=c(plasma(6)[1], "red"), labels=c("25-100%", "<25%"))
+shape.map <- scale_shape_manual(name="Hardwood fraction", values=c(16,18), labels=c("25-100%", "<25%"))
+size.map <- scale_size_manual(name="Hardwood fraction", values=c(pt.size, pt.size*1.5), guide=FALSE)
+## log+a transformed
+## mark the points that are low HW fraction
+live.plot[hw.frac<0.25, HW:="S"]
+live.plot[hw.frac>=0.25, HW:="H"]
+live.plot.mono.log <- ggplot(live.plot, aes(total.biom0.MgC.ha, biom.growth.ann.hw, colour=HW))+
+  geom_point(aes(shape=HW, size=hw.frac<0.25), alpha=alpha.master)+
+  col.map+
+  shape.map+  
+  size.map+
+  # scale_y_continuous(trans="stemg", breaks=c(0, 0.02, 0.04, 0.06, 0.08), limits=ylim.all)+
+  # scale_x_continuous(trans="log", limits=xlim.all, breaks=c(50, 100, 200, 300))+
+  scale_y_continuous(breaks=c(0, 0.02, 0.04, 0.06, 0.08), limits=ylim.all)+
+  scale_x_continuous(limits=xlim.all, breaks=c(100, 200, 300))+
+  geom_line(data = pred_live, aes(x=total.biom0.MgC.ha, y=growth.pred), color=fit.col, linetype=fit.type, size=fit.width)+
+  labs(x = "Biomass Density (MgC/ha)", y="Biomass Gain (MgC per MgC/ha)", title="Rural Forest '08-'16")+
+  theme.master+
+  theme(legend.position = c(0.40, 0.15),
+        legend.title = element_text(size=legend.title.size, face="bold"),
+        legend.background = element_rect(fill = "white"),
+        legend.key =  element_blank(),
+        legend.key.size = unit(0.6, "lines"),
+        legend.text = element_text(size=legend.title.size-1, face="plain"),
+        legend.justification = "center")+
+  guides(shape = guide_legend(override.aes = list(size=pt.size*1.7,
+                                                  alpha=1,
+                                                  color=c(plasma(6)[1], "red"))))
+
+### Andy urban plots
+andy.plot <- as.data.table(read.csv("processed/andy.plot.groomed.csv"))
+load("processed/mod.andy.plot.final.sav")
+pred_andy.edge <- data.frame(growth.pred=predict(mod.andy.plot.final, newdata=data.frame(biom.MgC.ha=seq(from=andy.plot[,min(biom.MgC.ha)], 
+                                                                                                         to=andy.plot[,max(biom.MgC.ha)], length.out=100),
+                                                                                      seg.F=rep("E", 100))),
+                             biom.MgC.ha=seq(from=andy.plot[,min(biom.MgC.ha)], 
+                                             to=andy.plot[,max(biom.MgC.ha)], length.out=100))
+pred_andy.int <- data.frame(growth.pred=predict(mod.andy.plot.final, newdata=data.frame(biom.MgC.ha=seq(from=andy.plot[,min(biom.MgC.ha)], 
+                                                                                                         to=andy.plot[,max(biom.MgC.ha)], length.out=100),
+                                                                                         seg.F=rep("I", 100))),
+                             biom.MgC.ha=seq(from=andy.plot[,min(biom.MgC.ha)], 
+                                             to=andy.plot[,max(biom.MgC.ha)], length.out=100))
+
+## split colors (seg.Edge), density via alpha
+andy.col <- plasma(6)[c(3,5)]
+names(andy.col) <- levels(andy.plot$seg.F)
+col.map <- scale_color_manual(name="Stand position", values=andy.col, labels=c("Edge <10m", "Interior"))
+shape.map <- scale_shape_manual(name="Stand position", values=c(16,17), labels=c("Edge <10m", "Interior"))
+
+## log+a transformed
+andy.plot.mono.log <- ggplot(andy.plot, aes(biom.MgC.ha, rel.gain.ps, colour=seg.F))+
+  geom_point(aes(shape=seg.F), alpha=alpha.master, size=pt.size)+
+  col.map+
+  shape.map+
+  # scale_y_continuous(trans="stemg", breaks=c(0, 0.02, 0.04, 0.06, 0.08), limits=ylim.all)+
+  # scale_x_continuous(trans="log", limits=xlim.all, breaks=c(50, 100, 200, 300))+
+  scale_y_continuous(breaks=c(0, 0.02, 0.04, 0.06, 0.08), limits=ylim.all)+
+  scale_x_continuous(limits=xlim.all, breaks=c(100, 200, 300))+
+  labs(x = "Biomass Density (MgC/ha)", y="Biomass Gain (MgC per MgC/ha", title="Urban Forest '90-'16")+
+  theme.master+  
+  geom_line(data = pred_andy.edge, aes(x=biom.MgC.ha, y=growth.pred), color="darkmagenta", linetype=fit.type, size=fit.width)+
+  geom_line(data = pred_andy.int, aes(x=biom.MgC.ha, y=growth.pred), color="chocolate3", linetype=fit.type, size=fit.width)+
+  theme(legend.position = c(0.40, 0.15),
+        legend.title = element_text(size=legend.title.size, face="bold"),
+        legend.background = element_rect(fill = "white"),
+        legend.key =  element_blank(),
+        legend.key.size = unit(0.6, "lines"),
+        legend.text = element_text(size=legend.title.size-1, face="plain"),
+        legend.justification = "center")+
+  guides(shape = guide_legend(override.aes = list(size=pt.size*1.7,
+                                                  alpha=1,
+                                                  color=andy.col)))
+
+library(gridExtra)
+png(width=6, height=3, units="in", res=600, bg="white", filename="images/FigS1_plot_level_growth.png")
+grid.arrange(grobs=list(live.plot.mono.log, andy.plot.mono.log),
+             widths=c(1,1))
+dev.off()
+

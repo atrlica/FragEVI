@@ -431,17 +431,21 @@ write.csv(andy.dbh, "processed/andy.dbh.proc.results.csv")
 
 
 ### Determine areal-basis growth, growth~biomass(kg/ha) relationship
-andy.dbh <- read.csv("processed/andy.dbh.proc.results.csv")
-andy.dbh <- as.data.table(andy.dbh)
-g <- andy.dbh[, .(sum(growth.kg), sum(growth.kg.ps), sum(biom)), by=.(seg, Plot.ID)] ## total biomass gain and total biomass for each plot
-names(g)[3:5] <- c("growth.kg", "growth.kg.ps", "biom")
-g[,rel.gain:=growth.kg/biom] ## this deals in forest growth as a function of biomass, not of forest area
-g[,rel.gain.ps:=growth.kg.ps/biom]
+andy.dbh <- as.data.table(read.csv("processed/andy.dbh.proc.results.csv")) ## this is the exhaustive dbh sampling from all plots plus projected biomass growth per tree
+g <- andy.dbh[, .(sum(growth.kg), 
+                  sum(growth.kg.ps), 
+                  sum(biom),
+                  sum(ba)), by=.(seg, Plot.ID)] ## total biomass gain and total biomass for each plot
+names(g)[3:6] <- c("growth.kg", "growth.kg.ps", "tot.biom.kg", "tot.ba")
+g[,rel.gain:=growth.kg/tot.biom.kg]
+g[,rel.gain.ps:=growth.kg.ps/tot.biom.kg]
 g[seg==10, seg.F:="E"]
 g[seg!=10, seg.F:="I"]
 g$seg.F <- as.factor(g$seg.F)
-g[,biom.Mg.ha:=(biom/(10*20))/1000*1E4] ## get things in a standard biomass density Mg.ha based on plot size
-g$biom.Mg.ha/(2) ### OK this is about the range of our forested pixels in terms of MgC/ha
+g[,BA.plot:=tot.ba/((10*20)/1E4)] ## looking good, 20-40 peak
+g[,biom.MgC.ha:=(tot.biom.kg/2000)/((10*20)/1E4)] ## get things in a standard biomass density Mg.ha based on plot size
+hist(g$biom.MgC.ha) ### OK this is about the range of our forested pixels in terms of MgC/ha
+write.csv(g, "processed/andy.plot.groomed.csv")
 
 ## what does plot-level relationships look like?
 par(mar=c(4,4,1,1), mfrow=c(1,2))
@@ -450,28 +454,27 @@ plot(g$biom, g$rel.gain.ps, col=as.numeric(g$seg), xlab="total plot biomass", ma
 
 
 ## plot-level models growth~biomass.Mg.ha
-andy.growth.log <- lm(log(g$rel.gain.ps)~log(biom.Mg.ha), data=g) ## R2 0.1, barely significant
-andy.growth.log.edge <- lm(log(rel.gain.ps)~log(biom.Mg.ha)*seg.F, data=g) ## R2 0.75, all factors sig
-andy.plot.mod <- summary(andy.growth.log.edge)
-andy.growth.lin <- lm(rel.gain.ps~biom.Mg.ha, data=g)
-summary(andy.growth.lin) # R2 0.13, p>0.08
-andy.growth.lin.edge <- lm(rel.gain.ps~biom.Mg.ha+seg.F, data=g) #R2 0.67, only biom*edge not significant
-andy.plot.mod.lin <- summary(andy.growth.lin.edge)
+## log-log
+summary(lm(log(g$rel.gain.ps)~log(biom.MgC.ha), data=g)) ## R2 0.1, barely significant
+andy.plot.mod <- summary(lm(log(rel.gain.ps)~log(biom.MgC.ha)*seg.F, data=g)) ## R2 0.75, all factors sig
+# linear
+andy.plot.mod.lin <- summary(lm(rel.gain.ps~biom.MgC.ha+seg.F, data=g)) #R2 0.67, only biom*edge not significant
+summary(lm(rel.gain.ps~biom.MgC.ha*seg.F, data=g)) # contrast R2=0.67, only biom*edge not significant
 
 par(mar=c(4,4,1,1), mfrow=c(1,1))
 # plot(g$biom, g$rel.gain, col=as.numeric(g$seg), xlab="total plot biomass", main="avg.dbh")
 col.edge <- c("steelblue3", "orchid")
 andy.ylim <- c(-0.015, 0.083) ## trying to match up roughly with the range of the FIA plots
-andy.xlim <- c(0, 650)
-plot(g$biom.Mg.ha, g$rel.gain.ps, main="Urban Forest, plot growth",
+andy.xlim <- c(0, 350)
+plot(g$biom.MgC.ha, g$rel.gain.ps, main="Urban Forest, plot growth",
      col=col.edge[as.numeric(g$seg.F)], pch=15, cex=0.9, ylim=andy.ylim, xlim=andy.xlim,
      xlab="Biomass density (Mg/ha)", ylab="Relative growth (Mg/Mg/ha)")
-test <- seq(from=g[,min(biom.Mg.ha)], to = g[,max(biom.Mg.ha)], length.out=100)
+test <- seq(from=g[,min(biom.MgC.ha)], to = g[,max(biom.MgC.ha)], length.out=100)
 lines(test, exp(andy.plot.mod$coefficients[1]+(andy.plot.mod$coefficients[2]*log(test))),
        col="blue", lty=2, lwd=2)
 lines(test, exp(andy.plot.mod$coefficients[1]+(andy.plot.mod$coefficients[2]*log(test))+andy.plot.mod$coefficients[3]+(andy.plot.mod$coefficients[4]*log(test))),
        col="purple",  lty=2, lwd=2)
-legend(fill=c("steelblue3", "orchid"), legend=c("Edge (<10m)", "Interior"), x=450, y=0.05, bty="n")
+legend(fill=c("steelblue3", "orchid"), legend=c("Edge (<10m)", "Interior"), x=50, y=0.05, bty="n")
 abline(v=250, col="steelblue3") ## 90th percentile upper
 abline(v=329, col="purple")## 90th percentile upper
 abline(v=524, col="steelblue3", lty=3)

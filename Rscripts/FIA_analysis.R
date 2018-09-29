@@ -163,7 +163,7 @@ abline(h=live[, median(growth.ann.rel)])
 #####
 #### Plot-level assessment of growth~biomass.density
 ### equivalent plot-level assessment in live-only data ## 331 plots have at least one subplot dense enough to bother with
-live <- read.csv("processed/fia.live.stem.dbh.growth.csv") ## this is groomed to remove subplots with <5 stems
+live <- read.csv("processed/fia.live.stem.dbh.growth.csv") ## this is data groomed to remove subplots with <5 stems
 live <- as.data.table(live)
 ba.pred <- function(x){(x/2)^2*pi*0.0001} ## get BA per stump from dbh
 live.plot <- live[,
@@ -173,47 +173,50 @@ live.plot <- live[,
                     sum(biom0.spp, na.rm=T),
                     length(DIAM_T0)),
                   by=PlotID]
-dim(live.plot) ## 221 plots with at least one valid subplot
-names(live.plot) <- c("PlotID", "num.subplots", "BA.plot", "biom.growth", "total.biom0.kg", "num.stems")
-plot(live.plot[,total.biom0.kg], live.plot[,num.stems]) ## linear but gets unconstrained above ~20 stems/plot
-cor(live.plot[, total.biom0.kg], live.plot[, num.stems]) ## rho 0.60
-
-## the "fully forested" plots sample 0 to 25k kg/plot 
-live.plot[total.biom0.kg<5000,] ## mostly single-subplot plots (ie plot is mostly non-forest)
+# dim(live.plot) ## 221 plots with at least one valid subplot
+names(live.plot) <- c("PlotID", "num.subplots", "total.BA", "biom.growth", "total.biom0.kg", "num.stems")
+plot(live.plot[,num.stems], live.plot[,total.biom0.kg]) ## linear but gets unconstrained above ~20 stems/plot
+# cor(live.plot[, total.biom0.kg], live.plot[, num.stems]) ## rho 0.60
+# live.plot[total.biom0.kg<5000,] ## mostly single-subplot plots (ie plot is mostly non-forest)
 
 ## plot-level growth
 subplot.area <- (7.3152^2)*pi ## subplots are 24ft in radius
-live.plot[,total.biom0.Mg.ha:=((total.biom0.kg/1000)/(num.subplots*subplot.area))*1E4] ## biomass density in aggregated area covered by the fully forested subplots
+live.plot[,total.biom0.MgC.ha:=(total.biom0.kg/2000)/((num.subplots*subplot.area)/1E4)] ## biomass density in aggregated area covered by the fully forested subplots
 live.plot[,biom.growth.ann:=biom.growth/4.8]
 live.plot[,biom.growth.ann.rel:=(biom.growth.ann)/total.biom0.kg]
-hist(live.plot$biom.growth.ann.rel) ## most plots below 5%, a few are wildly productive, a couple decline
-summary(live.plot$biom.growth.ann.rel) ## -1% to 14%
+# hist(live.plot$biom.growth.ann.rel) ## most plots below 5%, a few are wildly productive, a couple decline
+# hist(live.plot$BA.plot) ## ok BA is looking like forest mostly -- 20-40
+# summary(live.plot$biom.growth.ann.rel) ## -1% to 14%
 
-## plot level density
+# ## plot level density
 live.plot[,stems.ha:=(num.stems/(subplot.area*num.subplots))*1E4]
-live.plot[,ba.ha:=BA.plot/((num.subplots*subplot.area)/1E4)] 
-hist(live.plot$ba.ha)## peak below 40m2/ha, a few up to 80
-summary(live.plot$ba.ha)
-hist(live.plot$stems.ha) # 400-500 peak
-hist(live.plot[, total.biom0.kg], breaks=10) ## peak 5-10k kg
-hist((live.plot[, total.biom0.kg]/675)*1E4/2000, breaks=10) ## i.e. peaking 50-100 MgC/ha, up to 200
-summary(live.plot[, total.biom0.kg/(subplot.area*num.subplots)*1E4]/2000) ## 90 MgC/ha, 34-307 -- so a forest
-hist(live.plot$num.stems)
-hist(live.plot$num.subplots) ## pretty even distribution, about 1/4 in each class from 1 to 4 subplots available
+live.plot[,BA.plot:=total.BA/(num.subplots*subplot.area/1E4)]
+# hist(live.plot$BA.plot)## peak below 40m2/ha, a few up to 80
+# summary(live.plot$ba.ha)
+# hist(live.plot$stems.ha) # 400-500 peak
+# hist(live.plot[, total.biom0.kg], breaks=10) ## peak 5-10k kg
+# hist((live.plot[, total.biom0.kg]/675)*1E4/2000, breaks=10) ## i.e. peaking 50-100 MgC/ha, up to 200
+# summary(live.plot[, total.biom0.kg/(subplot.area*num.subplots)*1E4]/2000) ## 90 MgC/ha, 34-307 -- so a forest
+# hist(live.plot$num.stems)
+# hist(live.plot$num.subplots) ## pretty even distribution, about 1/4 in each class from 1 to 4 subplots available
 
-## growth~biomass modeling
-plot(live.plot$total.biom0.kg, live.plot$biom.growth.ann.rel) ## exponential negative, the super productive ones were very low biomass to begin
-plot(live.plot$total.biom0.kg, live.plot$biom.growth.ann) ## linear-ish, more biomass --> more growth (no bottoming out)
-plot(live.plot$total.biom0.Mg.ha, live.plot$biom.growth.ann.rel) ## OK more happily exponential
-plot(live.plot[,log(total.biom0.Mg.ha)], live.plot[,log(biom.growth.ann.rel)]) ## here's our regular log-log linear relationship, pretty shotgunned
 
-l <- lm(log(biom.growth.ann.rel)~log(total.biom0.Mg.ha), data=live.plot) ### R2 0.17, significant
-plot(live.plot[,log(total.biom0.Mg.ha)], live.plot[,log(biom.growth.ann.rel)])
-s <- summary(l)
-abline(a=s$coefficients[1], b=s$coefficients[2], col="red") ## ok ho hum
-## can do this as a proper expnential nls to also incorporate the negative growth plots
 
-# ## compare the models of areal biomass growth with raw data and using only hardwoods
+# ## basic growth~biomass modeling
+# plot(live.plot$total.biom0.kg, live.plot$biom.growth.ann.rel) ## exponential negative, the super productive ones were very low biomass to begin
+# plot(live.plot$total.biom0.kg, live.plot$biom.growth.ann) ## linear-ish, more biomass --> more growth (no bottoming out)
+# plot(live.plot$total.biom0.MgC.ha, live.plot$biom.growth.ann.rel) ## OK more happily exponential
+# plot(live.plot[,log(total.biom0.MgC.ha)], live.plot[,log(biom.growth.ann.rel)]) ## here's our regular log-log linear relationship, pretty shotgunned
+# 
+# l <- lm(log(biom.growth.ann.rel)~log(total.biom0.Mg.ha), data=live.plot) ### R2 0.17, significant
+# plot(live.plot[,log(total.biom0.Mg.ha)], live.plot[,log(biom.growth.ann.rel)])
+# s <- summary(l)
+# abline(a=s$coefficients[1], b=s$coefficients[2], col="red") ## ok ho hum
+# ## can do this as a proper expnential nls to also incorporate the negative growth plots
+
+
+## look at specific growth rates in the hardwood/softwood population separate from total growth in all trees
+## spp in these names indicates that species-specific allometries were applied to the underlying stem data
 hwood <- live[type=="H", .(sum(biom1.spp-biom0.spp, na.rm=T), 
                            sum(biom0.spp, na.rm=T)), 
               by=PlotID]
@@ -230,84 +233,96 @@ live.plot[,biom.growth.ann.sw:=(biom.growth.spp.sw/4.8)/total.biom0.spp.kg.sw]
 live.plot[,hw.frac:=total.biom0.spp.kg.hw/total.biom0.kg] ## get fraction of hardwood in total biomass
 write.csv(live.plot, "processed/fia.live.plot.groomed.csv")
 
-### comparative models in hardwoods and softwoods in isolation
-hw <- lm(live.plot[biom.growth.ann.hw>0,log(biom.growth.ann.hw)]~live.plot[biom.growth.ann.hw>0,log(total.biom0.Mg.ha)])
-summary(hw) ## barely significant (p 0.07), R2 0.01
-sw <- lm(live.plot[biom.growth.ann.sw>0,log(biom.growth.ann.sw)]~live.plot[biom.growth.ann.sw>0,log(total.biom0.Mg.ha)])
-summary(sw) ## significant, R2 0.12
-
-### model without respect to hard/softwood
-tot.mod <- lm(live.plot[biom.growth.ann.rel>0,log(biom.growth.ann.rel)]~live.plot[biom.growth.ann.rel>0,log(total.biom0.Mg.ha)])
-summary(tot.mod) ### ok does like R2 0.18 and significant
-
-plot(live.plot[,log(total.biom0.Mg.ha)], live.plot[,log(biom.growth.ann.rel)], 
-     main="FIA growth~biomass (plot level)", ylab="Relative growth rate (Mg/Mg/ha)", xlab="Plot biomass density (Mg/ha)",
-     xaxt="n", yaxt="n")
-axis(side = 1, at = c(4.5, 5, 5.5, 6, 6.5), labels = round(exp(c(4.5, 5, 5.5, 6, 6.5)), digits=0))
-axis(side=2, at=seq(-5.5, -2.5, by=0.5), labels=round(exp(seq(-5.5, -2.5, by=0.5)), digits=3))
-abline(a=tot.mod$coefficients[1], b=tot.mod$coefficients[2], lwd=1.4, col="black")
-# points(live.plot[,log(((total.biom0.spp.kg.hw/1000)/(num.subplots*subplot.area))*1E4)],
+live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomed.csv"))
+# ### here follows a lot of hemming and hawing until the final model, excluding low hw.frac, is discovered.
+# ## hard wood and soft wood growth in stands, identifying stands that a low in either
+# plot(live.plot[,total.biom0.MgC.ha], live.plot[,biom.growth.ann.hw]) ## ding dong goofball with big outliers, all low hw
+# points(live.plot[hw.frac<0.25, total.biom0.MgC.ha], live.plot[hw.frac<0.25, biom.growth.ann.hw], cex=1.5, col="red", pch=14)
+# 
+# plot(live.plot[,total.biom0.MgC.ha], live.plot[,biom.growth.ann.sw]) ## low softwood frac is the norm, but more well behaved
+# points(live.plot[hw.frac>0.75, total.biom0.MgC.ha], live.plot[hw.frac>0.75, biom.growth.ann.sw], cex=1.5, col="green", pch=14)
+# 
+# ### comparative models in hardwoods and softwoods in isolation
+# hw <- lm(live.plot[biom.growth.ann.hw>0,log(biom.growth.ann.hw)]~live.plot[biom.growth.ann.hw>0,log(total.biom0.MgC.ha)])
+# summary(hw) ## barely significant (p 0.07), R2 0.01
+# sw <- lm(live.plot[biom.growth.ann.sw>0,log(biom.growth.ann.sw)]~live.plot[biom.growth.ann.sw>0,log(total.biom0.MgC.ha)])
+# summary(sw) ## significant, R2 0.12
+# 
+# ### model without respect to hard/softwood
+# plot(live.plot[,log(total.biom0.MgC.ha)], live.plot[,log(biom.growth.ann.rel)])
+# points(live.plot[hw.frac<0.25,log(total.biom0.MgC.ha)], live.plot[hw.frac<0.25,log(biom.growth.ann.rel)], col="red", pch=14, cex=1.6)
+# tot.mod <- lm(live.plot[biom.growth.ann.rel>0,log(biom.growth.ann.rel)]~live.plot[biom.growth.ann.rel>0,log(total.biom0.MgC.ha)])
+# summary(tot.mod) ### ok does like R2 0.18 and significant
+# 
+# plot(live.plot[,log(total.biom0.MgC.ha)], live.plot[,log(biom.growth.ann.rel)], 
+#      main="FIA growth~biomass (plot level)", ylab="Relative growth rate (Mg/Mg/ha)", xlab="Plot biomass density (Mg/ha)",
+#      xaxt="n", yaxt="n")
+# axis(side = 1, at = c(4.5, 5, 5.5, 6, 6.5), labels = round(exp(c(4.5, 5, 5.5, 6, 6.5)), digits=0))
+# axis(side=2, at=seq(-5.5, -2.5, by=0.5), labels=round(exp(seq(-5.5, -2.5, by=0.5)), digits=3))
+# abline(a=tot.mod$coefficients[1], b=tot.mod$coefficients[2], lwd=1.4, col="black")
+# # points(live.plot[,log(((total.biom0.spp.kg.hw/1000)/(num.subplots*subplot.area))*1E4)],
+# #        live.plot[,log(biom.growth.ann.hw)], pch=15, cex=0.6, col="red")
+# points(live.plot[,log(total.biom0.Mg.ha)],
 #        live.plot[,log(biom.growth.ann.hw)], pch=15, cex=0.6, col="red")
-points(live.plot[,log(total.biom0.Mg.ha)],
-       live.plot[,log(biom.growth.ann.hw)], pch=15, cex=0.6, col="red")
-abline(a=hw$coefficients[1], b=hw$coefficients[2], col="red")
-# points(live.plot[,log(((total.biom0.spp.kg.sw/1000)/(num.subplots*subplot.area))*1E4)],
+# abline(a=hw$coefficients[1], b=hw$coefficients[2], col="red")
+# # points(live.plot[,log(((total.biom0.spp.kg.sw/1000)/(num.subplots*subplot.area))*1E4)],
+# #        live.plot[,log(biom.growth.ann.sw)], pch=17, cex=0.6, col="blue")
+# points(live.plot[,log(total.biom0.Mg.ha)],
 #        live.plot[,log(biom.growth.ann.sw)], pch=17, cex=0.6, col="blue")
-points(live.plot[,log(total.biom0.Mg.ha)],
-       live.plot[,log(biom.growth.ann.sw)], pch=17, cex=0.6, col="blue")
-abline(a=sw$coefficients[1], b=sw$coefficients[2], col="blue")
-legend(x=4.3, y=-5, legend = c("All", "Hardwoods", "Softwoods"), 
-       fill = c("black", "red", "blue"))
-summary(live.plot$biom.growth.ann.hw) ## hardwood growth rate just doesn't vary much across range of TOTAL biomass density: 2-3% growth (0.4 to 15%)
-
-
-#### let's look at it in untransformed space
-tot.mod <- lm(live.plot[biom.growth.ann.rel>0,log(biom.growth.ann.rel)]~live.plot[biom.growth.ann.rel>0,log(total.biom0.Mg.ha)])
-summary(tot.mod) ### R2 0.18 and significant
-hw.mod <- lm(live.plot[biom.growth.ann.hw>0,log(biom.growth.ann.hw)]~live.plot[biom.growth.ann.hw>0,log(total.biom0.Mg.ha)])
-summary(hw.mod) ### R2 0.01 and only sig at p<0.10
-hw.mod$coefficients
-tot.mod$coefficients ## slope in hw.mod is very low, not particularly high in tot.mod
-
-## untransformed
-hw.mod.exp <- nls(biom.growth.ann.hw ~ exp(a + b * log(total.biom0.Mg.ha)),
-                  data=live.plot, start=list(a=0, b=0))
-q <- summary(hw.mod.exp) ## b is not even close to significant
-exp(q$coefficients[1]) ## ie. about 3% boyo
-
-tot.mod.exp <- nls(biom.growth.ann.rel ~ exp(a + b * log(total.biom0.Mg.ha)),
-                   data=live.plot, start=list(a=0, b=0)) ### not terrifically differfent from final HW-frac filtered model below
-r <- summary(tot.mod.exp) ## definitely significant
-
-## visual comparison of the plot-level models
-plot(live.plot[,(total.biom0.Mg.ha)], 
-     live.plot[,(biom.growth.ann.rel)], main="FIA growth~biomass (plot-level)",
-     xlab="Biomass Density (Mg/ha)", ylab="Relative growth (Mg/Mg/ha)")
-points(live.plot[,(total.biom0.Mg.ha)], 
-       live.plot[,(biom.growth.ann.hw)], col="red", pch=17, cex=0.6)
-test <- seq(min(live.plot$total.biom0.Mg.ha), max(live.plot$total.biom0.Mg.ha), length.out=100)
-lines(test, exp(r$coefficients[1]+(r$coefficients[2]*log(test))),
-      lwd=3, lty=2)
-# abline(h=mean(live.plot$biom.growth.ann.hw), col="orangered", lwd=3, lty=4)
-
-## why so poor fit on hw model, why some high biomass plots have such high hw growth rate?
-# summary(live.plot$hw.frac) ## most have a majority hardwoods, a few v low
-# hist(live.plot$hw.frac)
-# live.plot[total.biom0.Mg.ha>400, hw.frac] ## high biomass contains the low hw fraction ones
-points(live.plot[hw.frac<0.25, total.biom0.Mg.ha],
-       live.plot[hw.frac<0.25, biom.growth.ann.hw],
-       cex=1.2, lwd=3, pch=5, col="seagreen")
+# abline(a=sw$coefficients[1], b=sw$coefficients[2], col="blue")
+# legend(x=4.3, y=-5, legend = c("All", "Hardwoods", "Softwoods"), 
+#        fill = c("black", "red", "blue"))
+# summary(live.plot$biom.growth.ann.hw) ## hardwood growth rate just doesn't vary much across range of TOTAL biomass density: 2-3% growth (0.4 to 15%)
+# 
+# 
+# #### let's look at it in untransformed space
+# tot.mod <- lm(live.plot[biom.growth.ann.rel>0,log(biom.growth.ann.rel)]~live.plot[biom.growth.ann.rel>0,log(total.biom0.Mg.ha)])
+# summary(tot.mod) ### R2 0.18 and significant
+# hw.mod <- lm(live.plot[biom.growth.ann.hw>0,log(biom.growth.ann.hw)]~live.plot[biom.growth.ann.hw>0,log(total.biom0.Mg.ha)])
+# summary(hw.mod) ### R2 0.01 and only sig at p<0.10
+# hw.mod$coefficients
+# tot.mod$coefficients ## slope in hw.mod is very low, not particularly high in tot.mod
+# 
+# ## untransformed
+# hw.mod.exp <- nls(biom.growth.ann.hw ~ exp(a + b * log(total.biom0.Mg.ha)),
+#                   data=live.plot, start=list(a=0, b=0))
+# q <- summary(hw.mod.exp) ## b is not even close to significant
+# exp(q$coefficients[1]) ## ie. about 3% boyo
+# 
+# tot.mod.exp <- nls(biom.growth.ann.rel ~ exp(a + b * log(total.biom0.Mg.ha)),
+#                    data=live.plot, start=list(a=0, b=0)) ### not terrifically differfent from final HW-frac filtered model below
+# r <- summary(tot.mod.exp) ## definitely significant
+# 
+# ## visual comparison of the plot-level models
+# plot(live.plot[,(total.biom0.Mg.ha)], 
+#      live.plot[,(biom.growth.ann.rel)], main="FIA growth~biomass (plot-level)",
+#      xlab="Biomass Density (Mg/ha)", ylab="Relative growth (Mg/Mg/ha)")
+# points(live.plot[,(total.biom0.Mg.ha)], 
+#        live.plot[,(biom.growth.ann.hw)], col="red", pch=17, cex=0.6)
+# test <- seq(min(live.plot$total.biom0.Mg.ha), max(live.plot$total.biom0.Mg.ha), length.out=100)
+# lines(test, exp(r$coefficients[1]+(r$coefficients[2]*log(test))),
+#       lwd=3, lty=2)
+# # abline(h=mean(live.plot$biom.growth.ann.hw), col="orangered", lwd=3, lty=4)
+# 
+# ## why so poor fit on hw model, why some high biomass plots have such high hw growth rate?
+# # summary(live.plot$hw.frac) ## most have a majority hardwoods, a few v low
+# # hist(live.plot$hw.frac)
+# # live.plot[total.biom0.Mg.ha>400, hw.frac] ## high biomass contains the low hw fraction ones
+# points(live.plot[hw.frac<0.25, total.biom0.Mg.ha],
+#        live.plot[hw.frac<0.25, biom.growth.ann.hw],
+#        cex=1.2, lwd=3, pch=5, col="seagreen")
 
 ### OOOOOOKKKKKKAAAAYYYYY Let's elminate the handful of weird low-HW plots (could be weird places that favor pines or something, not really how an urban forest do)
-hw.mod.exp.filt <- nls(biom.growth.ann.hw ~ exp(a + b * log(total.biom0.Mg.ha)),
+hw.mod.exp.filt <- nls(biom.growth.ann.hw ~ exp(a + b * log(total.biom0.MgC.ha)),
                        data=live.plot[hw.frac>0.25,], start=list(a=0, b=0))
 y <- summary(hw.mod.exp.filt) ## all significant
-y$coefficients
-r$coefficients ## quite comparable
+
 ## so we will use the low-hw filtered plots to approximate growth in the final NPP calculations
-### show on plot
+plot(live.plot[,total.biom0.MgC.ha], live.plot[,biom.growth.ann.hw], pch=17, col="red", cex=0.6)
+points(live.plot[hw.frac<0.25, total.biom0.MgC.ha], live.plot[hw.frac<0.25, biom.growth.ann.hw], pch=5, col="seagreen", cex=0.8)
+test <- seq(min(live.plot$total.biom0.MgC.ha), max(live.plot$total.biom0.MgC.ha, length.out=100))
 lines(test, exp(y$coefficients[1]+(y$coefficients[2]*log(test))),
-      lwd=3, lty=2, col="red")
+      lwd=3, lty=2, col="black")
 legend(x=100, y=0.01, legend=c("Hardwoods", "Low HW frac.", "All"), 
        fill=c("red",  "seagreen", "black"), bty="n")
 

@@ -20,7 +20,7 @@ mod.andy.final<- lmer(log(biom.rel.ann)~log(dbh.start)+seg.Edge +
                           (1+seg.Edge|Plot.ID) +
                           # (1+seg.Edge|incr.ID) + ## there are no individual stems that are in both an edge and interior
                           (1+seg.Edge|interval), 
-                        data=ps.contain[dbh.start>=5,],
+                        data=andy[dbh.start>=5,],
                         REML=FALSE)
 drop1(mod.andy.final, test="Chisq") ## sig in dbh and in edge class (E vs I)
 save(mod.andy.final, file="processed/mod.andy.final.sav")
@@ -30,15 +30,91 @@ mod.street.final <- nls(npp.ann.rel ~ exp(a + b * log(dbh.2006)), data=street[re
 summary(mod.street.final) ## RSE is pretty high 0.33
 save(mod.street.final, file="processed/mod.street.final.sav")
 
+# ## compare coefficients
+# summary(mod.fia.final)$coefficients #lowest
+# summary(mod.andy.final)$coefficients #middle
+# summary(mod.street.final)$coefficients #highest
+
 ###
 ## resultant areal-basis growth regressions
 live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomed.csv"))
-mod.live.plot.final <- nls(biom.growth.ann.hw ~ exp(a + b * log(total.biom0.Mg.ha)),
-                       data=live.plot[hw.frac>0.25,], start=list(a=0, b=0))
-summary(mod.live.plot.final)
+mod.live.plot.final <- nls(biom.growth.ann.hw ~ exp(a + b * log(total.biom0.MgC.ha)),
+                                              data=live.plot[hw.frac>0.25,], start=list(a=0, b=0))
+summary(mod.live.plot.final) ## all significant
 save(mod.live.plot.final, file="processed/mod.live.plot.final.sav")
 
-andy.plot <- 
+andy.plot <- read.csv("processed/andy.plot.groomed.csv")
+mod.andy.plot.final <- lm(rel.gain.ps~biom.MgC.ha+seg.F, data=andy.plot) #R2 0.67, only biom*edge not significant
+save(mod.andy.plot.final, file="processed/mod.andy.plot.final.sav")
+
+
+### summary table of all the coefficients in play
+## plot growth models
+mandy.stem <- summary(mod.andy.final)
+mfia.stem <- summary(mod.fia.final)
+mstreet.stem <- summary(mod.street.final)
+mandy.stem.p <- drop1(mod.andy.final, test="Chisq")
+stem.context <- c("Rural.stem", "Urban.stem", "Street.stem")
+b0.stem <- c(mfia.stem$coefficients[1,1], mandy.stem$coefficients[1,1], mstreet.stem$coefficients[1,1])
+b0.stem.se <- c(mfia.stem$coefficients[1,2], mandy.stem$coefficients[1,2], mstreet.stem$coefficients[1,2])
+b0.stem.p <- round(c(mfia.stem$coefficients[1,4], NA, mstreet.stem$coefficients[1,4]),3)
+
+b1.stem <- c(mfia.stem$coefficients[2,1], mandy.stem$coefficients[2,1], mstreet.stem$coefficients[2,1])
+b1.stem.se <- c(mfia.stem$coefficients[2,2], mandy.stem$coefficients[2,2], mstreet.stem$coefficients[2,2])
+b1.stem.p <- round(c(mfia.stem$coefficients[2,4], mandy.stem.p[2,4], mstreet.stem$coefficients[2,4]),3)
+
+b2.stem <- c(mfia.stem$coefficients[3,1], mandy.stem$coefficients[3,1], NA)
+b2.stem.se <- c(mfia.stem$coefficients[3,2], mandy.stem$coefficients[3,2], NA)
+b2.stem.p <- round(c(mfia.stem$coefficients[3,4], mandy.stem.p[3,4], NA), 3)
+
+b0.stem.tot <- paste(round(b0.stem, 2), " (", round(b0.stem.se, 2), ")", sep="")
+b1.stem.tot <- paste(round(b1.stem, 2), " (", round(b1.stem.se, 2), ")", sep="")
+b2.stem.tot <- paste(round(b2.stem, 2), " (", round(b2.stem.se, 2), ")", sep="")
+
+sigma <- round(c(mfia.stem$sigma, mandy.stem$sigma, mstreet.stem$sigma), 3)
+
+b0 <- cbind(b0.stem.tot, b0.stem.p)
+b1 <- cbind(b1.stem.tot, b1.stem.p)
+b2 <- cbind(b2.stem.tot, b2.stem.p)
+
+stem.table <- cbind(stem.context, b0,b1,b2,sigma)
+
+## plot growth models
+mfia.plot <- summary(mod.live.plot.final)
+mandy.plot <- summary(mod.andy.plot.final)
+mandy.plot$coefficients[,1:2] <- mandy.plot$coefficients[,1:2]*100
+
+plot.context <- c("Rural.plot", "Urban.plot")
+
+b0.plot <- c(mfia.plot$coefficients[1,1], mandy.plot$coefficients[1,1])
+b0.plot.se <- c(mfia.plot$coefficients[1,2], mandy.plot$coefficients[1,2])
+b0.plot.p <- round(c(mfia.plot$coefficients[1,4], mandy.plot$coefficients[1,4]),3)
+
+b0.plot <- c(mfia.plot$coefficients[1,1], mandy.plot$coefficients[1,1])
+b0.plot.se <- c(mfia.plot$coefficients[1,2], mandy.plot$coefficients[1,2])
+b0.plot.p <- round(c(mfia.plot$coefficients[1,4], mandy.plot$coefficients[1,4]),3)
+
+b1.plot <- c(mfia.plot$coefficients[2,1], mandy.plot$coefficients[2,1])
+b1.plot.se <- c(mfia.plot$coefficients[2,2], mandy.plot$coefficients[2,2])
+b1.plot.p <- round(c(mfia.plot$coefficients[2,4], mandy.plot$coefficients[2,4]),3)
+
+b2.plot <- c(NA, mandy.plot$coefficients[3,1])
+b2.plot.se <- c(NA, mandy.plot$coefficients[3,2])
+b2.plot.p <- round(c(NA, mandy.plot$coefficients[3,4]),3)
+
+b0.plot.tot <- paste(round(b0.plot, 2), " (", round(b0.plot.se, 2), ")", sep="")
+b1.plot.tot <- paste(round(b1.plot, 2), " (", round(b1.plot.se, 2), ")", sep="")
+b2.plot.tot <- paste(round(b2.plot, 2), " (", round(b2.plot.se, 2), ")", sep="")
+
+sigma <- round(c(mfia.plot$sigma, mandy.plot$sigma), 3)
+
+b0 <- cbind(b0.plot.tot, b0.plot.p)
+b1 <- cbind(b1.plot.tot, b1.plot.p)
+b2 <- cbind(b2.plot.tot, b2.plot.p)
+
+plot.table <- cbind(plot.context, b0,b1,b2,sigma)
+
+write.csv(rbind(stem.table, plot.table), "processed/stem.plot.model.summstats.csv")
 
 # ### just for context -- are the stem growth equations really indicated to be different depending on context?
 # 

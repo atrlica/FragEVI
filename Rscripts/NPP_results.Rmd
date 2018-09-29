@@ -1,7 +1,7 @@
 ---
-title: "Boston NPP estimates: Results"
+title: "Boston NPP estimates"
 author: "Drew Trlica"
-date: "Sept. 17, 2018"
+date: "Sept. 28, 2018"
 output: html_document
 ---
 
@@ -14,7 +14,7 @@ library(ggplot2)
 library(raster)
 
 ```
-# METHODS (notes)
+### Methods (notes)
 Due to skewed distributions, median values are reported with upper and lower limits of central 90% of observations.
 Unless otherwise noted, the realtionship between biomass gain (stem or area basis) and biomass quantity was modeled as an exponential negative relationship to log-DBH ($growth = e^{a+b \times \log{DBH}}$).
 
@@ -28,8 +28,8 @@ cover <- as.data.table(cover)
 names(cover) <- c("lulc", "area", "can", "ed", "biom", "isa")
 
 ```
-## Urban forest structure in Boston
-Tree canopy covered `r round(sum(cover$can)/sum(cover$area),2)*100`% of the study area of which `r round(sum(cover$ed)/sum(cover$can), 2)*100`% was within 10 m of an edge, but canopy, biomass, and fragmentation degree were distributed differently between LULC types (Figure 1). Developed and High-density Residential areas covering, respectively, `r round(cover[lulc==2, sum(area)]/sum(cover$area), 2)*100`% and `r round(cover[lulc==3, sum(area)]/sum(cover$area), 2)*100`% of the total urban area contained `r round(cover[lulc==2, sum(can)]/sum(cover$can), 2)*100`% and `r round(cover[lulc==3,sum(can)]/sum(cover$can), 2)*100`% of total canopy area of which `r round(cover[lulc==2, sum(ed)]/cover[lulc==2, sum(can)], 2)*100`% and `r round(cover[lulc==3, sum(ed)]/cover[lulc==3, sum(can)], 2)*100`% was within 10 m of an edge (Table S1 -- canopy and biomass configuration summary). In contrast, while Forest areas covered only `r round(cover[lulc==1, sum(area)]/sum(cover$area), 2)*100`% of the study area they contained `r round(cover[lulc==1, sum(can)]/sum(cover$can), 2)*100`% of the total urban canopy and `r round(cover[lulc==1, sum(biom)]/sum(cover$biom), 2)*100`% of total biomass, of which only `r round(cover[lulc==1, sum(ed)]/cover[lulc==1, sum(can)], 2)*100`% was within 10 m of an edge. The extensive area of HD Residential land, containing a significant fraction of the total city biomass under highly fragmented conditions, implies a potentially large contribution of these types of canopy configurations to overall urban "forest" productivity, but which also requires specific accounting for urban- and canopy-specific influence on growth rates. In contrast, Forest-type land cover covered a small fraction of total land surface but contained a significant fraction of overall biomass and at much lower canopy fragmentation than other developed cover types. These relatively small areas of forest might as a result be expected to perform a significant proportion of total C uptake for the city, but under different growing conditions and uptake rates than in surrounding urban trees.
+### Urban forest structure in Boston
+Tree canopy covered `r round(sum(cover$can)/sum(cover$area),2)*100`% of the study area of which `r round(sum(cover$ed)/sum(cover$can), 2)*100`% was within 10 m of an edge, but canopy, biomass, and fragmentation degree were distributed differently between LULC types (*Figure 1*). Developed and High-density Residential areas covering, respectively, `r round(cover[lulc==2, sum(area)]/sum(cover$area), 2)*100`% and `r round(cover[lulc==3, sum(area)]/sum(cover$area), 2)*100`% of the total urban area contained `r round(cover[lulc==2, sum(can)]/sum(cover$can), 2)*100`% and `r round(cover[lulc==3,sum(can)]/sum(cover$can), 2)*100`% of total canopy area of which `r round(cover[lulc==2, sum(ed)]/cover[lulc==2, sum(can)], 2)*100`% and `r round(cover[lulc==3, sum(ed)]/cover[lulc==3, sum(can)], 2)*100`% was within 10 m of an edge (*Table S1 -- canopy and biomass configuration summary*). In contrast, while Forest areas covered only `r round(cover[lulc==1, sum(area)]/sum(cover$area), 2)*100`% of the study area they contained `r round(cover[lulc==1, sum(can)]/sum(cover$can), 2)*100`% of the total urban canopy and `r round(cover[lulc==1, sum(biom)]/sum(cover$biom), 2)*100`% of total biomass, of which only `r round(cover[lulc==1, sum(ed)]/cover[lulc==1, sum(can)], 2)*100`% was within 10 m of an edge. The extensive area of HD Residential land, containing a significant fraction of the total city biomass under highly fragmented conditions, implies a potentially large contribution of these types of canopy configurations to overall urban "forest" productivity, but which also requires specific accounting for urban- and canopy-specific influence on growth rates. In contrast, Forest-type land cover covered a small fraction of total land surface but contained a significant fraction of overall biomass and at much lower canopy fragmentation than other developed cover types. These relatively small areas of forest might as a result be expected to perform a significant proportion of total C uptake for the city, but under different growing conditions and uptake rates than in surrounding urban trees.
 ```{r fig_1, echo=FALSE, out.width='100%'}
 knitr::include_graphics('E:/FragEVI/images/Fig1_overview_v1_cr.png')
 ```
@@ -43,17 +43,22 @@ andy <- as.data.table(read.csv("processed/andy.bai.dbh.pseudo.csv"))
 street <- as.data.table(read.csv("processed/boston/street.trees.dbh.csv"))
 
 ## models ## just slot in whatever is the best model when you decide on it
-live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomed.csv"))
 load("processed/mod.fia.final.sav")
 load("processed/mod.andy.final.sav")
 load("processed/mod.street.final.sav")
 mfia <- summary(mod.fia.final)
-p.andy <- drop1(mmod.andy.full, test="Chisq")
+p.andy <- drop1(mod.andy.final, test="Chisq")
 # p.andy[3,4]
-s.andy <- summary(mmod.andy.full)
+s.andy <- summary(mod.andy.final)
+mstreet <- summary(mod.street.final)
 
+### plot level data/models
+live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomed.csv"))
 load("processed/mod.live.plot.final.sav")
 mfia.plot <- summary(mod.live.plot.final)
+andy.plot <- as.data.table(read.csv("processed/andy.plot.groomed.csv"))
+load("processed/mod.andy.plot.final.sav")
+mandy.plot <- summary(mod.andy.plot.final)
 ### to get the formatting of p values printed out right
 p.fixer <- function(x){
   if(x<0.001){
@@ -67,20 +72,21 @@ p.fixer <- function(x){
 }
 ```
 
-## Growth rates in urban context
-On a stem basis, urban trees grew more quickly and showed increased growth nearer to canopy edges (Figure 2). Rural forest trees grew more slowly than urban forest trees, with median DBH `r paste(round(live[,median(DIAM_T0, na.rm=T)], digits=1), " (", round(live[,quantile(DIAM_T0, probs=c(0.05))], 1), "-", round(live[,quantile(DIAM_T0, probs=c(0.95))], 1), ")", sep="")` cm corresponding to median annual growth of `r paste(round(live[,median(growth.ann.rel, na.rm=T)], digits=1), " (", round(live[,quantile(growth.ann.rel, probs=c(0.05))], 1), "-", round(live[,quantile(growth.ann.rel, probs=c(0.95))], 1), ")", sep="")` kg/kg. The best fit model for rural stem growth rate (Table S2 -- model coefficients and p values) (residual std. error `r round(mfia$sigma, 3)`) showed a significant negative relationship with log-DBH (p<`r p.fixer(mfia$coefficients[2,4])`) and a significantly higher per-stem rate of growth in softwood species compared to hardwoods (p<`r p.fixer(mfia$coefficients[3,4])`). Successive complete DBH measurements in all rural forest trees >12 cm DBH showed a comparble significant negative exponential relationship (p<`r`) between annual hardwood biomass gain (MgC per MgC/ha) and total biomass density (MgC/ha), excluding plots with <25% hardwoods by total biomass (Figre S3 -- plot level growth). Median per-area growth rate in rural forest plots was `r 
+### Growth rates in urban context
+On an individual stem basis, urban trees grew more quickly and showed increased growth nearer to canopy edges (*Figure 2*). Rural forest trees grew more slowly than urban forest trees, with median DBH `r paste(round(live[,median(DIAM_T0, na.rm=T)], digits=1), " (", round(live[,quantile(DIAM_T0, probs=c(0.05))], 1), "-", round(live[,quantile(DIAM_T0, probs=c(0.95))], 1), ")", sep="")` cm corresponding to median annual growth of `r paste(round(live[,median(growth.ann.rel, na.rm=T)], digits=3), " (", round(live[,quantile(growth.ann.rel, probs=c(0.05))], 3), "-", round(live[,quantile(growth.ann.rel, probs=c(0.95))], 3), ")", sep="")` kg/kg. The best fit model for rural stem growth rate (*Table S2 -- model coefficients and p values*) (residual std. error `r round(mfia$sigma, 3)`) showed a significant negative relationship with log-DBH (p<`r p.fixer(mfia$coefficients[2,4])`) and a significantly higher per-stem rate of growth in softwood species compared to hardwoods (p<`r p.fixer(mfia$coefficients[3,4])`). On an areal basis, complete DBH measurements over 4.8 years in all rural forest trees >12 cm DBH showed a comparble significant negative exponential relationship (residual standard error (RSE) `r round(mfia.plot$sigma, 3)`) between annual hardwood biomass gain (MgC per MgC/ha) and total biomass density (MgC/ha) (p<`r p.fixer(mfia.plot$coefficients[2,4])`), excluding plots with <25% hardwoods by total biomass (*Figure S1 -- plot level growth*). Median areal growth rate in hardwood species in rural forest plots was `r paste(round(live.plot[,median(biom.growth.ann.hw, na.rm=T)], digits=3), " (", round(live.plot[,quantile(biom.growth.ann.hw, probs=c(0.05))], 3), "-", round(live.plot[,quantile(biom.growth.ann.hw, probs=c(0.95))], 3), ")", sep="")` MgC per MgC/ha, corresponding to median biomass denstiy of `r paste(round(live.plot[,median(total.biom0.MgC.ha, na.rm=T)], digits=1), " (", round(live.plot[,quantile(total.biom0.MgC.ha, probs=c(0.05))], 1), "-", round(live.plot[,quantile(total.biom0.MgC.ha, probs=c(0.95))], 1), ")", sep="")` MgC/ha.
 
-Trees in urban forest grew faster than in rural forest, and grew more quickly within 10 m of a canopy edge than in canopy interior (20-30 m). Median DBH of edge (<10 m) and interior stems was `r round(andy[seg.Edge=="E", median(dbh.start, na.rm=T)], digits=1)` cm and `r round(andy[seg.Edge=="I", median(dbh.start, na.rm=T)], digits=1)` cm, respectively, corresponding to median annual growth of `r round(andy[seg.Edge=="E", median(biom.rel.ann, na.rm=T)], digits=3)` kg/kg and `r round(andy[seg.Edge=="I", median(biom.rel.ann, na.rm=T)], digits=3)` kg/kg. The best fit model for urban forest stem growth rate (estimating random slopes and intercepts for sample plot, year interval, and stem ID) showed a significant negative effect for log-DBH (p<`r p.fixer(p.andy[2,4])`) and a significantly lower growth rate in interior-grown stems (p<`r p.fixer(p.andy[3,4])`). Projecting these stem growth rates to the record of all stems >5 cm DBH by edge distance class in each test plot, 
+Trees in urban forest grew faster than in rural forest, and grew more quickly within 10 m of a canopy edge than in canopy interior (20-30 m). Median DBH of edge (<10 m) and interior stems was `r round(andy[seg.Edge=="E", median(dbh.start, na.rm=T)], digits=1)` cm and `r round(andy[seg.Edge=="I", median(dbh.start, na.rm=T)], digits=1)` cm, respectively, corresponding to median annual growth of `r round(andy[seg.Edge=="E", median(biom.rel.ann, na.rm=T)], digits=3)` kg/kg and `r round(andy[seg.Edge=="I", median(biom.rel.ann, na.rm=T)], digits=3)` kg/kg. The best fit model for urban forest stem growth rate (estimating random slopes and intercepts for sample plot, year interval, and stem ID) showed a significant negative relationship with log-DBH (p<`r p.fixer(p.andy[2,4])`) and a significantly lower growth rate in interior-grown stems (p<`r p.fixer(p.andy[3,4])`). Projecting these stem growth rates to the record of all stems >5 cm DBH by edge distance class in the urban forest plots, there was a corresponding significant linear relationship (RSE `r round(mandy.plot$sigma, 3)`) an an areal basis between annual biomass gain and biomass density (p<`r p.fixer(mandy.plot$coefficients[2,4])`), with significant lower biomass gain overall in interior plots (p< `r p.fixer(mandy.plot$coefficients[3,4])`). Median areal growth rate edge biomass in urban forest plots was `r paste(round(andy.plot[seg.F=="E",median(rel.gain.ps, na.rm=T)], digits=3), " (", round(andy.plot[seg.F=="E",quantile(rel.gain.ps, probs=c(0.05))], 3), "-", round(andy.plot[seg.F=="E",quantile(rel.gain.ps, probs=c(0.95))], 3), ")", sep="")` MgC per MgC/ha, corresponding to median edge biomass denstiy of `r paste(round(andy.plot[seg.F=="E",median(biom.MgC.ha, na.rm=T)], digits=1), " (", round(andy.plot[seg.F=="E",quantile(biom.MgC.ha, probs=c(0.05))], 1), "-", round(andy.plot[seg.F=="E",quantile(biom.MgC.ha, probs=c(0.95))], 1), ")", sep="")` MgC/ha. In contrast, in interior biomass median areal growth rate was `r paste(round(andy.plot[seg.F=="I",median(rel.gain.ps, na.rm=T)], digits=3), " (", round(andy.plot[seg.F=="I",quantile(rel.gain.ps, probs=c(0.05))], 3), "-", round(andy.plot[seg.F=="I",quantile(rel.gain.ps, probs=c(0.95))], 3), ")", sep="")` MgC per MgC/ha, corresponding to median interior biomass denstiy of `r paste(round(andy.plot[seg.F=="I",median(biom.MgC.ha, na.rm=T)], digits=1), " (", round(andy.plot[seg.F=="I",quantile(biom.MgC.ha, probs=c(0.05))], 1), "-", round(andy.plot[seg.F=="I",quantile(biom.MgC.ha, probs=c(0.95))], 1), ")", sep="")` MgC/ha.
 
+Stem growth rate was fastest in street trees, with median annual growth rate of `r round(street[record.good==1 & dbh.2006>5, median(npp.ann.rel, na.rm=T)], digits=3)` kg/kg corresponding to median DBH of `r round(street[record.good==1 & dbh.2006>5, median(dbh.2006, na.rm=T)], digits=1)`. As in the other tree stem samples, the best fit model for street tree stem growth (RSE `r round(mstreet$sigma, 3)`) showed a significant negative relationship with log-DBH (p<`r p.fixer(mstreet$coefficients[2,4])`). The sampling design of the street tree survey did not allow for these growth rates to be estimated on an areal basis as in the rural- and urban-forest samples, necessitating the simulation of indvidual stem assemblages to approximate biomass and productivity by cell across the study area. *Is it worth presenting some aggregate stats on the simulated street tree results here?*
 
-The best model for stem growth in urban forest ($e^{a+b \times \log{DBH}+c[interior]}$, random slope and intercept estimated for sample plot, year interval, and stem) had coefficients of *a* = `r round(s.andy$coefficients[1,1], 3)` (SE `r round(s.andy$coefficients[1,2], 3)`), a significant effect for DBH (*b* = `r round(s.andy$coefficients[2,1], 3)` (SE `r round(s.andy$coefficients[2,2], 3)`), p<`r p.fixer(p.andy[2,4])`) and a negative correction for interior-grown trees (*c* = `r round(s.andy$coefficients[3,1], 3)` (SE `r round(s.andy$coefficients[3,2], 3)`), p<`r p.fixer(p.andy[3,4])`)
-
-
-The best mixed model for street trees showed the highest median annual growth rate of `r round(street[record.good==1 & dbh.2006>5, median(npp.ann.rel, na.rm=T)], digits=3)` kg/kg corresponding to median DBH of `r round(street[record.good==1 & dbh.2006>5, median(dbh.2006, na.rm=T)], digits=1)`. The range and median stem DBH in each sample context were similar, but the street tree sample included very few conifers and a relatively large fraction of non-native taxa, primarily deciduous hardwoods including members of *Gleditsia*, *Zelkova* and *Pyrus*.
+**Context** How things compare to other measured rates in literature etc. The range and median stem DBH in each sample context were similar, but the street tree sample included very few conifers and a relatively large fraction of non-native taxa, primarily deciduous hardwoods including members of *Gleditsia*, *Zelkova* and *Pyrus*.
 
 ```{r fig_2, echo=FALSE, out.width='100%'}
 knitr::include_graphics('E:/FragEVI/images/Fig2A_stem-dbh-growth_mono_logxform.png')
 ```
 
+```{r fig_S1, echo=FALSE, out.width='66%'}
+knitr::include_graphics('E:/FragEVI/images/FigS1_plot_level_growth.png')
+```
 
 
