@@ -457,6 +457,7 @@ plot(g$biom, g$rel.gain.ps, col=as.numeric(g$seg), xlab="total plot biomass", ma
 ## log-log
 summary(lm(log(g$rel.gain.ps)~log(biom.MgC.ha), data=g)) ## R2 0.1, barely significant
 andy.plot.mod <- summary(lm(log(rel.gain.ps)~log(biom.MgC.ha)*seg.F, data=g)) ## R2 0.75, all factors sig
+
 # linear
 andy.plot.mod.lin <- summary(lm(rel.gain.ps~biom.MgC.ha+seg.F, data=g)) #R2 0.67, only biom*edge not significant
 summary(lm(rel.gain.ps~biom.MgC.ha*seg.F, data=g)) # contrast R2=0.67, only biom*edge not significant
@@ -488,6 +489,9 @@ lines(test, andy.plot.mod.lin$coefficients[1]+andy.plot.mod.lin$coefficients[3]+
 ### the exponential fits fine but it gets v. nonlinear right in the low range of biomass density in edge pixels
 ### the linear is more modest about edge growth at low density, but doesn't fit as well and extrapolates to unrealistically low in interior forest at high biomass
 ### propose a compromise: Use the exponential fit and apply a cap on edge plots below the lowest density recorded = predicted productivity at that level
+
+### this linear model is the (current) final operative regression
+### saved as processed/andy.plot.model.final
 
 
 ###### 
@@ -522,7 +526,12 @@ lines(test, andy.plot.mod.lin$coefficients[1]+andy.plot.mod.lin$coefficients[3]+
 
 ### convert to 1m edge biomass map to 30m aggregate (arcpy)
 
-### now working in the 30m space
+### andy plot-level data for model specification
+g <- as.data.table(read.csv("processed/andy.plot.groomed.csv"))
+
+load("processed/mod.andy.plot.final.sav")
+
+### load up 30m data
 biom <- raster("processed/boston/bos.biom30m.tif")
 aoi <- raster("processed/boston/bos.aoi30m.tif")
 biom <- crop(biom, aoi)
@@ -541,7 +550,7 @@ biom.dat <- cbind(biom.dat, aoi.dat, ed.can.dat, can.dat, ed.biom.dat, isa.dat)
 biom.dat[,pix.ID:=seq(1:dim(biom.dat)[1])]
 names(biom.dat) <- c("biom", "aoi", "ed.can", "can", "ed.biom", "isa", "pix.ID")
 
-## figure out the relative area of interior forestcanopy in each cell
+## figure out the relative area of interior forest canopy in each cell
 biom.dat[,int.can:=can-ed.can]
 biom.dat[,range(int.can, na.rm=T)] ## includes negative numbers
 biom.dat[int.can<0, length(int.can)] ## 112, some are rounding errors
@@ -551,8 +560,7 @@ biom.dat[biom==0, ed.can:=0]
 biom.dat[is.na(biom), ed.can:=NA]
 biom.dat[is.na(biom), int.can:=NA]
 biom.dat[int.can<0 & int.can>(-0.01), int.can:=0] ## kill rounding errors
-biom.dat[,int.can:=can-ed.can]
-# biom.dat[int.can<0, length(int.can)] ## 31
+# biom.dat[int.can<0, length(int.can)] ## 13
 # View(biom.dat[int.can<0,]) ## all areas with 0 or partial forest, places with forest biom>0 are 100% edge biomass
 # biom.dat[ed.biom==forest.biom & int.can>0,]
 # biom.dat[ed.can>can, ] ## almost all partial pixels, usually forest edge is 100% of forest biomass, seem like minor disagreements in canopy area figuring
@@ -565,65 +573,69 @@ biom.dat[ed.can>can, int.can:=0]
 biom.dat[,int.biom:=biom-ed.biom] # internal forest biomass
 # biom.dat[,range(int.biom, na.rm=T)] ## 0-51k 
 # biom.dat[,range(ed.biom, na.rm=T)] ## 0-31k (so the peak biomass cells are deep forest somewhere)
-hist(biom.dat[aoi>800, int.biom])
-hist(biom.dat[aoi>800, ed.biom])
+# hist(biom.dat[aoi>800, int.biom])
+# hist(biom.dat[aoi>800, ed.biom])
 
 ### range of edge and interior biomass, in Mg-biomass/ha
 biom.dat[aoi>800, range(ed.biom, na.rm=T)] ## in kg/cell
-biom.dat[aoi>800, ed.biom.Mgbiom:=(ed.biom/1000)]
-biom.dat[aoi>800, ed.biom.Mgbiom.ha.can:=(ed.biom.Mgbiom/(aoi*ed.can))*1E4]
-biom.dat[aoi>800 & ed.can<0.005, ed.biom.Mgbiom.ha.can:=0]
-hist(biom.dat[aoi>800 & ed.biom.Mgbiom.ha.can>0, ed.biom.Mgbiom.ha.can])
-biom.dat[aoi>800, quantile(ed.biom.Mgbiom.ha.can, probs=c(0.05, 0.95), na.rm=T)]
-biom.dat[aoi>800, range(ed.biom.Mgbiom.ha.can, na.rm=T)]
+biom.dat[aoi>800, ed.biom.MgC:=(ed.biom/2000)]
+biom.dat[aoi>800, ed.biom.MgC.ha.can:=(ed.biom.MgC/(aoi*ed.can))*1E4]
+biom.dat[aoi>800 & ed.can<0.005, ed.biom.MgC.ha.can:=0]
+hist(biom.dat[aoi>800 & ed.biom.MgC.ha.can>0, ed.biom.MgC.ha.can])
+biom.dat[aoi>800, quantile(ed.biom.MgC.ha.can, probs=c(0.05, 0.95), na.rm=T)]
+biom.dat[aoi>800, range(ed.biom.MgC.ha.can, na.rm=T)]
 ## what fraction below 100 but still there?
-biom.dat[aoi>800 & ed.biom.Mgbiom.ha.can<=100 & ed.biom.Mgbiom.ha.can>5 & !is.na(ed.biom.Mgbiom.ha.can), length(ed.biom.Mgbiom.ha.can)]/biom.dat[aoi>800 & !is.na(ed.biom.Mgbiom.ha.can), length(ed.biom.Mgbiom.ha.can)]
-## 28%
+biom.dat[aoi>800 & ed.biom.MgC.ha.can<=100 & ed.biom.MgC.ha.can>5 & !is.na(ed.biom.MgC.ha.can), length(ed.biom.MgC.ha.can)]/biom.dat[aoi>800 & !is.na(ed.biom.MgC.ha.can), length(ed.biom.MgC.ha.can)]
+## 63% below 100 MgC/ha-can
 
 biom.dat[aoi>800, range(int.biom, na.rm=T)] ## in kg/cell
-biom.dat[aoi>800, int.biom.Mgbiom:=(int.biom/1000)]
-biom.dat[aoi>800, int.biom.Mgbiom.ha.can:=(int.biom.Mgbiom/(aoi*int.can))*1E4]
-biom.dat[aoi>800 & int.can<0.005, int.biom.Mgbiom.ha.can:=0]
-hist(biom.dat[aoi>800 & int.biom.Mgbiom.ha.can>0, int.biom.Mgbiom.ha.can])
-biom.dat[aoi>800, quantile(int.biom.Mgbiom.ha.can, probs=c(0.05, 0.95), na.rm=T)]
-biom.dat[aoi>800, range(int.biom.Mgbiom.ha.can, na.rm=T)]
-biom.dat[aoi>800 & int.biom.Mgbiom.ha.can<=100 & int.biom.Mgbiom.ha.can>5 & !is.na(int.biom.Mgbiom.ha.can), length(int.biom.Mgbiom.ha.can)]/biom.dat[aoi>800 & !is.na(int.biom.Mgbiom.ha.can), length(int.biom.Mgbiom.ha.can)]
-## <1%
+biom.dat[aoi>800, int.biom.MgC:=(int.biom/2000)]
+biom.dat[aoi>800, int.biom.MgC.ha.can:=(int.biom.MgC/(aoi*int.can))*1E4]
+biom.dat[aoi>800 & int.can<0.005, int.biom.MgC.ha.can:=0]
+hist(biom.dat[aoi>800 & int.biom.MgC.ha.can>0, int.biom.MgC.ha.can])
+biom.dat[aoi>800, quantile(int.biom.MgC.ha.can, probs=c(0.05, 0.95), na.rm=T)]
+biom.dat[aoi>800, range(int.biom.MgC.ha.can, na.rm=T)]
+biom.dat[aoi>800 & int.biom.MgC.ha.can<=100 & int.biom.MgC.ha.can>5 & !is.na(int.biom.MgC.ha.can), length(int.biom.MgC.ha.can)]/biom.dat[aoi>800 & !is.na(int.biom.MgC.ha.can), length(int.biom.MgC.ha.can)]
+## 4% is below 100 MgC/ha-can
 
-### ANDY NPP CALC 0: USE MEAN GROWTH RATE FOR EDGE/INTERIOR
-andy.dbh <- read.csv("processed/andy.dbh.proc.results.csv")
-andy.dbh <- as.data.table(andy.dbh)
-g <- andy.dbh[, .(sum(growth.kg), sum(growth.kg.ps), sum(biom)), by=.(seg, Plot.ID)] ## total biomass gain and total biomass for each plot
-names(g)[3:5] <- c("growth.kg", "growth.kg.ps", "biom")
-g[,rel.gain:=growth.kg/biom] ## kg/kg growth rate judging from avg.dbh~growth stem data
-g[,rel.gain.ps:=growth.kg.ps/biom] ## kg/kg growth rate as determined from pseudoreplicated stem data
-g[seg==10, seg.F:="E"]
-g[seg!=10, seg.F:="I"]
-g$seg.F <- as.factor(g$seg.F)
-g[,biom.Mg.ha:=(biom/(10*20))/1000*1E4] ## get things in a standard biomass density Mg.ha based on plot size (already at 100% canopy in these plots)
 
-### apply the growth factors from avg.dbh analysis to the edge/interior biomass fractions
-edint.fact <- g[,mean(rel.gain), by=seg.F] ## 4.29% edge vs. 2.85% interior, annual gain on biomass per edge category
-g[,mean(rel.gain.ps), by=seg.F] ## contrast 3.1% edge vs. 2.2% interior based on pseudorep model for stem growth
-biom.dat[,npp.edge:=ed.biom*edint.fact[seg.F=="E", V1]] ## apply growth of edge trees to edge biomass
-biom.dat[,npp.int:=int.biom*edint.fact[seg.F=="I", V1]] ## apply growth of interior trees to interior biomass
-biom.dat[,npp.tot:=npp.edge+npp.int]
-biom.dat[,range(npp.tot, na.rm=T)] ## 0 1465 kg biomass/cell/yr
-biom.dat[,npp.tot.MgC.ha:=((npp.tot*1E-3*(1/2))/aoi)*1E4]
-biom.dat[aoi>800, range(npp.tot.MgC.ha, na.rm=T)] ### up to ~8 MgC/ha
-biom.dat[aoi>800, sum(npp.tot, na.rm=T)]/(2*1000) ##13.7k tC
-biom.dat[aoi>800, (sum(npp.tot, na.rm=T)/(2*1000))/sum(aoi, na.rm=T)]*1E4 ## mean of 1.12 tC/ha
 
-### same for growth factors derived from pseudorep analysis
-edint.fact.ps <- g[,mean(rel.gain.ps), by=seg.F] ## 3.91% edge vs. 2.74% interior, annual gain on biomass per edge category
-biom.dat[,npp.edge.ps:=ed.biom*edint.fact.ps[seg.F=="E", V1]] ## apply growth of edge trees to edge biomass
-biom.dat[,npp.int.ps:=int.biom*edint.fact.ps[seg.F=="I", V1]] ## apply growth of interior trees to interior biomass
-biom.dat[,npp.tot.ps:=npp.edge.ps+npp.int.ps]
-biom.dat[,range(npp.tot.ps, na.rm=T)] ## 0 1122 kg biomass/cell/yr
-biom.dat[,npp.tot.ps.MgC.ha:=((npp.tot.ps*1E-3*(1/2))/aoi)*1E4]
-biom.dat[aoi>800, range(npp.tot.ps.MgC.ha, na.rm=T)] ## up to ~6 MgC/ha
-biom.dat[aoi>800, sum(npp.tot.ps, na.rm=T)/(2*1000)] ## 10.1 tC
-biom.dat[aoi>800, (sum(npp.tot.ps, na.rm=T)/(2*1000))/sum(aoi, na.rm=T)]*1E4 ### 0.82 tC/ha
+
+
+# ### ANDY NPP CALC 0: USE MEAN GROWTH RATE FOR EDGE/INTERIOR
+# andy.dbh <- read.csv("processed/andy.dbh.proc.results.csv")
+# andy.dbh <- as.data.table(andy.dbh)
+# g <- andy.dbh[, .(sum(growth.kg), sum(growth.kg.ps), sum(biom)), by=.(seg, Plot.ID)] ## total biomass gain and total biomass for each plot
+# names(g)[3:5] <- c("growth.kg", "growth.kg.ps", "biom")
+# g[,rel.gain:=growth.kg/biom] ## kg/kg growth rate judging from avg.dbh~growth stem data
+# g[,rel.gain.ps:=growth.kg.ps/biom] ## kg/kg growth rate as determined from pseudoreplicated stem data
+# g[seg==10, seg.F:="E"]
+# g[seg!=10, seg.F:="I"]
+# g$seg.F <- as.factor(g$seg.F)
+# g[,biom.Mg.ha:=(biom/(10*20))/1000*1E4] ## get things in a standard biomass density Mg.ha based on plot size (already at 100% canopy in these plots)
+# 
+# ### apply the growth factors from avg.dbh analysis to the edge/interior biomass fractions
+# edint.fact <- g[,mean(rel.gain), by=seg.F] ## 4.29% edge vs. 2.85% interior, annual gain on biomass per edge category
+# g[,mean(rel.gain.ps), by=seg.F] ## contrast 3.1% edge vs. 2.2% interior based on pseudorep model for stem growth
+# biom.dat[,npp.edge:=ed.biom*edint.fact[seg.F=="E", V1]] ## apply growth of edge trees to edge biomass
+# biom.dat[,npp.int:=int.biom*edint.fact[seg.F=="I", V1]] ## apply growth of interior trees to interior biomass
+# biom.dat[,npp.tot:=npp.edge+npp.int]
+# biom.dat[,range(npp.tot, na.rm=T)] ## 0 1465 kg biomass/cell/yr
+# biom.dat[,npp.tot.MgC.ha:=((npp.tot*1E-3*(1/2))/aoi)*1E4]
+# biom.dat[aoi>800, range(npp.tot.MgC.ha, na.rm=T)] ### up to ~8 MgC/ha
+# biom.dat[aoi>800, sum(npp.tot, na.rm=T)]/(2*1000) ##13.7k tC
+# biom.dat[aoi>800, (sum(npp.tot, na.rm=T)/(2*1000))/sum(aoi, na.rm=T)]*1E4 ## mean of 1.12 tC/ha
+# 
+# ### same for growth factors derived from pseudorep analysis
+# edint.fact.ps <- g[,mean(rel.gain.ps), by=seg.F] ## 3.91% edge vs. 2.74% interior, annual gain on biomass per edge category
+# biom.dat[,npp.edge.ps:=ed.biom*edint.fact.ps[seg.F=="E", V1]] ## apply growth of edge trees to edge biomass
+# biom.dat[,npp.int.ps:=int.biom*edint.fact.ps[seg.F=="I", V1]] ## apply growth of interior trees to interior biomass
+# biom.dat[,npp.tot.ps:=npp.edge.ps+npp.int.ps]
+# biom.dat[,range(npp.tot.ps, na.rm=T)] ## 0 1122 kg biomass/cell/yr
+# biom.dat[,npp.tot.ps.MgC.ha:=((npp.tot.ps*1E-3*(1/2))/aoi)*1E4]
+# biom.dat[aoi>800, range(npp.tot.ps.MgC.ha, na.rm=T)] ## up to ~6 MgC/ha
+# biom.dat[aoi>800, sum(npp.tot.ps, na.rm=T)/(2*1000)] ## 10.1 tC
+# biom.dat[aoi>800, (sum(npp.tot.ps, na.rm=T)/(2*1000))/sum(aoi, na.rm=T)]*1E4 ### 0.82 tC/ha
 
 
 #### ANDY NPP CALC 1: APPLY PLOT-LEVEL MODEL OF growth~biomass*Edge
@@ -632,90 +644,111 @@ biom.dat[aoi>800, (sum(npp.tot.ps, na.rm=T)/(2*1000))/sum(aoi, na.rm=T)]*1E4 ###
 ### because growth~biomass density was determined in closed-canopy systems, and biomass density as a predictor was determined based on the plot area being totally canopy covered
 ### To apply the model to partially-forested pixels, we area calculating pixel biomass density on basis of canopy coverage area per cell
 
-### apply EXPONENTIAL model to the biomass data
-andy.growth.log.edge <- lm(log(g$rel.gain.ps)~log(biom.Mg.ha)*seg.F, data=g) ## R2 0.75, sig
-### not that this model is specified on the biomass density in g, i.e. in full canopy Andy forest plots (does not require canopy area correction)
-andy.plot.mod <- summary(andy.growth.log.edge)
-### use model to determine growth factor for edge and interior biomass fraction of each pixel
-### determine growth factor for edge biomass
-biom.dat[,edge.mod.factor:=exp(andy.plot.mod$coefficients[1]+(andy.plot.mod$coefficients[2]*log(ed.biom.Mgbiom.ha.can)))] ## apply growth model for edge to edge biomass density CORRECTED FOR CANOPY AREA
-biom.dat[ed.biom.Mgbiom.ha.can<0.1, edge.mod.factor:=0] ## anything without less than about 9 kg biomass/cell gets 0 factor
-summary(biom.dat[aoi>800, edge.mod.factor]) ## 2.7 to 6% in middle quartiles, 0-1.37
-### new hotness: cap the exponential prediction in low-density edge pixels
-biom.dat[,edge.mod.factor.cap:=edge.mod.factor]
-edge.cap <- exp(andy.plot.mod$coefficients[1]+(andy.plot.mod$coefficients[2]*log(g[seg.F=="E",min(biom.Mg.ha)])))
-biom.dat[edge.mod.factor.cap>=edge.cap, edge.mod.factor.cap:=edge.cap]
-summary(biom.dat[aoi>800, edge.mod.factor.cap]) ## reduces the median somewhat, cuts the top end
-## compare
-hist(biom.dat[aoi>800 & edge.mod.factor>0, edge.mod.factor])
-hist(biom.dat[aoi>800 & edge.mod.factor.cap>0, edge.mod.factor.cap]) ## this will have the effect of treating most edge forest as a static factor
-biom.dat[aoi>800 & edge.mod.factor<0.001, length(edge.mod.factor)] ## 33052 register as 0 growth
-biom.dat[aoi>800 & edge.mod.factor.cap<0.001, length(edge.mod.factor.cap)] ## 33052 register as 0 growth
-### determine growth factor in interior biomass
-biom.dat[,int.mod.factor:=exp(andy.plot.mod$coefficients[1]+andy.plot.mod$coefficients[3]+((andy.plot.mod$coefficients[2]+andy.plot.mod$coefficients[4])*log(int.biom.Mgbiom.ha.can)))] ## apply growth model for interior growth to interior biomass density
-biom.dat[int.biom.Mgbiom.ha.can<0.1, int.mod.factor:=0] ## anything without less than about 9 kg biomass/cell gets 0 factor
-summary(biom.dat[aoi>800 & int.biom.Mgbiom.ha.can>0, int.mod.factor]) ## in the range of 2%
-hist(biom.dat[aoi>800 & int.biom.Mgbiom.ha.can>0, int.mod.factor]) ## for that minority of cells with lots of interior biomass, below about 2.5
-### kill a tiny number of dipshit high interior growth factors
-int.cap <- exp(andy.plot.mod$coefficients[1]+andy.plot.mod$coefficients[3]+(andy.plot.mod$coefficients[2]*log(g[seg.F=="I",min(biom.Mg.ha)]))+(andy.plot.mod$coefficients[4]*log(g[seg.F=="I",min(biom.Mg.ha)])))
-biom.dat[int.mod.factor>=int.cap, int.mod.factor:=int.cap]
-summary(biom.dat[aoi>800 & int.mod.factor>0, int.mod.factor]) ## reduces the median somewhat, cuts the top end
+# ### apply EXPONENTIAL model to the biomass data
+# andy.growth.log.edge <- lm(log(g$rel.gain.ps)~log(biom.Mg.ha)*seg.F, data=g) ## R2 0.75, sig
+# ### not that this model is specified on the biomass density in g, i.e. in full canopy Andy forest plots (does not require canopy area correction)
+# andy.plot.mod <- summary(andy.growth.log.edge)
+# ### use model to determine growth factor for edge and interior biomass fraction of each pixel
+# ### determine growth factor for edge biomass
+# biom.dat[,edge.mod.factor:=exp(andy.plot.mod$coefficients[1]+(andy.plot.mod$coefficients[2]*log(ed.biom.MgC.ha.can)))] ## apply growth model for edge to edge biomass density CORRECTED FOR CANOPY AREA
+# biom.dat[ed.biom.Mgbiom.ha.can<0.1, edge.mod.factor:=0] ## anything without less than about 9 kg biomass/cell gets 0 factor
+# summary(biom.dat[aoi>800, edge.mod.factor]) ## 2.7 to 6% in middle quartiles, 0-1.37
+# ### new hotness: cap the exponential prediction in low-density edge pixels
+# biom.dat[,edge.mod.factor.cap:=edge.mod.factor]
+# edge.cap <- exp(andy.plot.mod$coefficients[1]+(andy.plot.mod$coefficients[2]*log(g[seg.F=="E",min(biom.Mg.ha)])))
+# biom.dat[edge.mod.factor.cap>=edge.cap, edge.mod.factor.cap:=edge.cap]
+# summary(biom.dat[aoi>800, edge.mod.factor.cap]) ## reduces the median somewhat, cuts the top end
+# ## compare
+# hist(biom.dat[aoi>800 & edge.mod.factor>0, edge.mod.factor])
+# hist(biom.dat[aoi>800 & edge.mod.factor.cap>0, edge.mod.factor.cap]) ## this will have the effect of treating most edge forest as a static factor
+# biom.dat[aoi>800 & edge.mod.factor<0.001, length(edge.mod.factor)] ## 33052 register as 0 growth
+# biom.dat[aoi>800 & edge.mod.factor.cap<0.001, length(edge.mod.factor.cap)] ## 33052 register as 0 growth
+# ### determine growth factor in interior biomass
+# biom.dat[,int.mod.factor:=exp(andy.plot.mod$coefficients[1]+andy.plot.mod$coefficients[3]+((andy.plot.mod$coefficients[2]+andy.plot.mod$coefficients[4])*log(int.biom.Mgbiom.ha.can)))] ## apply growth model for interior growth to interior biomass density
+# biom.dat[int.biom.Mgbiom.ha.can<0.1, int.mod.factor:=0] ## anything without less than about 9 kg biomass/cell gets 0 factor
+# summary(biom.dat[aoi>800 & int.biom.Mgbiom.ha.can>0, int.mod.factor]) ## in the range of 2%
+# hist(biom.dat[aoi>800 & int.biom.Mgbiom.ha.can>0, int.mod.factor]) ## for that minority of cells with lots of interior biomass, below about 2.5
+# ### kill a tiny number of dipshit high interior growth factors
+# int.cap <- exp(andy.plot.mod$coefficients[1]+andy.plot.mod$coefficients[3]+(andy.plot.mod$coefficients[2]*log(g[seg.F=="I",min(biom.Mg.ha)]))+(andy.plot.mod$coefficients[4]*log(g[seg.F=="I",min(biom.Mg.ha)])))
+# biom.dat[int.mod.factor>=int.cap, int.mod.factor:=int.cap]
+# summary(biom.dat[aoi>800 & int.mod.factor>0, int.mod.factor]) ## reduces the median somewhat, cuts the top end
 
 
 ### similarly, apply LINEAR model to biomass data
-andy.growth.lin.edge <- lm(rel.gain.ps~biom.Mg.ha+seg.F, data=g) #R2 0.67, only biom*edge not significant
-andy.plot.mod.lin <- summary(andy.growth.lin.edge)
+andy.plot.mod.lin <- summary(mod.andy.plot.final)
+
+### additional safety filter: Cut off anything above or below its respective empirical range
+cutoff.edge.hi <- andy.plot.mod.lin$coefficients[1]+(andy.plot.mod.lin$coefficients[2]*g[,min(biom.MgC.ha)])
+cutoff.edge.low <- andy.plot.mod.lin$coefficients[1]+(andy.plot.mod.lin$coefficients[2]*g[,max(biom.MgC.ha)])
+cutoff.int.hi <- andy.plot.mod.lin$coefficients[1]+(andy.plot.mod.lin$coefficients[2]*g[,min(biom.MgC.ha)])+andy.plot.mod.lin$coefficients[3]
+# cutoff.int.low <- andy.plot.mod.lin$coefficients[1]+(andy.plot.mod.lin$coefficients[2]*g[,max(biom.MgC.ha)])+andy.plot.mod.lin$coefficients[3] ## this is not restrictive, extrapolates past empirical range
+cutoff.int.low <- g[seg.F=="I", min(rel.gain.ps)]
+  
 ### use model to determine growth factor for edge and interior biomass fraction of each pixel
 ### determine growth factor for edge biomass
-biom.dat[,edge.mod.factor.lin:=andy.plot.mod.lin$coefficients[1]+(andy.plot.mod.lin$coefficients[2]*ed.biom.Mgbiom.ha.can)] ## apply growth model for edge to edge biomass density CORRECTED FOR CANOPY AREA
-biom.dat[ed.biom.Mgbiom.ha.can<0.1, edge.mod.factor.lin:=0] ## anything without less than about 9 kg biomass/cell gets 0 factor
-summary(biom.dat[aoi>800 & ed.biom.Mgbiom.ha.can, edge.mod.factor.lin]) ## 3.5 to 3.7 in middle quartiles, 2-4.3
+biom.dat[,edge.mod.factor.lin:=andy.plot.mod.lin$coefficients[1]+(andy.plot.mod.lin$coefficients[2]*ed.biom.MgC.ha.can)] ## apply growth model for edge to edge biomass density CORRECTED FOR CANOPY AREA
+biom.dat[ed.biom.MgC.ha.can<0.1, edge.mod.factor.lin:=0] ## anything without less than about 9 kg biomass/cell gets 0 factor
+summary(biom.dat[aoi>800 & ed.biom.MgC.ha.can>0, edge.mod.factor.lin]) ## 3.5 to 3.7 in middle quartiles, 2-4.3
+hist(biom.dat[aoi>800 & ed.biom.MgC.ha.can>0, edge.mod.factor.lin])
+### clip the range to the modeled values at min/max of empirical range
+biom.dat[edge.mod.factor.lin>cutoff.edge.hi, edge.mod.factor.lin:=cutoff.edge.hi]
+biom.dat[edge.mod.factor.lin<cutoff.edge.low, edge.mod.factor.lin:=cutoff.edge.low]
+biom.dat[ed.biom.MgC.ha.can<0.1, edge.mod.factor.lin:=0] ## reimpose the minimum density cutoff for any productivity
+hist(biom.dat[aoi>800 & ed.biom.MgC.ha.can>0, edge.mod.factor.lin])
+summary(biom.dat[aoi>800 & ed.biom.MgC.ha.can>0, edge.mod.factor.lin]) ## slight reduction at the >3rd quartile
+
 ### determine growth factor in interior biomass
-biom.dat[,int.mod.factor.lin:=andy.plot.mod.lin$coefficients[1]+andy.plot.mod.lin$coefficients[3]+(andy.plot.mod.lin$coefficients[2]*int.biom.Mgbiom.ha.can)] ## apply growth model for interior growth to interior biomass density
-biom.dat[int.biom.Mgbiom.ha.can<0.1, int.mod.factor.lin:=0] ## anything without less than about 9 kg biomass/cell gets 0 factor
-summary(biom.dat[aoi>800 & int.biom.Mgbiom.ha.can>0, int.mod.factor.lin]) ## 1.6 to 2.2, range 0.5 to 3.0
-hist(biom.dat[aoi>800 & int.biom.Mgbiom.ha.can>0, int.mod.factor]) ## for that minority of cells with lots of interior biomass, below about 2.5
+biom.dat[,int.mod.factor.lin:=andy.plot.mod.lin$coefficients[1]+andy.plot.mod.lin$coefficients[3]+(andy.plot.mod.lin$coefficients[2]*int.biom.MgC.ha.can)] ## apply growth model for interior growth to interior biomass density
+biom.dat[int.biom.MgC.ha.can<0.1, int.mod.factor.lin:=0] ## anything without less than about 9 kg biomass/cell gets 0 factor
+summary(biom.dat[aoi>800 & int.biom.MgC.ha.can>0, int.mod.factor.lin]) ## 1.6 to 2.2, range 0.5 to 3.0
+hist(biom.dat[aoi>800 & int.biom.MgC.ha.can>0, int.mod.factor.lin]) ## normal, centered on 2%
+## clip the range as above
+biom.dat[int.mod.factor.lin>cutoff.int.hi, int.mod.factor.lin:=cutoff.int.hi]
+biom.dat[int.mod.factor.lin<cutoff.int.low, int.mod.factor.lin:=cutoff.int.low]
+biom.dat[int.biom.MgC.ha.can<0.1, int.mod.factor.lin:=0] ## reimpose the minimum density cutoff for any productivity
+summary(biom.dat[aoi>800 & int.biom.MgC.ha.can>0, int.mod.factor.lin]) ## 1.6 to 2.2, range 0.5 to 2.6, brings a lot of low-end up
+hist(biom.dat[aoi>800 & int.biom.MgC.ha.can>0, int.mod.factor.lin]) ## huge number of minimums now
 
 ### interrim diagnostics
-biom.dat[aoi>800 & int.biom.Mgbiom.ha.can>0.1, length(int.biom.Mgbiom.ha.can)] ## only 24k cells have meaningful interior biomass
-hist(biom.dat[aoi>800 & int.biom.Mgbiom.ha.can>0.1, int.biom.Mgbiom.ha.can]) ## that interior forest is pretty beefy, peaks 300 Mg/ha
-hist(biom.dat[aoi>800 & ed.biom.Mgbiom.ha.can>0.1, ed.biom.Mgbiom.ha.can]) ## in contrast, the edge biomass tends to be less beefy, peaks about 100 Mg/ha
+biom.dat[aoi>800 & int.biom.MgC.ha.can>0.1, length(int.biom.MgC.ha.can)] ## only 24k cells have meaningful interior biomass
+hist(biom.dat[aoi>800 & int.biom.MgC.ha.can>0.1, int.biom.MgC.ha.can]) ## that interior forest is pretty beefy, peaks 300 Mg/ha
+hist(biom.dat[aoi>800 & ed.biom.MgC.ha.can>0.1, ed.biom.MgC.ha.can]) ## in contrast, the edge biomass tends to be less beefy, peaks about 100 Mg/ha
 
-### static factor estimated NPP
-biom.dat[,npp.edge.mod:=ed.biom*edge.mod.factor] ## apply growth of edge trees to edge biomass
-biom.dat[,npp.edge.mod.cap:=ed.biom*edge.mod.factor.cap] ## apply alternative capped edge factor
+### Gin up NPP estimates based on biomass and growth factor (these results in kg-biomass)
+# biom.dat[,npp.edge.mod:=ed.biom*edge.mod.factor] ## apply growth of edge trees to edge biomass
+# biom.dat[,npp.edge.mod.cap:=ed.biom*edge.mod.factor.cap] ## apply alternative capped edge factor
 biom.dat[,npp.edge.mod.lin:=ed.biom*edge.mod.factor.lin] ## apply linear model edge growth factor
-biom.dat[,npp.int.mod:=int.biom*int.mod.factor] ## apply growth of interior trees to interior biomass
+# biom.dat[,npp.int.mod:=int.biom*int.mod.factor] ## apply growth of interior trees to interior biomass
 biom.dat[,npp.int.mod.lin:=int.biom*int.mod.factor.lin] ## apply linear model of interior growth factor
-biom.dat[,npp.tot.mod:=npp.edge.mod+npp.int.mod]
-biom.dat[,npp.tot.mod.cap:=npp.edge.mod.cap+npp.int.mod]
+# biom.dat[,npp.tot.mod:=npp.edge.mod+npp.int.mod]
+# biom.dat[,npp.tot.mod.cap:=npp.edge.mod.cap+npp.int.mod]
 biom.dat[,npp.tot.mod.lin:=npp.edge.mod.lin+npp.int.mod.lin]
 
 ## range of estimated NPP, different approaches
-biom.dat[,range(npp.tot, na.rm=T)] ## 0 1465 kg biomass/cell yr, static avg.dbh factors
-biom.dat[,range(npp.tot.ps, na.rm=T)] ## 0 1122 kg biomass/cell/yr, static pseudorep factors
-biom.dat[,range(npp.tot.mod, na.rm=T)] ## 0 848 kg biomass/cell/yr, exponential model
-biom.dat[,range(npp.tot.mod.cap, na.rm=T)] ## 0 848 kg biomass/cell/yr, exponential model, capped
-biom.dat[,range(npp.tot.mod.lin, na.rm=T)] ## 0 833 kg biomass/cell/yr, linear model
+# biom.dat[,range(npp.tot, na.rm=T)] ## 0 1465 kg biomass/cell yr, static avg.dbh factors
+# biom.dat[,range(npp.tot.ps, na.rm=T)] ## 0 1122 kg biomass/cell/yr, static pseudorep factors
+# biom.dat[,range(npp.tot.mod, na.rm=T)] ## 0 848 kg biomass/cell/yr, exponential model
+# biom.dat[,range(npp.tot.mod.cap, na.rm=T)] ## 0 848 kg biomass/cell/yr, exponential model, capped
+biom.dat[,range(npp.tot.mod.lin, na.rm=T)] ## new filters: 0-853 kg biomass/cell; old filters 0 833 kg biomass/cell/yr, linear model
 
-summary(biom.dat$npp.tot.mod)
-summary(biom.dat$npp.tot.mod.cap) ## lowers the median a fair bit
-summary(biom.dat$npp.tot.ps) ## but still a bit higher median than the static factors 
+# summary(biom.dat$npp.tot.mod)
+# summary(biom.dat$npp.tot.mod.cap) ## lowers the median a fair bit
+# summary(biom.dat$npp.tot.ps) ## but still a bit higher median than the static factors 
 summary(biom.dat$npp.tot.mod.lin) ## really similar to the capped exponential model, but cleaner
-biom.dat[,npp.tot.mod.MgC.ha:=((npp.tot.mod*1E-3*(1/2))/aoi)*1E4]
-biom.dat[,npp.tot.mod.cap.MgC.ha:=((npp.tot.mod.cap*1E-3*(1/2))/aoi)*1E4]
+# biom.dat[,npp.tot.mod.MgC.ha:=((npp.tot.mod*1E-3*(1/2))/aoi)*1E4]
+# biom.dat[,npp.tot.mod.cap.MgC.ha:=((npp.tot.mod.cap*1E-3*(1/2))/aoi)*1E4]
 biom.dat[,npp.tot.mod.lin.MgC.ha:=((npp.tot.mod.lin*1E-3*(1/2))/aoi)*1E4]
 
 
-## uncapped model
-biom.dat[aoi>800, range(npp.tot.mod.MgC.ha, na.rm=T)] ## up to ~4.7 MgC/ha
-biom.dat[aoi>800, sum(npp.tot.mod, na.rm=T)/(2*1000)] ## 12.1 tC
-biom.dat[aoi>800, (sum(npp.tot.mod, na.rm=T)/(2*1000))/sum(aoi, na.rm=T)]*1E4 ### 0.98 tC/ha
+# ## uncapped model
+# biom.dat[aoi>800, range(npp.tot.mod.MgC.ha, na.rm=T)] ## up to ~4.7 MgC/ha
+# biom.dat[aoi>800, sum(npp.tot.mod, na.rm=T)/(2*1000)] ## 12.1 tC
+# biom.dat[aoi>800, (sum(npp.tot.mod, na.rm=T)/(2*1000))/sum(aoi, na.rm=T)]*1E4 ### 0.98 tC/ha
 
-## capped model -- totals are a bit lower than the uncapped model (the extrapolations were having an impact)
-biom.dat[aoi>800, range(npp.tot.mod.cap.MgC.ha, na.rm=T)] ## up to ~4.7 MgC/ha
-biom.dat[aoi>800, sum(npp.tot.mod.cap, na.rm=T)/(2*1000)] ## 10.8 tC
-biom.dat[aoi>800, (sum(npp.tot.mod.cap, na.rm=T)/(2*1000))/sum(aoi, na.rm=T)]*1E4 ### 0.88 tC/ha
+# ## capped model -- totals are a bit lower than the uncapped model (the extrapolations were having an impact)
+# biom.dat[aoi>800, range(npp.tot.mod.cap.MgC.ha, na.rm=T)] ## up to ~4.7 MgC/ha
+# biom.dat[aoi>800, sum(npp.tot.mod.cap, na.rm=T)/(2*1000)] ## 10.8 tC
+# biom.dat[aoi>800, (sum(npp.tot.mod.cap, na.rm=T)/(2*1000))/sum(aoi, na.rm=T)]*1E4 ### 0.88 tC/ha
 
 ## linear model -- damn near same as capped, slighly lower
 biom.dat[aoi>800, range(npp.tot.mod.lin.MgC.ha, na.rm=T)] ## up to ~4.6 MgC/ha
@@ -723,26 +756,26 @@ biom.dat[aoi>800, sum(npp.tot.mod.lin, na.rm=T)/(2*1000)] ## 10.6 tC
 biom.dat[aoi>800, (sum(npp.tot.mod.lin, na.rm=T)/(2*1000))/sum(aoi, na.rm=T)]*1E4 ### 0.86 tC/ha
 
 ## how do the static (mean productivity edge/interior) vs. the modeled productivity (growth~biomass*edge) compare in aggregate?
-biom.dat[,sum(npp.tot, na.rm=T)]*1E-3*(1/2) ## 13.8 tC, original static avg.dbh growth factors
-biom.dat[,sum(npp.tot.ps, na.rm=T)]*1E-3*(1/2) #10.1k tC, static pseudorep factors
-biom.dat[,sum(npp.tot.mod, na.rm=T)]*1E-3*(1/2) #12.2k tC, pseudorep factors applied by model exponential growth~biomass*edge
-biom.dat[,sum(npp.tot.mod.cap, na.rm=T)]*1E-3*(1/2) #10.8k tC, pseudorep factors applied by *capped* model growth~biomass*edge 
+# biom.dat[,sum(npp.tot, na.rm=T)]*1E-3*(1/2) ## 13.8 tC, original static avg.dbh growth factors
+# biom.dat[,sum(npp.tot.ps, na.rm=T)]*1E-3*(1/2) #10.1k tC, static pseudorep factors
+# biom.dat[,sum(npp.tot.mod, na.rm=T)]*1E-3*(1/2) #12.2k tC, pseudorep factors applied by model exponential growth~biomass*edge
+# biom.dat[,sum(npp.tot.mod.cap, na.rm=T)]*1E-3*(1/2) #10.8k tC, pseudorep factors applied by *capped* model growth~biomass*edge 
 biom.dat[,sum(npp.tot.mod.lin, na.rm=T)]*1E-3*(1/2) #10.6k tC, pseudorep factors applied by *linear* model growth~biomass*edge 
 
 
-(biom.dat[aoi>800,sum(npp.tot, na.rm=T)]*1E-3*(1/2))/(biom.dat[aoi>800,sum(aoi, na.rm=T)]*1E-4) ## ie 1.12 tC/ha/yr using static/avg.dbh
-(biom.dat[aoi>800,sum(npp.tot.ps, na.rm=T)]*1E-3*(1/2))/(biom.dat[aoi>800,sum(aoi, na.rm=T)]*1E-4) ## ie 0.82 tC/ha/yr using static/pseudoreps
-(biom.dat[aoi>800,sum(npp.tot.mod, na.rm=T)]*1E-3*(1/2))/(biom.dat[aoi>800,sum(aoi, na.rm=T)]*1E-4) ## ie 0.98 tC/ha/yr using exponential modeled/pseudoreps
-(biom.dat[aoi>800,sum(npp.tot.mod.cap, na.rm=T)]*1E-3*(1/2))/(biom.dat[aoi>800,sum(aoi, na.rm=T)]*1E-4) ## ie 0.88 tC/ha/yr using exponential capped modeled/pseudoreps
+# (biom.dat[aoi>800,sum(npp.tot, na.rm=T)]*1E-3*(1/2))/(biom.dat[aoi>800,sum(aoi, na.rm=T)]*1E-4) ## ie 1.12 tC/ha/yr using static/avg.dbh
+# (biom.dat[aoi>800,sum(npp.tot.ps, na.rm=T)]*1E-3*(1/2))/(biom.dat[aoi>800,sum(aoi, na.rm=T)]*1E-4) ## ie 0.82 tC/ha/yr using static/pseudoreps
+# (biom.dat[aoi>800,sum(npp.tot.mod, na.rm=T)]*1E-3*(1/2))/(biom.dat[aoi>800,sum(aoi, na.rm=T)]*1E-4) ## ie 0.98 tC/ha/yr using exponential modeled/pseudoreps
+# (biom.dat[aoi>800,sum(npp.tot.mod.cap, na.rm=T)]*1E-3*(1/2))/(biom.dat[aoi>800,sum(aoi, na.rm=T)]*1E-4) ## ie 0.88 tC/ha/yr using exponential capped modeled/pseudoreps
 (biom.dat[aoi>800,sum(npp.tot.mod.lin, na.rm=T)]*1E-3*(1/2))/(biom.dat[aoi>800,sum(aoi, na.rm=T)]*1E-4) ## ie 0.86 tC/ha/yr using linear modeled/pseudoreps
 
 
-hist(biom.dat[aoi>800 & biom>10, npp.tot.ps]) ## up to 1000 kg/cell/yr
-hist(biom.dat[aoi>800 & biom>10, npp.tot.ps.MgC.ha]) ## up to 6 MgC/ha/yr
-hist(biom.dat[aoi>800 & biom>10, npp.tot.mod]) ## up to 800 kg/cell/yr
-hist(biom.dat[aoi>800 & biom>10, npp.tot.mod.MgC.ha]) ## up to 4 MgC/ha/yr
-hist(biom.dat[aoi>800 & biom>10, npp.tot.mod.cap]) ## up to 800 kg/cell/yr
-hist(biom.dat[aoi>800 & biom>10, npp.tot.mod.cap.MgC.ha]) ## up to 4 MgC/ha/yr
+# hist(biom.dat[aoi>800 & biom>10, npp.tot.ps]) ## up to 1000 kg/cell/yr
+# hist(biom.dat[aoi>800 & biom>10, npp.tot.ps.MgC.ha]) ## up to 6 MgC/ha/yr
+# hist(biom.dat[aoi>800 & biom>10, npp.tot.mod]) ## up to 800 kg/cell/yr
+# hist(biom.dat[aoi>800 & biom>10, npp.tot.mod.MgC.ha]) ## up to 4 MgC/ha/yr
+# hist(biom.dat[aoi>800 & biom>10, npp.tot.mod.cap]) ## up to 800 kg/cell/yr
+# hist(biom.dat[aoi>800 & biom>10, npp.tot.mod.cap.MgC.ha]) ## up to 4 MgC/ha/yr
 hist(biom.dat[aoi>800 & biom>10, npp.tot.mod.lin]) ## up to 800 kg/cell/yr
 hist(biom.dat[aoi>800 & biom>10, npp.tot.mod.lin.MgC.ha]) ## up to 4 MgC/ha/yr
 

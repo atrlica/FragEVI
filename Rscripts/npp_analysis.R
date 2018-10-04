@@ -192,10 +192,13 @@ write.csv(fat, "processed/boston/bos.lulc.1mcover.summary.csv")
 
 
 
-### bringing together NPP estimates
-#### all NPP will be dealt with in MgC/ha/yr, all biomass in kg-biomass/ha
+##### Bringing together NPP estimates
+### NOTE: Growth models are specified as factor~MgC/ha; 
+### biomass per cell and npp estimates per cell are in kg-biomass;
+### Statistics and analysis on NPP is done as MgC NPP vs MgC/ha
 
-## maybe look at how this sorts re. lulc
+
+## LULC data to bin things by
 lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
 # aoi <- raster("processed/boston/bos.aoi30m.tif")
 # lulc <- crop(lulc, aoi)
@@ -203,7 +206,7 @@ lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
 # biom.dat[,lulc:=getValues(lulc)]
 # hist(biom.dat[,lulc])
 # 
-### FIA results, packaged with some exploratory calcs
+### FIA results, equation based, packaged with some exploratory calcs
 fia <- read.csv("processed/npp.FIA.v3.csv")
 fia <- as.data.table(fia)
 ## the current npp.ann figures are in MgC/pix/yr; correct to MgC/ha/yr
@@ -214,22 +217,21 @@ names(fia) <- paste("fia", names(fia), sep=".")
 # hist(fia[fia.aoi>800, fia.npp.ann.forest.MgC.ha]) ## up to ~2.0
 # hist(fia[fia.aoi>800, fia.npp.ann.ground.MgC.ha]) ## up to ~2.0
 # hist(fia[fia.aoi>800, fia.npp.ann.perv.MgC.ha]) ## up to ~2.0
+
 ### FIA results, empirically derived npp estiamtes
 # fia.empir <- read.csv("processed/npp.FIA.empirV22.csv")
-fia.empir <- read.csv("processed/npp.FIA.empirV23.csv") ### most recent Aug 16 analysis
-fia.empir <- as.data.table(fia.empir)
+# fia.empir <- as.data.table(read.csv("processed/npp.FIA.empirV23.csv")) ### Aug 16 analysis
+fia.empir <- as.data.table(read.csv("processed/npp.FIA.empirV24.csv")) ## Oct 4 analysis
 names(fia.empir) <- paste("fia.empir", names(fia.empir), sep=".")
   
 ## andy forest results and exploration of beta range
-andy.res <- read.csv("processed/andy.forest.results.csv")
+andy.res <- as.data.table(read.csv("processed/andy.forest.results.csv"))
 # andy.betas <- load("processed/andy.forest.beta.samples") ## comes in as list beta.track
 # andy.samples <- read.csv("processed/andy.forest.npp.edge.int.samples.csv")
-andy.res <- as.data.table(andy.res)
 names(andy.res) <- paste("andy", names(andy.res), sep=".")
 
 ## street trees
-st <- read.csv("processed/streettrees.npp.simulator.v4.results.csv")
-st <- as.data.table(st)
+st <- as.data.table(read.csv("processed/streettrees.npp.simulator.v4.results.csv"))
 st[,med.ann.npp.MgC.ha:=med.ann.npp.all*1E-3*(1/2)/aoi*1E4]
 names(st) <- paste("st", names(st), sep=".")
 
@@ -321,32 +323,29 @@ names(npp.dat)[c(1:5, dim(npp.dat)[2])] <- c("pix.ID", "bos.biom30m", "aoi", "ca
 
 ### how many successful estimates do we have for each approach?
 npp.dat[!is.na(bos.biom30m) & aoi>800, length(bos.biom30m)] ## 135705 biomass records in relatively complete pixels
-
 npp.dat[is.finite(fia.npp.ann.forest.MgC.ha) & aoi>800, length(fia.npp.ann.forest.MgC.ha)] #135705 c.p. fia retrievals
-npp.dat[is.finite(andy.npp.tot.MgC.ha) & aoi>800, length(andy.npp.tot.MgC.ha)] ## 135705 c.p. andy retreivals
-npp.dat[is.finite(andy.npp.tot.mod.lin.MgC.ha) & aoi>800, length(andy.npp.tot.mod.lin.MgC.ha)] ## 135705 for final andy model version
-npp.dat[is.finite(fia.empir.npp.kg.hw.forest) & aoi>800, length(fia.empir.live.Mgbiom.ha.forest)] ## 135705 for empirical FIA model
+npp.dat[is.finite(andy.npp.tot.mod.lin) & aoi>800, length(andy.npp.tot.mod.lin.MgC.ha)] ## 135705 for final andy model version
+npp.dat[is.finite(fia.empir.npp.kg.hw.forest) & aoi>800, length(fia.empir.live.MgC.ha.forest)] ## 135705 for empirical FIA model
 npp.dat[is.finite(st.med.ann.npp.MgC.ha) & aoi>800,length(st.med.ann.npp.MgC.ha)] # 103850 complete pixel street tree retrievals
 npp.dat[bos.biom30m<10, st.med.ann.npp.all:=0] ## manually fix the negligible biomass retreivals did not simulate to begin with
 npp.dat[bos.biom30m<10, st.med.ann.npp.MgC.ha:=0]
 npp.dat[is.finite(st.med.ann.npp.MgC.ha) & aoi>800,length(st.med.ann.npp.MgC.ha)] # up to 132896 retrievals
 
-
 ## comparison: how much npp do we see by these different methods
 hist(npp.dat[aoi>800, st.med.ann.npp.MgC.ha]) ## 0-5 MgC/ha/yr
 hist(npp.dat[aoi>800, fia.npp.ann.forest.MgC.ha]) ## 0-2.5 MgC/ha/yr
-hist(npp.dat[aoi>800, andy.npp.tot.MgC.ha]) ## 0-8 MgC/ha/yr
+# hist(npp.dat[aoi>800, andy.npp.tot.MgC.ha]) ## 0-8 MgC/ha/yr
 hist(npp.dat[aoi>800, fia.empir.npp.kg.hw.forest*(1E4/aoi)/2000]) ## up to ~3 MgC/ha/yr
 hist(npp.dat[aoi>800, andy.npp.tot.mod.lin.MgC.ha]) ## up to ~4 MgC/ha/yr
 
 sum(npp.dat[, st.med.ann.npp.MgC.ha*(aoi/1E4)], na.rm=T) ## 13.2k tC/yr street tree sim (missing a bunch of high-value pixels)
 sum(npp.dat[, fia.npp.ann.forest.MgC.ha*(aoi/1E4)], na.rm=T) ## 4.6k tC/yr ## fia forest method
-sum(npp.dat[, andy.npp.tot.MgC.ha*(aoi/1E4)], na.rm=T) ## 13.8k tC/yr ## andy trees, avg. dbh, static
-sum(npp.dat[, andy.npp.tot.ps.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.1k tC/yr ## andy trees with pseudoreps, static
+# sum(npp.dat[, andy.npp.tot.MgC.ha*(aoi/1E4)], na.rm=T) ## 13.8k tC/yr ## andy trees, avg. dbh, static
+# sum(npp.dat[, andy.npp.tot.ps.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.1k tC/yr ## andy trees with pseudoreps, static
 sum(npp.dat[, fia.empir.npp.kg.hw.forest/2000], na.rm=T) ## 7.8k tC/yr for fia empirical(forest) method
-sum(npp.dat[, andy.npp.tot.mod.MgC.ha*(aoi/1E4)], na.rm=T) ## 12.2k tC/yr ## andy trees with pseudoreps, exp modeled
-sum(npp.dat[, andy.npp.tot.mod.cap.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.8k tC/yr ## andy trees with pseudoreps, exp modeled, capped at low end
-sum(npp.dat[, andy.npp.tot.mod.lin.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.6k tC/yr ## andy trees with pseudoreps, lin modeled
+# sum(npp.dat[, andy.npp.tot.mod.MgC.ha*(aoi/1E4)], na.rm=T) ## 12.2k tC/yr ## andy trees with pseudoreps, exp modeled
+# sum(npp.dat[, andy.npp.tot.mod.cap.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.8k tC/yr ## andy trees with pseudoreps, exp modeled, capped at low end
+sum(npp.dat[, andy.npp.tot.mod.lin.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.7k tC/yr ## andy trees with pseudoreps, lin modeled
 
 
 ### some very close reading of how these estimates differ on a spatial basis
@@ -403,11 +402,10 @@ npp.dat[st.sim.incomp==1 & aoi>800, mean(bos.biom30m, na.rm=T), by=lulc]
 ## failures are all hella high biomass except lowveg and dev
 
 ### compare to how the andy models look
-plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, andy.npp.tot], main="andy.static.avgDBH")
-plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, andy.npp.tot.ps], main="andy.static.pseudoreps") ### linear, narrower envelope
-plot(npp.dat[lulc==1 & aoi>800, bos.biom30m], npp.dat[lulc==1 & aoi>800, andy.npp.tot.mod]) ## linear in all-interior, fast increase in the low biomass edge
-plot(npp.dat[lulc==1 & aoi>800, bos.biom30m], npp.dat[lulc==1 & aoi>800, andy.npp.tot.mod.cap]) ## similar, cuts low-biomass edge increase back
-plot(npp.dat[lulc==1 & aoi>800, bos.biom30m], npp.dat[lulc==1 & aoi>800, andy.npp.tot.mod.lin]) ## humped over in the all-interior high biomass pixels, somewhat lower than street tree max
+plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, andy.npp.tot.mod.lin], main="andy.mod.lin")
+# plot(npp.dat[lulc==1 & aoi>800, bos.biom30m], npp.dat[lulc==1 & aoi>800, andy.npp.tot.mod]) ## linear in all-interior, fast increase in the low biomass edge
+# plot(npp.dat[lulc==1 & aoi>800, bos.biom30m], npp.dat[lulc==1 & aoi>800, andy.npp.tot.mod.cap]) ## similar, cuts low-biomass edge increase back
+# plot(npp.dat[lulc==1 & aoi>800, bos.biom30m], npp.dat[lulc==1 & aoi>800, andy.npp.tot.mod.lin]) ## humped over in the all-interior high biomass pixels, somewhat lower than street tree max
 
 ## compare to the street tree estimates
 plot(npp.dat[lulc==1 & aoi>800, bos.biom30m], npp.dat[lulc==1 & aoi>800, st.med.ann.npp.all])
@@ -420,41 +418,40 @@ abline(a=0, b=1) ## street trees trend higher in general, but kink downward abov
 
 ######
 ### let's make a hybrid ANDY + STREET TREE (ANDY for forest and pix >20k kg, street for all else)
-### version using growth based on avg.dbh, static
-npp.dat[,hyb.npp:=andy.npp.tot]
-npp.dat[lulc!=1, hyb.npp:=st.med.ann.npp.all]
-npp.dat[aoi>800 & is.finite(hyb.npp), length(hyb.npp)] #134643
-plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp], 
-     col=npp.dat[aoi>800, lulc], main="avg.dbh")
-# ### still get that kink in the street trees
+# ### version using growth based on avg.dbh, static
+# npp.dat[,hyb.npp:=andy.npp.tot]
+# npp.dat[lulc!=1, hyb.npp:=st.med.ann.npp.all]
+# npp.dat[aoi>800 & is.finite(hyb.npp), length(hyb.npp)] #134643
+# plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp], 
+#      col=npp.dat[aoi>800, lulc], main="avg.dbh")
+# # ### still get that kink in the street trees
 
-### version using the psuedoreps, static
-npp.dat[,hyb.npp.ps:=andy.npp.tot.ps] ## 
-npp.dat[lulc!=1, hyb.npp.ps:=st.med.ann.npp.all]
-npp.dat[aoi>800 & is.finite(hyb.npp.ps), length(hyb.npp.ps)] #134643
-plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.ps], 
-     col=npp.dat[aoi>800, lulc], main="with pseudoreps, static")
+# ### version using the psuedoreps, static
+# npp.dat[,hyb.npp.ps:=andy.npp.tot.ps] ## 
+# npp.dat[lulc!=1, hyb.npp.ps:=st.med.ann.npp.all]
+# npp.dat[aoi>800 & is.finite(hyb.npp.ps), length(hyb.npp.ps)] #134643
+# plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.ps], 
+#      col=npp.dat[aoi>800, lulc], main="with pseudoreps, static")
 
-par(mfrow=c(1,3))
-## version using the pseudoreps, exp modeled
-npp.dat[,hyb.npp.mod:=andy.npp.tot.mod] ## 
-npp.dat[lulc!=1, hyb.npp.mod:=st.med.ann.npp.all]
-npp.dat[aoi>800 & is.finite(hyb.npp.mod), length(hyb.npp.mod)] #134643
-plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.mod], 
-     col=npp.dat[aoi>800, lulc], main="with pseudoreps, modeled")
+# ## version using the pseudoreps, exp modeled
+# npp.dat[,hyb.npp.mod:=andy.npp.tot.mod] ## 
+# npp.dat[lulc!=1, hyb.npp.mod:=st.med.ann.npp.all]
+# npp.dat[aoi>800 & is.finite(hyb.npp.mod), length(hyb.npp.mod)] #134643
+# plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.mod], 
+#      col=npp.dat[aoi>800, lulc], main="with pseudoreps, modeled")
 
-## version using the pseudoreps, exp modeled, capped low end
-npp.dat[,hyb.npp.mod.cap:=andy.npp.tot.mod.cap] ## 
-npp.dat[lulc!=1, hyb.npp.mod.cap:=st.med.ann.npp.all]
-npp.dat[aoi>800 & is.finite(hyb.npp.mod.cap), length(hyb.npp.mod.cap)] #134643
-plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.mod.cap], 
-     col=npp.dat[aoi>800, lulc], main="with pseudoreps, modeled, capped")
+# ## version using the pseudoreps, exp modeled, capped low end
+# npp.dat[,hyb.npp.mod.cap:=andy.npp.tot.mod.cap] ## 
+# npp.dat[lulc!=1, hyb.npp.mod.cap:=st.med.ann.npp.all]
+# npp.dat[aoi>800 & is.finite(hyb.npp.mod.cap), length(hyb.npp.mod.cap)] #134643
+# plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.mod.cap], 
+#      col=npp.dat[aoi>800, lulc], main="with pseudoreps, modeled, capped")
 
 ## version using pseudoreps, linear modeled
 npp.dat[,hyb.npp.mod.lin:=andy.npp.tot.mod.lin] ## 
 npp.dat[lulc!=1, hyb.npp.mod.lin:=st.med.ann.npp.all]
 npp.dat[aoi>800 & is.finite(hyb.npp.mod.lin), length(hyb.npp.mod.lin)] #134643
-plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.mod.cap], 
+plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.mod.lin], 
      col=npp.dat[aoi>800, lulc], main="with pseudoreps, modeled, linear")
 ### ok, all  have two clear populations of street tree and forest
 
@@ -484,19 +481,18 @@ plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, hyb.npp.mod.cap],
 npp.dat[aoi>800 & bos.biom30m>20000, length(bos.biom30m)]/npp.dat[aoi>800, length(bos.biom30m)] ## 6% of pixels are over 20k
 
 ### swap the >20000kg biomass pixels with the andy forest npp estimates irrespective of lulc class; 20k/pix is 111 MgC/ha, about what a mature forest would be
-npp.dat[bos.biom30m>20000, hyb.npp:=andy.npp.tot]
-npp.dat[bos.biom30m>20000, hyb.npp.ps:=andy.npp.tot.ps]
-npp.dat[bos.biom30m>20000, hyb.npp.mod:=andy.npp.tot.mod]
-npp.dat[bos.biom30m>20000, hyb.npp.mod.cap:=andy.npp.tot.mod.cap]
+# npp.dat[bos.biom30m>20000, hyb.npp:=andy.npp.tot]
+# npp.dat[bos.biom30m>20000, hyb.npp.ps:=andy.npp.tot.ps]
+# npp.dat[bos.biom30m>20000, hyb.npp.mod:=andy.npp.tot.mod]
+# npp.dat[bos.biom30m>20000, hyb.npp.mod.cap:=andy.npp.tot.mod.cap]
 npp.dat[bos.biom30m>20000, hyb.npp.mod.lin:=andy.npp.tot.mod.lin]
 
 ### how's the new future look?
-npp.dat[aoi>800, (sum(hyb.npp, na.rm=T)/2000)] ## 14.4 kMgC/yr
-npp.dat[aoi>800, (sum(hyb.npp.ps, na.rm=T)/2000)] ## 13.2 kMgC/yr
-npp.dat[aoi>800, (sum(hyb.npp.mod, na.rm=T)/2000)] ## 13.0 kMgC/yr
-npp.dat[aoi>800, (sum(hyb.npp.mod.cap, na.rm=T)/2000)] ## 13.0 kMgC/yr
+# npp.dat[aoi>800, (sum(hyb.npp, na.rm=T)/2000)] ## 14.4 kMgC/yr
+# npp.dat[aoi>800, (sum(hyb.npp.ps, na.rm=T)/2000)] ## 13.2 kMgC/yr
+# npp.dat[aoi>800, (sum(hyb.npp.mod, na.rm=T)/2000)] ## 13.0 kMgC/yr
+# npp.dat[aoi>800, (sum(hyb.npp.mod.cap, na.rm=T)/2000)] ## 13.0 kMgC/yr
 npp.dat[aoi>800, (sum(hyb.npp.mod.lin, na.rm=T)/2000)] ## 12.9 kMgC/yr
-
 
 ### check this shit out
 par(mfrow=c(1,2))
@@ -505,12 +501,14 @@ plot(npp.dat[aoi>800, bos.biom30m], npp.dat[aoi>800, fia.empir.npp.kg.hw.forest]
 hist(npp.dat[aoi>800 & lulc==1, ((bos.biom30m/2000)/(aoi*can.frac))*1E4]) ## forest biomass density is a nice normal curve mean ~120 MgC/ha
 hist(npp.dat[aoi>800 & lulc==3, ((bos.biom30m/2000)/(aoi*can.frac))*1E4]) ## skewed, more like 50 -- SMALLER TREES DAWG!!!
 
-
 ### export the collated results
 # write.csv(npp.dat, "processed/npp.estimates.V1.csv")
 # write.csv(npp.dat, "processed/npp.estimates.V2.csv") ## with pseudorep based andy trees
 # write.csv(npp.dat, "processed/npp.estimates.V3.csv") ## with pseudorep/model-capped based andy trees
 write.csv(npp.dat, "processed/npp.estimates.V4.csv") ## with pesudorep/model-linear based andy trees
+
+
+
 
 # npp.dat <- read.csv("processed/npp.estimates.V1.csv")
 # npp.dat <- read.csv("processed/npp.estimates.V2.csv")
