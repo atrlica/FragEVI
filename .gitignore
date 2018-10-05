@@ -10,3 +10,6 @@ logs/*
 docs/*
 *.gdb
 presentations/*
+*.html
+*.doc
+*.docx

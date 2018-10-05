@@ -3,13 +3,14 @@ title: "Boston NPP estimates"
 author: "Drew Trlica"
 date: "Sept. 28, 2018"
 output:
-  word_document: default
   html_document: default
+  word_document: default
 ---
 
 ```{r setup, include=FALSE}
 library(knitr)
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(scipen=999)
 knitr::opts_knit$set(root.dir = "E:/FragEVI/")
 library(data.table)
 library(ggplot2)
@@ -86,6 +87,28 @@ Stem growth rate was fastest in street trees, with median annual growth rate of 
 ```{r fig_2, echo=FALSE, out.width='100%'}
 knitr::include_graphics('E:/FragEVI/images/Fig2A_stem-dbh-growth_mono_logxform.png')
 ```
+
+```{r npp_summary, echo=FALSE}
+npp.dat <- as.data.table(read.csv("E:/FragEVI/processed/npp.estimates.V4.csv"))
+
+```
+#### Estimates of biomass gain
+Estimated biomass gain (MgC/yr) in the combined urban forest + street tree (Hybrid) model was `r round(npp.dat[aoi>800, sum(hyb.npp.mod.lin, na.rm=T)/2000],0)` MgC, with the largest annual biomass gains accruing in the Forest and HD Residential land use types (*Table 1*). In contrast, estimates of biomass growth rates made only on the basis of urban forest growth rates (including edge effects) predicted somewhat lower total biomass gain of `r round(npp.dat[aoi>800, sum(andy.npp.tot.mod.lin, na.rm=T)/2000], 0)` MgC. The Hybrid model showed greater biomass accural primarily to non-forested land use types like High-Density Residential, partly a result of accounting for biomass growth in these open-canopy areas by applying higher street tree-like growth factors. An estimation approach that applied rural forest growth factors to per-ha-canopy biomass density showed lower biomass gain in all land use categories (total gain of `r round(npp.dat[aoi>800, sum(fia.empir.npp.kg.hw.forest, na.rm=T)/2000], 0)`) MgC, with a greater relative fraction of total biomass gain accruing to forest stands. This reduced estimate, particuarly in non-forested cover types, is partly the result of lower per-stem and per-area biomass gain in rural forest context than seen in urban forest or street trees. The Hybrid estimate apportioned biomass gains similarly to the distribution of total biomass across the study area, with most biomass gains occuring in the more common moderate-density pixels dominated by the open-canopy High-Density Residential type with higher street tree-like growth factors (*Figure 3*). The rural forest model, in contrast, applied lower rural forest-like growth factors overall and apportioned somewhat more total biomass gain into the less common high-density pixels dominated by Forest land cover type.  
+
+```{r fig_3, echo=FALSE, out.width='100%'}
+knitr::include_graphics('E:/FragEVI/images/Fig4_biom-dens_NPP_comb.png')
+```
+
+### Effect of biomass density basis 
+The model results also illustrate the sensitivity of estimating biomass productivity to the method used to judge biomass density in heterogeneous scattered urban tree stands. (Say something about *Figure 4 cartoon*). The method of determining the areal basis (ground, canopy, or pervious area) for biomass density had significant and differential effects on biomass density distributions that varied with land use type (*Figure S2*). As this study used the empirical relationship between stand biomass density and productivity on an areal basis to estimate biomass gain from measured density in the study area, different estimates of biomass density can be expected to result in different estimates of biomass gain. For instance, in comparison to the results obtained via per-canopy-area biomass density estimates, applying rural forest growth factors to biomass density on a per-ground-area basis rendered an estimate of `r round(npp.dat[aoi>800, sum(andy.npp.tot.mod.lin, na.rm=T)/2000], 0)`, reasonably similar to the estimate obtained using edge-specific urban forest growth factors. These coinciding results, rather than reflecting similar underlying ecosystem processes, are instead an artifact of shifting the distribution of biomass density, when judged on this per-ground-area basis, generally lower due to the prevalence of discontinuous tree stands. Without accounting for canopy coverage and spacing, the commonplace urban example of stands of discontinuous canopy with relatively mature large trees appears similar in density to younger lower-biomass stands of smaller trees spread evenly over the same area. Such stands in continuous forest context tend to grow relatively more quickly than more mature stands, and in the case of the Boston study area the relatively high frequency of discontinous stands with low- to moderate biomass density on a per-ground-area basis raised the overall estimate of total biomass gain. This example shows that uncritically mapping the growth to density relationship of continuous forests on onto discontinous urban tree stands lead to applying higher growth factors than are likely accurate. 
+
+## Conclusions
+Estimating forest productivity in urban areas often requires reliance on incomplete or infrequent field survey, or coarse-resolution remote sensing measurements that obscure heterogeneity in urban tree stands with meaningful ecosystem functional consequences, such as canopy edges. Difficulties in accurately estimating forest productivity in urban context may also be due to two general types of ambiguity: The fundamental relationship between tree size and productivity measured in rural forest stands may not be reflected in urban-grown trees that experience different canopy environments, nutrient inputs, and a host of other anthropogenic effects not present in rural forests. To address this ambituity, this work has attempted to apply size-to-growth-rate relationships that were measured in local urban-grown trees that may more accurately represent forest ecosystem processes at work in the local urban context. The second ambiguity is in the application of biomass density-to-productivity relationships to discontinous and heterogenous collections of urban trees that may apply clearly only to less intensively managed and impacted stands of continuous canopy trees at predictable stages of succession. Such approaches are commonly practice to inventory C sequestration and annual uptake in rural forests, based on the predictable relationship between stand age (density) and C uptake (e.g. FIA COLE). Ecosystem carbon uptake estimates often use biomass density (or stand age) as a proxy for productivity based on the fundamental relationship of individual stem size to productivity. Thus even if accurate and reasonably spatially resolved inventories of forest carbon by area were available for a city, the inability to adequately quantify "density" in an ecosystem functional sense would still produce difficulties in producing accurate estimates of C uptake. 
+
+Therefore you should be careful and do it the way we did it.
+
+As growth and C uptake in forest stands is very often predicted on the basis of biomass density (also a proxy for stand age), these ambiguities in the call for caution in selecting an appropriate method for ascertiaining biomass density, particularly in scattered open-canopy urban stands.
+
 
 ```{r fig_S1, echo=FALSE, out.width='66%'}
 knitr::include_graphics('E:/FragEVI/images/FigS1_plot_level_growth.png')
