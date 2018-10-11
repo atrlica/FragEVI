@@ -509,7 +509,7 @@ write.csv(npp.dat, "processed/npp.estimates.V4.csv") ## with pesudorep/model-lin
 
 
 
-
+#### NPP RESULTS LOOKED AT HERE
 # npp.dat <- read.csv("processed/npp.estimates.V1.csv")
 # npp.dat <- read.csv("processed/npp.estimates.V2.csv")
 # npp.dat <- read.csv("processed/npp.estimates.V3.csv")
@@ -656,45 +656,112 @@ npp.dat[aoi>800, .((sum(hyb.npp.mod.lin, na.rm=T)/1000),
 npp.dat <- as.data.table(read.csv("processed/npp.estimates.V4.csv"))
 npp.dat[,biom.MgC.ha.ground:=((bos.biom30m/2000)/aoi)*1E4] ## per-pixel ground biomass density
 npp.dat[,biom.MgC.ha.can:=((bos.biom30m/2000)/(aoi*can.frac))*1E4] ## per-pixel canopy biomass density
-npp.dat[,fia.empir.npp.MgC.ha.ground:=((fia.empir.npp.kg.hw.forest/2000)/aoi)*1E4] 
-npp.dat[,fia.empir.npp.MgC.ha.can:=((fia.empir.npp.kg.hw.forest/2000)/(aoi*can.frac))*1E4]
-npp.dat[,hyb.npp.MgC.ha.ground:=((hyb.npp.mod.lin/2000)/aoi)*1E4]
-npp.dat[,hyb.npp.MgC.ha.can:=((hyb.npp.mod.lin/2000)/(aoi*can.frac))*1E4]
-npp.dat[,andy.npp.MgC.ha.ground:=((andy.npp.tot.mod.lin/2000)/aoi)*1E4]
-npp.dat[,andy.npp.MgC.ha.can:=((andy.npp.tot.mod.lin/2000)/(aoi*can.frac))*1E4]
+### these NPP flux densities are all in units of MgC/ha-ground (physical reality), even though they may differ in how *biom density* was calcualted prior to NPP estimation
+npp.dat[,fia.empir.npp.ground.MgC.ha:=((fia.empir.npp.kg.hw.ground/2000)/aoi)*1E4] ## actual per pixel MgC/ha, ground basis calc
+npp.dat[,fia.empir.npp.can.MgC.ha:=((fia.empir.npp.kg.hw.forest/2000)/aoi)*1E4] ## actual per pixel MgC/ha, canopy basis calc
+# npp.dat[,hyb.npp.MgC.ha.ground:=((hyb.npp.mod.lin/2000)/aoi)*1E4]
+npp.dat[,hyb.npp.MgC.ha:=((hyb.npp.mod.lin/2000)/(aoi))*1E4]
+# npp.dat[,andy.npp.MgC.ha.ground:=((andy.npp.tot.mod.lin/2000)/aoi)*1E4]
+npp.dat[,andy.npp.MgC.ha:=((andy.npp.tot.mod.lin/2000)/(aoi))*1E4]
 
 ## basic by-LULC summary table
-tab1 <- npp.dat[aoi>800,.(round((sum(aoi, na.rm=T)/1E4), 0), ## tot area
+tab1 <- npp.dat[aoi>800 & !is.na(lulc),.(round((sum(aoi, na.rm=T)/1E4), 0), ## tot area
                          round(median(can.frac, na.rm=T),2)*100, ## % canopy
                          round((sum(bos.biom30m, na.rm=T)/2000)/1000,0), ## biomass total
-                         round(median(biom.MgC.ha.ground, na.rm=T),1), ## biom MgC/ha-ground
-                         round(median(biom.MgC.ha.can, na.rm=T),1), ## biom MgC/ha-canopy
-                         round(sum(fia.empir.npp.kg.hw.ground/2000, na.rm=T),1), ## Tot NPP FIA, ground basis calc
+                         round(median(biom.MgC.ha.ground, na.rm=T),0), ## biom MgC/ha-ground
+                         round(median(biom.MgC.ha.can, na.rm=T),0), ## biom MgC/ha-canopy
+                         round(sum(fia.empir.npp.kg.hw.ground/2000, na.rm=T),0), ## Tot NPP FIA, ground basis calc
                          round(sum(fia.empir.npp.kg.hw.forest/2000, na.rm=T),0), ## Tot NPP FIA, canopy basis calc
                          round(sum(andy.npp.tot.mod.lin/2000, na.rm=T),0), ## tot NPP andy forest 
                          round(sum(hyb.npp.mod.lin/2000, na.rm=T),0), ## tot NPP HYBRID
-                         round(median(fia.empir.npp.MgC.ha.ground, na.rm=T),1), ## FIA NPP MgC/ha-ground -- canopy basis calc
-                         round(median(fia.empir.npp.MgC.ha.can, na.rm=T),1), ### FIA NPP MgC/ha-can -- canopy basis calc
-                         round(median(andy.npp.MgC.ha.ground, na.rm=T),1), ## andy forest NPP MgC/ha-ground
-                         round(median(andy.npp.MgC.ha.can, na.rm=T),1), ### andy forest NPP MgC/ha-can
-                         round(median(hyb.npp.MgC.ha.ground, na.rm=T),1), ## HYBRID NPP MgC/ha-ground
-                         round(median(hyb.npp.MgC.ha.can, na.rm=T),1)), by=lulc] ## HYBRID NPP MgC/ha-can
+                         ###### per-pixel MgC/ha/yr rates
+                         round(median(fia.empir.npp.ground.MgC.ha, na.rm=T),1), ## FIA NPP MgC/ha-ground -- canopy basis calc
+                         round(median(fia.empir.npp.can.MgC.ha, na.rm=T),1), ### FIA NPP MgC/ha-can -- canopy basis calc
+                         # round(median(andy.npp.MgC.ha.ground, na.rm=T),1), ## andy forest NPP MgC/ha-ground
+                         round(median(andy.npp.MgC.ha, na.rm=T),1), ### andy forest NPP MgC/ha-can
+                         # round(median(hyb.npp.MgC.ha, na.rm=T),1), ## HYBRID NPP MgC/ha-ground
+                         round(median(hyb.npp.MgC.ha, na.rm=T),1)), by=lulc] ## HYBRID NPP MgC/ha-can
 
-names(tab1)[2:16] <- c("area.ha", "med.can", "Tbiom.kMgC", "biom.MgC.ha.ground", "biom.MgC.ha.can", 
-                      "fia.empir.ground.npp.MgC", "fia.empir.forest.npp.MgC", "andy.npp.MgC", "hyb.npp.mod.lin.MgC",
-                      "fia.npp.MgC.ha.ground", "fia.npp.MgC.ha.can", "andy.npp.MgC.ha.ground", "andy.npp.MgC.ha.can", "hyb.npp.MgC.ha.ground", "hyb.npp.MgC.ha.can")
-View(tab1)
-area.tot <- npp.dat[aoi>800, sum(aoi, na.rm=T)/1E4] ## total area in ha
-biom.tot <- npp.dat[aoi>800, (sum(bos.biom30m, na.rm=T)/2000)/1000] ## total biomass in 1000 MgC
-hyb.tot <- npp.dat[aoi>800, sum(hyb.npp.mod.lin, na.rm=T)/2000]
-fia.empir.tot <- npp.dat[aoi>800, sum(fia.empir.npp.kg.hw.forest, na.rm=T)/2000]
-npp.dat[aoi>800, median(can.frac, na.rm=T)] ## whole-city median canopy
-npp.dat[aoi>800, median(fia.empir.npp.MgC.ha.ground, na.rm=T)]
-npp.dat[aoi>800, median(fia.empir.npp.MgC.ha.can, na.rm=T)]
-npp.dat[aoi>800, median(andy.npp.MgC.ha.ground, na.rm=T)]
-npp.dat[aoi>800, median(andy.npp.MgC.ha.can, na.rm=T)]
-npp.dat[aoi>800, median(hyb.npp.MgC.ha.ground, na.rm=T)]
-npp.dat[aoi>800, median(hyb.npp.MgC.ha.can, na.rm=T)]
+names(tab1)[2:14] <- c("area.ha", "Mcan", "Tbiom.kMgC", "Mbiom.MgC.ha.ground", "Mbiom.MgC.ha.can", 
+                      "Tfia.empir.npp.ground.MgC", "Tfia.empir.npp.forest.MgC", "Tandy.npp.MgC", "Thyb.npp.mod.lin.MgC",
+                      "Mfia.npp.ground.MgC.ha", "Mfia.npp.can.MgC.ha", "Mandy.npp.MgC.ha", "Mhyb.npp.MgC.ha")
+# View(tab1)
+# area.tot <- npp.dat[aoi>800, sum(aoi, na.rm=T)/1E4] ## total area in ha
+# biom.tot <- npp.dat[aoi>800, (sum(bos.biom30m, na.rm=T)/2000)/1000] ## total biomass in 1000 MgC
+# hyb.tot <- npp.dat[aoi>800, sum(hyb.npp.mod.lin, na.rm=T)/2000]
+# fia.empir.tot <- npp.dat[aoi>800, sum(fia.empir.npp.kg.hw.forest, na.rm=T)/2000]
+# npp.dat[aoi>800, median(can.frac, na.rm=T)] ## whole-city median canopy
+# npp.dat[aoi>800, median(fia.empir.npp.MgC.ha.ground, na.rm=T)]
+# npp.dat[aoi>800, median(fia.empir.npp.MgC.ha.can, na.rm=T)]
+# npp.dat[aoi>800, median(andy.npp.MgC.ha.ground, na.rm=T)]
+# npp.dat[aoi>800, median(andy.npp.MgC.ha.can, na.rm=T)]
+# npp.dat[aoi>800, median(hyb.npp.MgC.ha.ground, na.rm=T)]
+# npp.dat[aoi>800, median(hyb.npp.MgC.ha.can, na.rm=T)]
+
+
+
+
+### alternate layout: LULC | total NPP: FIAground, FIAcan, Andy-can, Hybrid | Median (95%ile) MgC/ha-ground: FIAcan, Hybrid
+fia.MgC.ha.low <- npp.dat[aoi>800 & !is.na(lulc), quantile(fia.empir.npp.can.MgC.ha, probs=c(0.05),  na.rm=T), by=lulc]
+fia.MgC.ha.hi <- npp.dat[aoi>800 & !is.na(lulc), quantile(fia.empir.npp.can.MgC.ha, probs=c(0.95),  na.rm=T), by=lulc]
+hyb.MgC.ha.low <- npp.dat[aoi>800 & !is.na(lulc), quantile(hyb.npp.MgC.ha, probs=c(0.05),  na.rm=T), by=lulc]
+hyb.MgC.ha.hi <- npp.dat[aoi>800 & !is.na(lulc), quantile(hyb.npp.MgC.ha, probs=c(0.95),  na.rm=T), by=lulc]
+
+
+tab1.f <- data.frame(cbind(as.character(tab1$lulc),
+                           as.character(tab1$Tfia.empir.npp.ground.MgC),
+                           as.character(tab1$Tfia.empir.npp.forest.MgC),
+                           as.character(tab1$Tandy.npp.MgC),
+                           as.character(tab1$Thyb.npp.mod.lin.MgC),
+                           paste(tab1$Mfia.npp.can.MgC.ha, " (",
+                                 round(fia.MgC.ha.low$V1, 1), "-",
+                                 round(fia.MgC.ha.hi$V1, 1), ")", sep=""),
+                           paste(tab1$Mhyb.npp.MgC.ha, " (",
+                                 round(hyb.MgC.ha.low$V1, 1), "-",
+                                 round(hyb.MgC.ha.hi$V1, 1), ")", sep="")))
+
+tots <- c("Total", 
+  round(npp.dat[aoi>800 & !is.na(lulc), sum(fia.empir.npp.kg.hw.ground/2000, na.rm=T)], 0),
+  round(npp.dat[aoi>800 & !is.na(lulc), sum(fia.empir.npp.kg.hw.forest/2000, na.rm=T)], 0),
+  round(npp.dat[aoi>800 & !is.na(lulc), sum(andy.npp.tot.mod.lin/2000, na.rm=T)], 0),
+  round(npp.dat[aoi>800 & !is.na(lulc), sum(hyb.npp.mod.lin/2000, na.rm=T)], 0),
+  paste(round(npp.dat[aoi>800 & !is.na(lulc), median(fia.empir.npp.can.MgC.ha, na.rm=T)], 1),
+        " (", round(npp.dat[aoi>800 & !is.na(lulc), quantile(fia.empir.npp.can.MgC.ha, probs=0.05, na.rm=T)], 1),
+        "-", round(npp.dat[aoi>800 & !is.na(lulc), quantile(fia.empir.npp.can.MgC.ha, probs=0.95, na.rm=T)], 1), ")", sep=""),
+  paste(round(npp.dat[aoi>800 & !is.na(lulc), median(hyb.npp.MgC.ha, na.rm=T)], 1),
+        " (", round(npp.dat[aoi>800 & !is.na(lulc), quantile(hyb.npp.MgC.ha, probs=0.05, na.rm=T)], 1),
+        "-", round(npp.dat[aoi>800 & !is.na(lulc), quantile(hyb.npp.MgC.ha, probs=0.95, na.rm=T)], 1), ")", sep=""))
+
+## fuck it export
+write.csv(tab1.f, "processed/boston/results/Table1_totals_only.csv")
+
+### new layout: LULC, AREA, CANOPY, TOTAL BIOM | FIA(ground), HYBRID(ground) | FIA(can), HYBRID(can) | Tot.FIA, Tot.HYBRID
+tab1.f <- data.frame(cbind(tab1$lulc,
+                           paste(tab1$area.ha, " (", round((tab1$area/area.tot)*100,0), "%)", sep=""),
+                           paste(tab1$med.can, "%", sep=""),
+                           paste(tab1$Tbiom.kMgC, " (", round((tab1$Tbiom.kMgC/biom.tot)*100,0), "%)", sep=""),
+                           tab1$fia.npp.MgC.ha.ground, tab1$hyb.npp.MgC.ha.ground,
+                           tab1$fia.npp.MgC.ha.can, tab1$hyb.npp.MgC.ha.can,
+                           paste(tab1$fia.empir.npp.MgC, " (", round((tab1$fia.empir.npp.MgC/fia.empir.tot)*100,0), "%)", sep=""),
+                           paste(tab1$hyb.npp.mod.lin.MgC, " (", round((tab1$hyb.npp.mod.lin.MgC/hyb.tot)*100,0), "%)", sep="")
+))
+names(tab1.f) <- c("LULC",
+                   "area.ha(%)",
+                   "med.can",
+                   "Tot.biom.kMgC(%)",
+                   "FIA.MgC.ha.gnd",
+                   "HYB.MgC.ha.gnd",
+                   "FIA.MgC.ha.can",
+                   "HYB.MgC.ha.can",
+                   "FIA.tot.MgC(%)",
+                   "HYB.tot.MgC(%)")
+
+write.csv(tab1.f, "processed/boston/results/lulc_NPP_summary_simp1.csv")
+aa <- read.csv("processed/boston/results/lulc_NPP_summary_simp1.csv")
+View(aa)
+
+
+
 
 ### new layout: LULC, AREA, CANOPY, TOTAL BIOM | FIA(ground), HYBRID(ground) | FIA(can), HYBRID(can) | Tot.FIA, Tot.HYBRID
 tab1.f <- data.frame(cbind(tab1$lulc,
