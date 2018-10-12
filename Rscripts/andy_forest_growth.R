@@ -169,19 +169,20 @@ write.csv(ps.contain, "processed/andy.bai.dbh.pseudo.csv")
 ### STEM GROWTH~DBH ANALYSIS
 andy.bai <- read.csv("processed/andy.bai.dbh.avg.csv")
 andy.bai <- as.data.table(andy.bai)
-ps.contain <- read.csv("processed/andy.bai.dbh.pseudo.csv")
-ps.contain <- as.data.table(ps.contain)
-ps.contain <- merge(x=ps.contain, y=andy.bai[,.(incr.ID, Plot.ID)], by="incr.ID", all.x=T, all.y=F) ## put the plot IDs in
-write.csv(ps.contain, "processed/andy.bai.dbh.pseudo.csv")
+# ps.contain <- read.csv("processed/andy.bai.dbh.pseudo.csv")
+# ps.contain <- as.data.table(ps.contain)
+# ps.contain <- merge(x=ps.contain, y=andy.bai[,.(incr.ID, Plot.ID)], by="incr.ID", all.x=T, all.y=F) ## put the plot IDs in
+# write.csv(ps.contain, "processed/andy.bai.dbh.pseudo.csv")
+ps.contain <- as.data.table(read.csv("processed/andy.bai.dbh.pseudo.csv"))
 
-## avg.dbh~avg.growth
-par(mfrow=c(1,2))
-col.edge <- c("black", "red")
-plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean),
-     col=as.numeric(andy.bai$seg.Edge), main="Andy trees, avg. dbh")
-summary(andy.bai$growth.mean) ### around 4%
-summary(andy.bai$avg.dbh) ## about 19cm
-table(andy.bai$seg.Edge) ## 64 edge: 131 interior
+# ## avg.dbh~avg.growth
+# par(mfrow=c(1,2))
+# col.edge <- c("black", "red")
+# plot(log(andy.bai$avg.dbh), log(andy.bai$growth.mean),
+#      col=as.numeric(andy.bai$seg.Edge), main="Andy trees, avg. dbh")
+# summary(andy.bai$growth.mean) ### around 4%
+# summary(andy.bai$avg.dbh) ## about 19cm
+# table(andy.bai$seg.Edge) ## 64 edge: 131 interior
 
 ## vs. pseudoreps
 plot(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, log(dbh.start)],

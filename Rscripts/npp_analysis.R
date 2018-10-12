@@ -1,6 +1,8 @@
 library(raster)
 library(data.table)
-library(tidyverse)
+# library(tidyverse)
+library(lme4)
+library(nlme)
 
 ### final stem growth and areal growth equations
 live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv"))

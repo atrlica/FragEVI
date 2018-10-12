@@ -17,57 +17,50 @@ library(rgeos)
 ## V3: Sample weighting of dbh distribution was adjusted towards large end if simulations failed
 ## V4: tolerance on matching biomass distribution was adjusted to a static threshold (addresses consistent undershoot in large biomass cells)
 
-
-######### Part 1: Develop prediction for growth~dbh in street trees
-### biomass equation biom~dbh
-b0 <- -2.48
-b1 <- 2.4835 ## these are eastern hardwood defaults, Jenkins et al., 2003 (following approach of Smith et al. 2018)
-biom.pred <- function(x){exp(b0+(b1*log(x)))}
-biom.inv <- function(x){exp((log(x)-b0)/b1)}
-
-### Some ground truthing using the street trees at corner of Granby and Bay State
-## dbh measurements made 9/12/2018 (contrast biomass based on 2006/2007 data)
-biom1m <- raster("data/dataverse_files/bostonbiomass_1m.tif")
-bs1 <- readOGR("processed/boston/BayState1.shp")
-bs1.biom <- sum(unlist(extract(biom1m, bs1)))
-bs1.biom # 162 kg
-biom.inv(162) # 21cm dbh predicted, actual = 36
-
-bs2 <- readOGR("processed/boston/BayState2.shp")
-bs2.biom <- sum(unlist(extract(biom1m, bs2)))
-biom.inv(bs2.biom) ##32 cm predicted, actual 38.4
-
-bs3 <- readOGR("processed/boston/BayState3.shp")
-bs3.biom <- sum(unlist(extract(biom1m, bs3)))
-biom.inv(bs3.biom) #48 cm predicted, actual 46.5
-
-bs4 <- readOGR("processed/boston/BayState4.shp")
-bs4.biom <- sum(unlist(extract(biom1m, bs4)))
-biom.inv(bs4.biom) #46 cm predited, actual 41.9
-
-bs5 <- readOGR("processed/boston/BayState5.shp")
-bs5.biom <- sum(unlist(extract(biom1m, bs5)))
-biom.inv(bs5.biom) ## 21 cm predicted, actual 30
-
-bs6 <- readOGR("processed/boston/BayState6.shp")
-bs6.biom <- sum(unlist(extract(biom1m, bs6)))
-biom.inv(bs6.biom) ## 20cm predicted, actual 33.8
-
-bs7 <- readOGR("processed/boston/BayState7.shp")
-bs7.biom <- sum(unlist(extract(biom1m, bs7)))
-biom.inv(bs7.biom) ##22 cm predicted, actual 29.5
-
-bs8 <- readOGR("processed/boston/BayState8.shp")
-bs8.biom <- sum(unlist(extract(biom1m, bs8)))
-biom.inv(bs8.biom) ## 14 cm predicted, 20.4cm actual
-
-park1 <- readOGR("processed/boston/Park1.shp")
-park1.biom <- sum(unlist(extract(biom1m,park1)))
-biom.inv(park1.biom) ## 40 cm predcited, 50.3 cm actual
-
-g1 <- readOGR("processed/boston/Granby1.shp")
-g1.biom <- sum(unlist(extract(biom1m, g1)))
-biom.inv(g1.biom) ## 40cm predicted, 52.5 cm actual
+#### PART 0: TESTING THE SENSE OF THINGS
+# ### Some ground truthing using the street trees at corner of Granby and Bay State
+# ## dbh measurements made 9/12/2018 (contrast biomass based on 2006/2007 data)
+# biom1m <- raster("data/dataverse_files/bostonbiomass_1m.tif")
+# bs1 <- readOGR("processed/boston/BayState1.shp")
+# bs1.biom <- sum(unlist(extract(biom1m, bs1)))
+# bs1.biom # 162 kg
+# biom.inv(162) # 21cm dbh predicted, actual = 36
+# 
+# bs2 <- readOGR("processed/boston/BayState2.shp")
+# bs2.biom <- sum(unlist(extract(biom1m, bs2)))
+# biom.inv(bs2.biom) ##32 cm predicted, actual 38.4
+# 
+# bs3 <- readOGR("processed/boston/BayState3.shp")
+# bs3.biom <- sum(unlist(extract(biom1m, bs3)))
+# biom.inv(bs3.biom) #48 cm predicted, actual 46.5
+# 
+# bs4 <- readOGR("processed/boston/BayState4.shp")
+# bs4.biom <- sum(unlist(extract(biom1m, bs4)))
+# biom.inv(bs4.biom) #46 cm predited, actual 41.9
+# 
+# bs5 <- readOGR("processed/boston/BayState5.shp")
+# bs5.biom <- sum(unlist(extract(biom1m, bs5)))
+# biom.inv(bs5.biom) ## 21 cm predicted, actual 30
+# 
+# bs6 <- readOGR("processed/boston/BayState6.shp")
+# bs6.biom <- sum(unlist(extract(biom1m, bs6)))
+# biom.inv(bs6.biom) ## 20cm predicted, actual 33.8
+# 
+# bs7 <- readOGR("processed/boston/BayState7.shp")
+# bs7.biom <- sum(unlist(extract(biom1m, bs7)))
+# biom.inv(bs7.biom) ##22 cm predicted, actual 29.5
+# 
+# bs8 <- readOGR("processed/boston/BayState8.shp")
+# bs8.biom <- sum(unlist(extract(biom1m, bs8)))
+# biom.inv(bs8.biom) ## 14 cm predicted, 20.4cm actual
+# 
+# park1 <- readOGR("processed/boston/Park1.shp")
+# park1.biom <- sum(unlist(extract(biom1m,park1)))
+# biom.inv(park1.biom) ## 40 cm predcited, 50.3 cm actual
+# 
+# g1 <- readOGR("processed/boston/Granby1.shp")
+# g1.biom <- sum(unlist(extract(biom1m, g1)))
+# biom.inv(g1.biom) ## 40cm predicted, 52.5 cm actual
 
 # ### get tree survey coordinates and translate to UTM
 # pts <- readOGR("processed/boston/street_trees_06_coords.shp")
@@ -81,11 +74,14 @@ biom.inv(g1.biom) ## 40cm predicted, 52.5 cm actual
 ### visually, I'm not sure how knowing the street trees in 30m pixel will get us to a numerical check. 
 ## Not all trees in any pixel are street trees, not clear that survey is exhaustive in any pixel
 
-## get the street tree record prepped
-## biomass prediction
+
+
+######### Part 1: Develop prediction for growth~dbh in street trees
+### biomass equation biom~dbh
 b0 <- -2.48
-b1 <- 2.4835 ## these are eastern hardwood defaults
+b1 <- 2.4835 ## these are eastern hardwood defaults, Jenkins et al., 2003 (following approach of Smith et al. 2018)
 biom.pred <- function(x){exp(b0+(b1*log(x)))}
+biom.inv <- function(x){exp((log(x)-b0)/b1)}
 
 ## read data and clean up
 street <- read.csv("docs/ian/Boston_Street_Trees.csv") ## Street tree resurvey, biomass 2006/2014, species
@@ -106,6 +102,7 @@ street[record.good==1, biom.2014:=biom.pred(dbh.2014)]
 street[record.good==1, biom.2006:=biom.pred(dbh.2006)]
 street[record.good==1, npp.ann:=(biom.2014-biom.2006)/8]
 street[record.good==1, npp.ann.rel:=npp.ann/biom.2006]
+street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny trees
 # street[record.good==1, range(dbh.2006, na.rm=T)] 
 # street[record.good==1, range(npp.ann, na.rm=T)] ## 202 records show negative growth -- questionable 2006 dbh record?
 write.csv(street, "processed/boston/street.trees.dbh.csv")
@@ -119,16 +116,6 @@ muf(40)
 muf(50)
 muf(60)
 
-
-### biomass increment model based on dbh (exponential function)
-# mod.biom.rel <- summary(lm(log(npp.ann.rel)~log(dbh.2006), data=street[record.good==1 & npp.ann!=0])) ## exclude 4 no-growth records
-# plot(street[record.good==1, log(biom.2006)], street[record.good==1, log(npp.ann.rel)]) # r2 = 0.54, slope significant
-# # there's <10 records below 5cm with a lot of leverage, cut them
-# mod.biom.rel <- summary(lm(log(npp.ann.rel)~log(dbh.2006), data=street[record.good==1 & npp.ann!=0 & dbh.2006>=5,])) ## exclude 4 no-growth records
-# plot(street[record.good==1 & dbh.2006>=5, log(biom.2006)], street[record.good==1 & dbh.2006>=5, log(npp.ann.rel)]) # r2 = 0.55, looks nicer
-street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny trees
-# write.csv(street, "processed/street.dbh.growth.results.csv")
-
 # ### a question: why is there so much periodicity in the dbh.2006 measures? Is this a function of diameter measured to nearest 1 inch?
 # a <- street$dbh.2006
 # a <- a[order(a)]
@@ -139,11 +126,11 @@ street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny tree
 # 3027/3492 ## 87% are whole inches
 # unique(a[a%%1==0]) ## basically every inch reading up to 60"
 
-### non-transformed growth~dbh
+
+### stem growth~dbh
 par(mfrow=c(1,1), mar=c(4,4,3,1))
-summary(street$dbh.2006) ## goes down to 2.54, contrast andy.bai min 5.5, FIA 9cm
-summary(street[record.good==1, npp.ann.rel]) ## some negative growth
 street[record.good==1,] ## 2592 records total
+
 ## log-log just to see how it feels
 plot(street[record.good==1, log(dbh.2006)], street[record.good==1, log(npp.ann.rel)])
 summary(lm(log(npp.ann.rel)~log(dbh.2006), data=street[record.good==1 & npp.ann.rel>0,])) ## R2 0.55, significant dbh
