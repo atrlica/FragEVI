@@ -163,8 +163,8 @@ abline(h=live[, median(growth.ann.rel)])
 #####
 #### Plot-level assessment of growth~biomass.density
 ### equivalent plot-level assessment in live-only data ## 331 plots have at least one subplot dense enough to bother with
-live <- read.csv("processed/fia.live.stem.dbh.growth.csv") ## this is data groomed to remove subplots with <5 stems
-live <- as.data.table(live)
+live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv")) ## this is data groomed to remove subplots with <5 stems
+
 ba.pred <- function(x){(x/2)^2*pi*0.0001} ## get BA per stump from dbh
 live.plot <- live[,
                   .(length(unique(SubID)),

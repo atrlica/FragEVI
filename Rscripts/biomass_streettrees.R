@@ -128,14 +128,83 @@ muf(60)
 
 
 ### stem growth~dbh
+street <- as.data.table(read.csv("processed/boston/street.trees.dbh.csv"))
 par(mfrow=c(1,1), mar=c(4,4,3,1))
 street[record.good==1,] ## 2592 records total
 
-## log-log just to see how it feels
-plot(street[record.good==1, log(dbh.2006)], street[record.good==1, log(npp.ann.rel)])
-summary(lm(log(npp.ann.rel)~log(dbh.2006), data=street[record.good==1 & npp.ann.rel>0,])) ## R2 0.55, significant dbh
+
+### basics: how does delta diameter vary?
+street[,delta.diam:=dbh.2014-dbh.2006]
+plot(street[record.good==1, dbh.2006], street[record.good==1, delta.diam])
+summary(lm(delta.diam~dbh.2006, data=street[record.good==1,])) ## so about a 0.1 cm decline in delta per cm of diameter
+street[,diam.rate:=delta.diam/8] ## annualized
+plot(street[record.good==1, dbh.2006], street[record.good==1, diam.rate])
+summary(lm(diam.rate~dbh.2006, data=street[record.good==1,])) ## 1cm/yr, subtract 0.1 cm/yr for each 10cm increase in size
+hm <- (lm(diam.rate~poly(dbh.2006, degree=4), data=street[record.good==1,]))
+points(street[record.good==1, dbh.2006], predict(hm), col="red", pch=16, cex=0.2)
+summary(hm) ## low predictive, RSE 0.63, R2 0.11
+street[,diam.rate.rel:=diam.rate/dbh.2006]
+plot(street[record.good==1, dbh.2006], street[record.good==1, diam.rate.rel]) ## same exponential-looking curve
+### hyperbolic but maybe just because we are taking something nearly constant (annual dbh increment) and dividing by x
+
+hm <- (lm(diam.rate~poly(dbh.2006, degree=3), data=street[record.good==1,]))
+points(street[record.good==1, dbh.2006], predict(hm), col="purple", pch=16, cex=0.2)
+summary(hm) ## low predictive, RSE 0.63, R2 0.11
+hm <- (lm(diam.rate~poly(dbh.2006, degree=2), data=street[record.good==1,]))
+points(street[record.good==1, dbh.2006], predict(hm), col="blue", pch=16, cex=0.2)
+summary(hm) ## low predictive, RSE 0.63, R2 0.11
+
+plot(street[record.good==1, dbh.2006], street[record.good==1, diam.rate])
+hm <- (lm(diam.rate~poly(dbh.2006, degree=2), data=street[record.good==1,]))
+points(street[record.good==1, dbh.2006], predict(hm), col="blue", pch=16, cex=0.2)
+summary(hm) ## low predictive, RSE 0.63, R2 0.11
+points(street[record.good==1, dbh.2006], 
+       (hm$coefficients[1]-(1.96*0.012))+((hm$coefficients[2]-(1.96*0.633))*street[record.good==1, dbh.2006]^1)+((hm$coefficients[3]-(1.96*0.633))*street[record.good==1, dbh.2006]^2),
+       col="green")
+plot(street[record.good==1, dbh.2006], hm$residuals, cex=0.5)
+hist(hm$residuals)
+plot(hm)
+table(street[record.good==1, genus])
+
+### contrast: FIA data
+live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv"))
+live[,delta.diam:=DIAM_T1-DIAM_T0]
+plot(live$DIAM_T0, live$delta.diam) ## generally lower diameter gain
+summary(lm(delta.diam~DIAM_T0, data=live)) ## about a 0.03 cm decline in delta per cm of dbh (i.e. less sesitive to size overall)
+live[,diam.rate:=delta.diam/4.8] ## annualized
+plot(live$DIAM_T0, live$diam.rate)
+summary(lm(diam.rate~DIAM_T0, data=live)) ## about 0.1cm/yr, subtract 0.05 cm/yr for each 10cm increment
+live[,diam.rate.rel:=diam.rate/DIAM_T0]
+plot(live$DIAM_T0, live$diam.rate.rel)
+
+
+## compare street and FIA scatters and lms
+par(mfrow=c(1,2))
+hm <- (lm(diam.rate~poly(dbh.2006, degree=2), data=street[record.good==1,]))
+summary(hm); hist(street[record.good==1, diam.rate])
+plot(street[record.good==1, dbh.2006], hm$residuals); hist(hm$residuals) ## perfect. wow.
+plot(street[record.good==1, dbh.2006], street[record.good==1, diam.rate], 
+     col="salmon", pch=15, cex=0.8, ylim=c(-1, 3), main="Street trees", xlab="DBH (cm)", ylab="DBH change (cm/yr)")
+points(street[record.good==1, dbh.2006], predict(hm), col="black", cex=0.2)
+
+bu <- lm(diam.rate~poly(DIAM_T0, degree=4), data=live)
+summary(bu); hist(live$diam.rate, xlim=c(-1, 2))
+plot(live$DIAM_T0, bu$residuals); hist(bu$residuals, xlim=c(-2,2))
+plot(live$DIAM_T0, live$diam.rate, 
+     col="skyblue", pch=16, cex=0.8, ylim=c(-1, 3), main="FIA trees", xlab="DBH (cm)", ylab="DBH change (cm/yr)")
+points(live$DIAM_T0, predict(bu), col="black", cex=0.2)
+
+## 10% DBH change per year in 15 cm tree, in FIA data 
+(0.1*15)+15 ## 16.5 cm next year
+## 40% DBH change per year in 15 cm tree, in street data
+(0.4*15)+15 ## 21 cm next year -- street trees "grow" faster than FIA trees
+biom.pred(15)
+(biom.pred(16.5)-biom.pred(15))/biom.pred(15) ## 10% DBH change is a 27% biomass change
+(biom.pred(21)-biom.pred(15))/biom.pred(15) ## 40% DBH change is a 130% biomass change
+
 
 ### exponential space
+par(mfrow=c(1,2))
 main.xlim <- c(4, 100)
 main.ylim <- c(-0.15, 1)
 # plot(street[record.good==1, dbh.2006],street[record.good==1, npp.ann.rel])
@@ -153,6 +222,17 @@ lines(test,
 abline(v=street[record.good==1, median(dbh.2006)], lwd=1, col="black")
 abline(h=street[record.good==1, median(npp.ann.rel)], lwd=1, col="black")
 
+mod.street.dbh <- nls(diam.rate.rel~exp(a+(b*dbh.2006)), data=street[record.good==1,], start=list(a=0, b=0))
+nn <- summary(mod.street.dbh) ## RSE is 0.04
+plot(street[record.good==1, dbh.2006], street[record.good==1, diam.rate.rel],
+     ylim=main.ylim, xlim=main.xlim, pch=15, col="salmon", cex=0.5, main="Street trees growth~DBH",
+     ylab="% DBH change/yr (cm/cm)", xlab="Stem DBH (cm)")
+test <- seq(from=main.xlim[1], to=main.xlim[2], length.out=100)
+lines(test, 
+      exp(nn$coefficients[1]+(nn$coefficients[2]*(test))),
+      col="black", lty=2, lwd=3)
+abline(v=street[record.good==1, median(dbh.2006)], lwd=1, col="black")
+abline(h=street[record.good==1, median(diam.rate.rel)], lwd=1, col="black")
 
 ######
 ##### PART 2: STREET TREE SIMULATOR

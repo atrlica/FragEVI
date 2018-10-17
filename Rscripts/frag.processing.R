@@ -35,6 +35,8 @@ library(zoo)
 # big <- raster("processed/boston/bos.biom20k.tif")
 # plot(big)
 
+
+
 #########
 ### Boston high-res data -- vegetation character map
 ### combine 2.4m NDVI and canopy map to produce 1m veg classification map
@@ -79,16 +81,19 @@ library(zoo)
 # }
 # bos.cov <- cover.bl(bos.can, bos.ndvi, filename="processed/bos.cov.tif")
 
-### V2 cover mapping
-### THIS VERSION splits canopy by edge position
-bos.isa <- raster("processed/boston/bos.isa.tif")
+### V3 cover mapping: Uses re-registered ISA layer
+# bos.isa <- raster("processed/boston/isa.reg-res2.tif")
 bos.ndvi <- raster("processed/boston/bos.ndvi.tif")
 bos.can <- raster("processed/boston/bos.can.tif")
 bos.lulc <- raster("processed/boston/bos.lulc.lumped.tif")
 bos.aoi <- raster("processed/boston/bos.aoi.tif")
 bos.ed <- raster("processed/boston/bos.ed10.tif")
+# bos.isa <- crop(bos.isa, bos.aoi)
+# writeRaster(bos.isa, "processed/boston/bos.isa.RR2.tif", format="GTiff", overwrite=T)
+bos.isa <- raster("processed/boston/bos.isa.RR2.tif")
 
-#### this function spits out a single 6 class raster
+
+#### ### THIS VERSION spit out a 6 class raster, splits canopy by edge position
 veg.class <- function(can, isa, ed, ndvi, lulc, aoi, filename) {
   out <- raster(can)
   bs <- blockSize(out)
@@ -115,21 +120,21 @@ veg.class <- function(can, isa, ed, ndvi, lulc, aoi, filename) {
   out <- writeStop(out)
   return(out)
 }
-cl <- veg.class(bos.can, bos.isa, bos.ed, bos.ndvi, bos.lulc, bos.aoi, "processed/boston/bos.cov.V2-ed.tif")
+cl <- veg.class(bos.can, bos.isa, bos.ed, bos.ndvi, bos.lulc, bos.aoi, "processed/boston/bos.cov.V3-ed.tif")
 plot(cl)
 
 
-### alternate V2 cover mapping
-### THIS VERSION splits canopy according to position over impervious vs. pervious
+### THIS VERSION spits out 6 class raster, splits canopy according to position over impervious vs. pervious
 ### which allows for a nice see-through effect if colors are wisely chosen
-bos.isa <- raster("processed/boston/bos.isa.tif")
+# bos.isa <- raster("processed/boston/isa.reg-res2.tif")
+bos.isa <- raster("processed/boston/bos.isa.RR2.tif")
 bos.ndvi <- raster("processed/boston/bos.ndvi.tif")
 bos.can <- raster("processed/boston/bos.can.tif")
 bos.lulc <- raster("processed/boston/bos.lulc.lumped.tif")
 bos.aoi <- raster("processed/boston/bos.aoi.tif")
 
 #### this function spits out a single 6 class raster
-veg.class <- function(can, isa, ndvi, lulc, aoi, filename) { # x is edge class, y is cover class
+veg.class <- function(can, isa, ndvi, lulc, aoi, filename) {
   out <- raster(can)
   bs <- blockSize(out)
   out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
@@ -154,7 +159,7 @@ veg.class <- function(can, isa, ndvi, lulc, aoi, filename) { # x is edge class, 
   out <- writeStop(out)
   return(out)
 }
-cl <- veg.class(bos.can, bos.isa, bos.ndvi, bos.lulc, bos.aoi, "processed/boston/bos.cov.V2.tif")
+cl <- veg.class(bos.can, bos.isa, bos.ndvi, bos.lulc, bos.aoi, "processed/boston/bos.cov.V3-canisa.tif")
 plot(cl)
 
 library(viridis)
@@ -169,7 +174,98 @@ cov.pal <- c(cov.pal[1],cov.pal[6],cov.pal[3],cov.pal[2],cov.pal[4],cov.pal[5]) 
 image(cl, col=cov.pal)
 col2rgb(cov.pal) ## how to enter these assholes into arc RGB
 
+##### Now use cover map to locate near-road pervious pixels without canopy cover
+rdbuff <- raster("E:/FragEVI/processed/boston/ROAD10m_rast.tif")
+cov <- raster("E:/FragEVI/processed/boston/bos.cov.V3-canisa.tif")
+rdbuff <- crop(extend(rdbuff, cov), cov)
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
 
+#### find cover class 3 or 2 (non-veg pervious, veg pervious) in the buffer region
+road.planting <- function(roadbuffer, cover, aoi, filename) {
+  out <- raster(aoi)
+  bs <- blockSize(aoi)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    target <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) ## dummy chunk
+    road <- getValues(roadbuffer, row=bs$row[i], nrows=bs$nrows[i]) ## road buffer chunk, 1=buffer/NA
+    plantme <- getValues(cover, row=bs$row[i], nrows=bs$nrows[i]) ## cover chunk
+    here <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) ## aoi chunk
+    target[here==1] <- 0 ## blank values for anything inside AOI
+    target[road==1 & plantme %in% c(2,3) & here==1] <- 1 ## mark the places inside AOI that are suitable
+    out <- writeValues(out, target, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+cj <- road.planting(rdbuff, cov, bos.aoi, "processed/boston/bos.planting10m.tif")
+plot(cj)
+
+## converted to polygon in arc
+### Arc is being an asshole, won't filter the polygons properly, so do it here
+library(rgdal)
+library(raster)
+## this is the unsimplified polygon, follows raster edges perfectly
+# plantP <- readOGR("processed/boston/plant10m_poly.shp")
+# plantP.filt <- plantP[plantP@data$gridcode=="1000000" & plantP@data$Shape_Area>=2,]
+# # writeOGR(plantP.filt, "processed/boston/plant10m_poly_filt.shp", "plant10m_poly_filt", driver="ESRI Shapefile")
+plantP <- readOGR("processed/boston/plant10mPoly_Simp.shp")
+plantP.filt <- plantP[plantP@data$gridcode=="1000000" & plantP@data$Shape_Area>1.3,]
+writeOGR(plantP.filt, "processed/boston/plant10m_poly_simp_filt.shp", "plant10m_poly_simp_filt", driver="ESRI Shapefile")
+### put this shit into arc and run a buffer on the filtered (simplified) polygons
+
+#### read in the 4m buffered filtered polygons and filter for >50% open sky
+# plantP.filt <- readOGR("processed/boston/plant10m_poly_filt.shp") ## 78618 features
+# plantP.filt.buff <- readOGR("processed/boston/plant10m_poly_filt_4mBuff.shp") ##78618 features
+plantP.filt.buff <- readOGR("processed/boston/plant10m_poly_simp_filt_4mBuff.shp") ##82527 features
+
+### clean up data frame, filter for canopy sky view factor
+# sum(as.numeric(as.character(plantP.filt@data$OBJECTID))-as.numeric(as.character(plantP.filt@data$Id))) ## identical
+filt.d <- plantP.filt@data[,c("OBJECTID", "Shape_Leng", "Shape_Area")]
+names(filt.d)[2:3] <- c("plant_Leng", "plant_Area")
+buff.d <- plantP.filt.buff@data[,c("OBJECTID", "gridcode", "BUFF_DIST", "Shape_Le_1", "Shape_Area")]
+names(buff.d)[4:5] <- c("buff_Leng", "buff_Area")
+merg.d <- merge(x=filt.d, y=buff.d, by="OBJECTID")
+plantP.filt.buff@data$OBJECTID_1 <- NULL
+plantP.filt.buff@data$Id <- NULL
+plantP.filt.buff@data$BUFF_DIST <- NULL
+plantP.filt.buff@data$Shape_Area <- NULL
+plantP.filt.buff@data$Shape_Le_1 <- NULL
+plantP.filt.buff@data$Shape_Leng <- NULL
+plantP.filt.buff@data$ORIG_FID <- NULL
+plantP.filt.buff@data$gridcode <- NULL
+plantP.filt.buff@data <- merge(x=plantP.filt.buff@data, y=merg.d, by="OBJECTID")
+
+### filter file by extracting canopy area within the buffer, then eliminating polygons associated with buffers that have too much canopy already
+# keep <- integer()
+# ditch <- integer()
+# bos.can <- raster("processed/boston/bos.can.tif")
+# for(f in 1:dim(plantP.filt.buff@data)[1]){
+#   test <- extract(bos.can, plantP.filt.buff[f,])
+#   if(sum(test[[1]], na.rm=T)<0.5*plantP.filt.buff@data[f,"buff_Area"]){ ## if less than half the buffer area already in canopy
+#     keep <- c(keep, f)
+#   } else{
+#     ditch <- c(ditch, f)
+#   }
+#   print(paste("evaluated polygon", f))
+# }
+# 
+# plantP.canfilt <- plantP.filt.buff[keep,]
+# plantP.canReject <- plantP.filt.buff[ditch,]
+# a=Sys.time()
+test <- extract(bos.can, plantP.filt.buff[,])
+# plot(crop(bos.can, extent(plantP.filt.buff[19,])))
+# plot(plantP.filt.buff[19,], add=T)
+
+# a-Sys.time()
+# ((5.394/10)*dim(plantP.filt@data)[1])/60/60 ## this is an 12 hour extract
+sum.na <- function(x){sum(x, na.rm=T)}
+plantP.filt.buff@data$can_area <- sapply(test, sum.na)
+plantP.canfilt <- plantP.filt.buff[can_area<(0.5*buff_Area),]
+plantP.canReject <- plantP.filt.buff[can_area>=(0.5*buff_Area),]
+
+writeOGR(plantP.canfilt, "processed/boston/plant10m_simp_4mbuff_canOK.shp", "plant10m_simp_4mbuff_canOK", driver="ESRI Shapefile")
+writeOGR(plantP.canReject, "processed/boston/plant10m_simp_4mbuff_canBAD.shp", "plant10m_simp_4mbuff_canBAD", driver="ESRI Shapefile")
 
 ###########
 # ### Processing 1m canopy map for edge class
@@ -1001,6 +1097,8 @@ plot(bos.lulc)
 
 
 
+
+#### Aggregate 1m into 30m raster w Landsat grid
 ### prep all individual raster layers (0/1) for aggregation all at once in arc
 bos.aoi <- raster("processed/boston/bos.aoi.tif")
 bos.stack <- stack("processed/boston/bos.stack.1m.tif")
