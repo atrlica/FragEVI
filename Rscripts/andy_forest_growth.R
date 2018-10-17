@@ -738,8 +738,9 @@ for(i in 1:1000){
 # ### saved as processed/andy.plot.model.final
 # ######
 
-######
 ##### NPP Calculation treating canopy as Andy-like forest
+
+########
 
 # ### procecssing 1m edge biomass to 30m cells
 # ## identify 1m biomass pixels that are edge canopy (all LULC types)
@@ -927,16 +928,11 @@ biom.dat[aoi>800 & int.can<0.005, int.biom.MgC.ha.can:=0]
   
 ## alternatively: apply a linear model of biomass gain~biomass denisty, with a distribution of coefficients
 
+### NPP CALC 2: APPLY PLOT-BASED MODEL WITH COEFFICIENT UNCERTAINTY 
 ### use model to determine growth factor for edge and interior biomass fraction of each pixel
 ### determine growth factor for edge biomass
-
-plot.mod.b0
-plot.mod.b1
-plot.mod.b2
-
-### here's where we insert a random selection of model coefficients and keep running it over and over
 for(i in 1:100){
-  b0.sel <- sample(plot.mod.b0, size=1)
+  b0.sel <- sample(plot.mod.b0, size=1) ## randomly select what your model coefficients will be
   b1.sel <- sample(plot.mod.b1, size=1)
   b2.sel <- sample(plot.mod.b2, size=1)
   
