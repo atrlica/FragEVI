@@ -237,32 +237,32 @@ plantP.filt.buff@data$gridcode <- NULL
 plantP.filt.buff@data <- merge(x=plantP.filt.buff@data, y=merg.d, by="OBJECTID")
 
 ### filter file by extracting canopy area within the buffer, then eliminating polygons associated with buffers that have too much canopy already
-# keep <- integer()
-# ditch <- integer()
-# bos.can <- raster("processed/boston/bos.can.tif")
-# for(f in 1:dim(plantP.filt.buff@data)[1]){
-#   test <- extract(bos.can, plantP.filt.buff[f,])
-#   if(sum(test[[1]], na.rm=T)<0.5*plantP.filt.buff@data[f,"buff_Area"]){ ## if less than half the buffer area already in canopy
-#     keep <- c(keep, f)
-#   } else{
-#     ditch <- c(ditch, f)
-#   }
-#   print(paste("evaluated polygon", f))
-# }
-# 
-# plantP.canfilt <- plantP.filt.buff[keep,]
-# plantP.canReject <- plantP.filt.buff[ditch,]
-# a=Sys.time()
-test <- extract(bos.can, plantP.filt.buff[,])
-# plot(crop(bos.can, extent(plantP.filt.buff[19,])))
-# plot(plantP.filt.buff[19,], add=T)
+keep <- integer()
+ditch <- integer()
+bos.can <- raster("processed/boston/bos.can.tif")
+for(f in 1:dim(plantP.filt.buff@data)[1]){
+  a=Sys.time()
+  test <- extract(bos.can, plantP.filt.buff[f,])
+  if(sum(test[[1]], na.rm=T)<0.5*plantP.filt.buff@data[f,"buff_Area"]){ ## if less than half the buffer area already in canopy
+    keep <- c(keep, f)
+  } else{
+    ditch <- c(ditch, f)
+  }
+  print(paste("evaluated polygon", f, Sys.time()-a))
+}
 
-# a-Sys.time()
-# ((5.394/10)*dim(plantP.filt@data)[1])/60/60 ## this is an 12 hour extract
-sum.na <- function(x){sum(x, na.rm=T)}
-plantP.filt.buff@data$can_area <- sapply(test, sum.na)
-plantP.canfilt <- plantP.filt.buff[can_area<(0.5*buff_Area),]
-plantP.canReject <- plantP.filt.buff[can_area>=(0.5*buff_Area),]
+plantP.canfilt <- plantP.filt.buff[keep,]
+plantP.canReject <- plantP.filt.buff[ditch,]
+
+### this hangs forever it seems
+# test <- extract(bos.can, plantP.filt.buff[,])
+# # plot(crop(bos.can, extent(plantP.filt.buff[19,])))
+# # plot(plantP.filt.buff[19,], add=T)
+# # ((5.394/10)*dim(plantP.filt@data)[1])/60/60 ## this is an 12 hour extract
+# sum.na <- function(x){sum(x, na.rm=T)}
+# plantP.filt.buff@data$can_area <- sapply(test, sum.na)
+# plantP.canfilt <- plantP.filt.buff[can_area<(0.5*buff_Area),]
+# plantP.canReject <- plantP.filt.buff[can_area>=(0.5*buff_Area),]
 
 writeOGR(plantP.canfilt, "processed/boston/plant10m_simp_4mbuff_canOK.shp", "plant10m_simp_4mbuff_canOK", driver="ESRI Shapefile")
 writeOGR(plantP.canReject, "processed/boston/plant10m_simp_4mbuff_canBAD.shp", "plant10m_simp_4mbuff_canBAD", driver="ESRI Shapefile")
@@ -1109,11 +1109,13 @@ bos.stack <- mask(bos.stack, bos.aoi)
 
 ndvi.only <- bos.stack[["ndvi"]]
 can.only <- bos.stack[["can"]]
-isa.only <- raster("processed/boston/bos.isa.rereg.tif")
-isa.only <- crop(isa.only, bos.aoi)
-isa.only <- mask(isa.only, bos.aoi)
-isa.only <- extend(isa.only, bos.aoi)
-extent(isa.only) <- extent(bos.aoi) ## fuck it, just tweak the x extent 0.4 m
+# isa.only <- raster("processed/boston/bos.isa.rereg.tif")
+## new hotness Oct. 17: Properly rectified isa layer using the road centerlines shapefile
+isa.only <- raster("processed/boston/bos.isa.RR2.tif")
+# isa.only <- crop(isa.only, bos.aoi)
+# isa.only <- mask(isa.only, bos.aoi)
+# isa.only <- extend(isa.only, bos.aoi)
+# extent(isa.only) <- extent(bos.aoi) ## fuck it, just tweak the x extent 0.4 m
 
 ### these cover layers are fucked up somehow and I can't be asked to fix them
 ### bos.grass is facing some bizarre internal error where I can process it down but it won't save to disk and evnetually disappears

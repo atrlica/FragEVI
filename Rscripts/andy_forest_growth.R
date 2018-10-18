@@ -253,6 +253,8 @@ plot(ps.final[dbh.start.incr>5, dbh.start.incr], ps.final[dbh.start.incr>5, dbh.
 
 #########
 ### STEM GROWTH~DBH ANALYSIS
+library(raster)
+library(data.table)
 # andy.bai <- read.csv("processed/andy.bai.dbh.avg.csv")
 # andy.bai <- as.data.table(andy.bai)
 # ps.contain <- read.csv("processed/andy.bai.dbh.pseudo.csv")
@@ -283,7 +285,7 @@ summary(ps.contain$dbh.start.biom) ## about 19cm
 summary(ps.contain$dbh.start.incr) ## about 18cm
 
 ### modeling growth~dbh*edge
-### VER2, linear mixed effects on DBH increment
+### VER2, linear mixed effects on **DBH growth increment**
 par(mfrow=c(1,1))
 plot(ps.contain[dbh.start.incr>=5, dbh.start.incr], ps.contain[dbh.start.incr>=5, dbh.incr.ann],
      col=ps.contain[dbh.start.incr>=5, seg.Edge])
@@ -357,7 +359,7 @@ f.null <- lmer(dbh.incr.ann~seg.Edge +
                  (1|interval), 
                data=ps.contain[dbh.start.incr>=5,],
                REML=F)
-
+summary(f.null)
 anova(f, f.null, test="Chisq") ## nope, p>0.26
 
 ### what does it look like if we push this model (with error) into the andy dbh records and get spatial growth
@@ -413,6 +415,7 @@ for(i in 1:1000){
   print(paste("iteration", i))
 }
 
+### model uncertainty diam-growth~dbh --> biomass change uncertainty in growth~density
 ### now loop to estimate coefficients for the area-basis model and pile them up
 ## simple linear model with MgC/ha with a single correction factor for edge/interior
 plot.mod.b0 <- numeric()
@@ -423,14 +426,17 @@ for(i in 1:1000){
   target <- names(andy.dbh)[11+i]
   yip <- cbind(yip, as.numeric(andy.dbh[,get(target)]))
   g <- yip[, .(sum(biom0), sum(V2)), by=.(seg, Plot.ID)]
+  g[,V3:=V2/V1]
   g[,V1:=((V1/2000)/(10*30))*1E4] ## MgC/ha
-  g[,V2:=V2/2000] ## MgC
-  # plot(g$V1, g$V2, col=g$seg, main=paste("iter", i))
+  g[,V2:=V2/2000] ## MgC growth
+  # plot(g$V1, g$V2, col=g$seg, main=paste("iter", i, "absolute growth"))
+  plot(g$V1, g$V3, col=g$seg, main=paste("iter", i, "relative growth"))
   g[,seg.F:="I"]
   g[seg==10, seg.F:="E"]
   # moo <- lmer(V2~V1+seg+(1|Plot.ID),
   #             data=g, REML=F)   ### there aren't enough replications in any plot to get good estimates of the random plot effects
-  aa <- lm(V2~V1+seg.F, data=g)
+  aa <- lm(V3~V1+seg.F, data=g) ## MgC-growth/MgC-biomass(MgC)~density(MgC/ha)+interior
+  points(g$V1, predict(aa), col="black", pch=15)
   # points(g$V1, predict(aa), col="black", cex=0.4, pch=16)
   plot.mod.b0 <- c(plot.mod.b0, coef(aa)[1])
   plot.mod.b1 <- c(plot.mod.b1, coef(aa)[2])
@@ -617,7 +623,7 @@ for(i in 1:1000){
 # # ee <- summary(mod.int.edge.ps)
 # ######
 # 
-# #### PLOT-LEVEL GROWTH~BIOMASS ASSESSMENT BASED ON STEM MEASUREMENTS
+# #### PLOT-LEVEL GROWTH~BIOMASS ASSESSMENT BASED ON STEM MEASUREMENTS (static)
 # ######
 # ### bring in full andy.dbh data set and apply the growth factors based on cores to the whole (exhaustive) dbh record for each plot
 # andy.bai <- read.csv("processed/andy.bai.dbh.avg.csv")
@@ -930,11 +936,7 @@ biom.dat[aoi>800 & int.can<0.005, int.biom.MgC.ha.can:=0]
 ### use model to determine growth factor for edge and interior biomass fraction of each pixel
 ### determine growth factor for edge biomass
 
-plot.mod.b0
-plot.mod.b1
-plot.mod.b2
-
-### here's where we insert a random selection of model coefficients and keep running it over and over
+### recall: this model predicts MgC growth a f(MgC/ha) in closed canopy, with correction factor for interior canopy
 for(i in 1:100){
   b0.sel <- sample(plot.mod.b0, size=1)
   b1.sel <- sample(plot.mod.b1, size=1)
