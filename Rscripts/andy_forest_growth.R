@@ -366,6 +366,7 @@ anova(f, f.null, test="Chisq") ## nope, p>0.26
 ### Now push the mixed effects model of dbh increment into the areal-basis model(s) for growth
 andy.dbh <- as.data.table(read.csv("docs/ian/Reinmann_Hutyra_2016_DBH.csv"))
 names(andy.dbh) <- c("Tree.ID", "Plot.ID", "Spp", "X", "Y", "dbh", "Can.class")
+ba.pred <- function(x){(x/2)^2*pi*0.0001} ## get BA per stump from dbh
 andy.dbh[Y<10, seg:=10]
 andy.dbh[Y>=10 & Y<20, seg:=20]
 andy.dbh[Y>=20, seg:=30]
@@ -373,7 +374,6 @@ andy.dbh[seg==10, seg.F:="E"]
 andy.dbh[seg!=10, seg.F:="I"]
 andy.dbh[,ba:=ba.pred(dbh)]
 andy.dbh[Spp=="FRAL", Spp:="FRAM"] # Fraxinus americana
-ba.pred <- function(x){(x/2)^2*pi*0.0001} ## get BA per stump from dbh
 
 ### allometrics from Chojnacky et al. 2014
 biom.pred.key <- data.frame(unique(andy.dbh$Spp))
@@ -448,8 +448,9 @@ for(i in 1:1000){
 }
 
 #### these distributions of plot model coefficients be used to estimate biomass gain in the map WITH NOISE
-
-
+mean(plot.mod.b0)
+mean(plot.mod.b1)
+mean(plot.mod.b2)
 ### additional stem-level analysis below
 ########
 # ### full interactive dbh*edge, avg.dbh and pseudo
@@ -800,9 +801,12 @@ ed.can.dat <- as.data.table(as.data.frame(ed.can))
 can.dat <- as.data.table(as.data.frame(can))
 ed.biom.dat <- as.data.table(as.data.frame(ed.biom))
 isa.dat <- as.data.table(as.data.frame(isa))
-biom.dat <- cbind(biom.dat, aoi.dat, ed.can.dat, can.dat, ed.biom.dat, isa.dat)
+lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
+lulc.dat <- as.data.table(as.data.frame(lulc))
+biom.dat <- cbind(biom.dat, aoi.dat, ed.can.dat, can.dat, ed.biom.dat, isa.dat, lulc.dat)
 biom.dat[,pix.ID:=seq(1:dim(biom.dat)[1])]
-names(biom.dat) <- c("biom", "aoi", "ed.can", "can", "ed.biom", "isa", "pix.ID")
+
+names(biom.dat) <- c("biom", "aoi", "ed.can", "can", "ed.biom", "isa", "lulc", "pix.ID")
 
 ## Figure out working parameters in the map data and prep for NPP calc
 biom.dat[,int.can:=can-ed.can]
@@ -1052,7 +1056,7 @@ for(i in 1:100){
   ## calculate NPP and store
   dump[,npp.tot:=(ed.biom*edge.fact)+(int.biom*int.fact)] ## apply growth factor to biomass present
   biom.dat <- cbind(biom.dat, dump[,npp.tot])
-  names(biom.dat)[13+i] <- paste("npp.iter.", i, ".kg")
+  names(biom.dat)[14+i] <- paste("npp.iter.", i, ".kg")
   print(paste("iteration",i))
 }
 write.csv(biom.dat, "processed/andy.forest.results.V2.csv") ## with the many estimates per cell, 321 MB

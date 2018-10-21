@@ -394,6 +394,9 @@ sum(npp.dat[, andy.npp.tot.mod.lin.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.7k tC/yr ##
 ## fia.FOREST vs. street: basically same as andy forest, higher all over esp. in forest except for a few little spots with moderate biomass
 
 
+####
+
+
 #######
 ### PREPARATION OF A FINAL ANDY+STREET HYBRID MAP
 ### let us then combine the andy and street maps into a single "let's get real" map: Andy forest in dense parts, street trees in scattered parts
@@ -510,8 +513,99 @@ hist(npp.dat[aoi>800 & lulc==3, ((bos.biom30m/2000)/(aoi*can.frac))*1E4]) ## ske
 write.csv(npp.dat, "processed/npp.estimates.V4.csv") ## with pesudorep/model-linear based andy trees
 
 
+###### Analysis of results in the error-distributed models
 
-#### NPP RESULTS LOOKED AT HERE
+### FIA results, error distributed
+fia.ground.rand <- as.data.table(read.csv("npp.FIA.empirV3.ground.csv"))
+fia.forest.rand <- as.data.table(read.csv("npp.FIA.empirV3.forest.csv"))
+fia.perv.rand <- as.data.table(read.csv("npp.FIA.empirV3.perv.csv"))
+
+## whole aoi total NPP distributions
+sum.na <- function(x){sum(x, na.rm=T)}
+fia.npp.tot.ground <- apply(fia.ground.rand[aoi>800,11:110], MARGIN=2, FUN=sum.na) 
+fia.npp.tot.forest <- apply(fia.forest.rand[aoi>800,11:110], MARGIN=2, FUN=sum.na)
+fia.npp.tot.perv <- apply(fia.perv.rand[aoi>800,11:110], MARGIN=2, FUN=sum.na)
+hist((fia.npp.tot.forest/2000))
+median((fia.npp.tot.forest/2000))
+mean((fia.npp.tot.forest/2000))
+hist((fia.npp.tot.ground/2000))
+median((fia.npp.tot.ground/2000))
+hist((fia.npp.tot.perv/2000))
+median((fia.npp.tot.perv/2000)) ## 20k MgC???
+
+### model realizations by lulc
+## can't think of a clever way to get these vectors by lulc
+fia.ground.lulc <- data.frame(1:100)
+fia.forest.lulc <- data.frame(1:100)
+fia.perv.lulc <- data.frame(1:100)
+for(l in 1:6){
+  tmp.grnd <- apply(fia.ground.rand[aoi>800 & lulc==l,11:110], MARGIN=2, FUN=sum.na)
+  fia.ground.lulc <- cbind(fia.ground.lulc, tmp.grnd)
+  tmp.for <- apply(fia.forest.rand[aoi>800 & lulc==l,11:110], MARGIN=2, FUN=sum.na)
+  fia.forest.lulc <- cbind(fia.forest.lulc, tmp.for)
+  tmp.perv <- apply(fia.perv.rand[aoi>800 & lulc==l,11:110], MARGIN=2, FUN=sum.na)
+  fia.perv.lulc <- cbind(fia.perv.lulc, tmp.perv)
+}
+names(fia.ground.lulc) <- c("iter", paste("fia.ground.lulc", 1:6, ".npp.tot", sep=""))
+names(fia.forest.lulc) <- c("iter", paste("fia.forest.lulc", 1:6, "npp.tot", sep=""))
+names(fia.perv.lulc) <- c("iter", paste("fia.perv.lulc", 1:6, "npp.tot", sep=""))
+rownames(fia.ground.lulc) <- NULL
+rownames(fia.forest.lulc) <- NULL
+rownames(fia.perv.lulc) <- NULL
+write.csv(fia.ground.lulc, "processed/boston/fia.empirV3.lulc.ground.results.csv")
+write.csv(fia.forest.lulc, "processed/boston/fia.empirV3.lulc.forest.results.csv")
+write.csv(fia.perv.lulc, "processed/boston/fia.empirV3.lulc.perv.results.csv")
+
+## quantiles by lulc -- GROUND
+quantile((fia.npp.tot.ground/2000)/1000, probs=c(0.05, 0.5, 0.95)) ## total
+quantile(fia.ground.lulc[,2]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(fia.ground.lulc[,3]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(fia.ground.lulc[,4]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(fia.ground.lulc[,5]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(fia.ground.lulc[,6]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(fia.ground.lulc[,7]/2000/1000, probs=c(0.05, 0.5, 0.95))
+
+## quantiles by lulc -- FOREST
+quantile((fia.npp.tot.forest/2000)/1000, probs=c(0.05, 0.5, 0.95))
+quantile(fia.forest.lulc[,2]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(fia.forest.lulc[,3]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(fia.forest.lulc[,4]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(fia.forest.lulc[,5]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(fia.forest.lulc[,6]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(fia.forest.lulc[,7]/2000/1000, probs=c(0.05, 0.5, 0.95))
+
+
+### ANDY FOREST, error distributed
+andy <- as.data.table(read.csv("processed/andy.forest.results.V2.csv"))
+sum.na <- function(x){sum(x, na.rm=T)}
+andy.npp.tot <- apply(andy[aoi>800,16:115], MARGIN=2, FUN=sum.na) 
+hist((andy.npp.tot/2000))
+median((andy.npp.tot/2000)) ## about 7k
+mean((andy.npp.tot/2000))
+
+### model realizations by lulc
+andy.lulc <- data.frame(1:100)
+for(l in 1:6){
+  tmp <- apply(andy[aoi>800 & lulc==l,16:115], MARGIN=2, FUN=sum.na)
+  andy.lulc <- cbind(andy.lulc, tmp)
+}
+names(andy.lulc) <- c("iter", paste("andy.lulc", 1:6, ".npp.tot", sep=""))
+rownames(andy.lulc) <- NULL
+write.csv(andy.lulc, "processed/boston/andy.v2.lulc.results.csv")
+
+## quantiles by lulc -- GROUND
+quantile((andy.npp.tot/2000)/1000, probs=c(0.05, 0.5, 0.95)) ## total
+quantile(andy.lulc[,2]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(andy.lulc[,3]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(andy.lulc[,4]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(andy.lulc[,5]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(andy.lulc[,6]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(andy.lulc[,7]/2000/1000, probs=c(0.05, 0.5, 0.95))
+
+
+
+
+#### STATIC NPP RESULTS LOOKED AT HERE
 # npp.dat <- read.csv("processed/npp.estimates.V1.csv")
 # npp.dat <- read.csv("processed/npp.estimates.V2.csv")
 # npp.dat <- read.csv("processed/npp.estimates.V3.csv")
