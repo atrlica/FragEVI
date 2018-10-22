@@ -512,6 +512,34 @@ hist(npp.dat[aoi>800 & lulc==3, ((bos.biom30m/2000)/(aoi*can.frac))*1E4]) ## ske
 # write.csv(npp.dat, "processed/npp.estimates.V3.csv") ## with pseudorep/model-capped based andy trees
 write.csv(npp.dat, "processed/npp.estimates.V4.csv") ## with pesudorep/model-linear based andy trees
 
+#### HYBRID MAP WITH ERROR DISTRIBUTION
+street.res <- as.data.table(read.csv("processed/streettrees.npp.simulator.v4.results.random.csv"))
+andy.res <- as.data.table(read.csv("processed/andy.forest.results.V2.csv"))
+pick <- andy.res[lulc==1 | biom>20000,] ## find the andy pixels we want
+pick[lulc!=1, range(biom, na.rm=T)] ## we good
+pick <- pick[,c(9,16:115)] ## pix.ID and then results
+names(pick)[2:101] <- paste0("npp.iter.", 1:100, ".hybrid") ### 14k pix
+street.pix <- copy(street.res)
+street.pix <- street.pix[bos.lulc30m.lumped!=1,]
+street.pix <- street.pix[bos.biom30m<=20000,]
+street.pix <- street.pix[,c(2,8:107)]
+names(street.pix)[2:101] <- paste0("npp.iter.", 1:100, ".hybrid") ### 123k pix
+hybrid <- rbind(pick, street.pix) ### now need to merge these back into the complete map
+
+aoi <- raster("processed/boston/bos.aoi30m.tif")
+biom <- raster("processed/boston/bos.biom30m.tif")
+biom <- crop(biom, aoi)
+can <- raster("processed/boston/bos.can30m.tif")
+isa <- raster("processed/boston/bos.isa30m.tif")
+lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
+biom.dat <- as.data.table(cbind(as.data.frame(aoi), 
+                                as.data.frame(biom), 
+                                as.data.frame(can), 
+                                as.data.frame(isa),
+                                as.data.frame(lulc)))
+biom.dat[, pix.ID:=seq(1:dim(biom.dat)[1])]
+biom.dat <- merge(biom.dat, hybrid, by="pix.ID", all.x=T) # here's our map
+write.csv(biom.dat, "processed/hybrid.results.V2.csv")
 
 ###### Analysis of results in the error-distributed models
 
@@ -552,9 +580,9 @@ names(fia.perv.lulc) <- c("iter", paste("fia.perv.lulc", 1:6, "npp.tot", sep="")
 rownames(fia.ground.lulc) <- NULL
 rownames(fia.forest.lulc) <- NULL
 rownames(fia.perv.lulc) <- NULL
-write.csv(fia.ground.lulc, "processed/boston/fia.empirV3.lulc.ground.results.csv")
-write.csv(fia.forest.lulc, "processed/boston/fia.empirV3.lulc.forest.results.csv")
-write.csv(fia.perv.lulc, "processed/boston/fia.empirV3.lulc.perv.results.csv")
+write.csv(fia.ground.lulc, "processed/fia.empirV3.lulc.ground.results.csv")
+write.csv(fia.forest.lulc, "processed/fia.empirV3.lulc.forest.results.csv")
+write.csv(fia.perv.lulc, "processed/fia.empirV3.lulc.perv.results.csv")
 
 ## quantiles by lulc -- GROUND
 quantile((fia.npp.tot.ground/2000)/1000, probs=c(0.05, 0.5, 0.95)) ## total
@@ -591,9 +619,9 @@ for(l in 1:6){
 }
 names(andy.lulc) <- c("iter", paste("andy.lulc", 1:6, ".npp.tot", sep=""))
 rownames(andy.lulc) <- NULL
-write.csv(andy.lulc, "processed/boston/andy.v2.lulc.results.csv")
+write.csv(andy.lulc, "processed/andy.v2.lulc.results.csv")
 
-## quantiles by lulc -- GROUND
+## quantiles by lulc 
 quantile((andy.npp.tot/2000)/1000, probs=c(0.05, 0.5, 0.95)) ## total
 quantile(andy.lulc[,2]/2000/1000, probs=c(0.05, 0.5, 0.95))
 quantile(andy.lulc[,3]/2000/1000, probs=c(0.05, 0.5, 0.95))
@@ -601,6 +629,86 @@ quantile(andy.lulc[,4]/2000/1000, probs=c(0.05, 0.5, 0.95))
 quantile(andy.lulc[,5]/2000/1000, probs=c(0.05, 0.5, 0.95))
 quantile(andy.lulc[,6]/2000/1000, probs=c(0.05, 0.5, 0.95))
 quantile(andy.lulc[,7]/2000/1000, probs=c(0.05, 0.5, 0.95))
+
+
+### HYBRID URBAN, error distributed
+hyb <- as.data.table(read.csv("processed/hybrid.results.V2.csv"))
+sum.na <- function(x){sum(x, na.rm=T)}
+med.na <- function(x){median(x, na.rm=T)}
+hyb.npp.tot <- apply(hyb[bos.aoi30m>800,8:107], MARGIN=2, FUN=sum.na)
+hyb[bos.aoi30m>800,8:107/bos.aoi30m]
+hist((hyb.npp.tot/2000))
+median((hyb.npp.tot/2000)) ## about 11.6k
+mean((hyb.npp.tot/2000))
+
+### model realizations by lulc
+hyb.lulc <- data.frame(1:100)
+for(l in 1:6){
+  tmp <- apply(hyb[bos.aoi30m>800 & bos.lulc30m.lumped==l,8:107], MARGIN=2, FUN=sum.na)
+  hyb.lulc <- cbind(hyb.lulc, tmp)
+}
+names(hyb.lulc) <- c("iter", paste("hyb.lulc", 1:6, ".npp.tot", sep=""))
+rownames(hyb.lulc) <- NULL
+write.csv(hyb.lulc, "processed/hyb.v2.lulc.results.csv")
+
+## quantiles by lulc 
+quantile((hyb.npp.tot/2000)/1000, probs=c(0.05, 0.5, 0.95)) ## total
+quantile(hyb.lulc[,2]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(hyb.lulc[,3]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(hyb.lulc[,4]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(hyb.lulc[,5]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(hyb.lulc[,6]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(hyb.lulc[,7]/2000/1000, probs=c(0.05, 0.5, 0.95))
+
+### pixel median spreads
+a <- ((hyb[, 8:107]/2000)/hyb[,bos.aoi30m])*1E4 ## get things from per kg-biomass/pix/yr to MgC/ha/yr
+a[,aoi:=hyb[,bos.aoi30m]]
+a[,lulc:=hyb[,bos.lulc30m.lumped]]
+quant.na <- function(x)(quantile(x, probs=c(0.05, 0.5, 0.95), na.rm=T))
+hyb.npp.med <- apply(a[aoi>800, 1:100], MARGIN=2, FUN=quant.na)
+hyb.lulc.med <- data.frame(1:100)
+hyb.lulc.lo <- data.frame(1:100)
+hyb.lulc.hi <- data.frame(1:100)
+for(l in 1:6){
+  tmp <- apply(a[aoi>800 & lulc==l,1:100], MARGIN=2, FUN=quant.na)
+  hyb.lulc.med <- cbind(hyb.lulc.med, tmp[2,])
+  hyb.lulc.lo <- cbind(hyb.lulc.lo, tmp[1,])
+  hyb.lulc.hi <- cbind(hyb.lulc.hi, tmp[3,])
+}
+names(hyb.lulc.med) <- c("iter", paste("hyb.lulc", 1:6, ".npp.med", sep=""))
+names(hyb.lulc.lo) <- c("iter", paste("hyb.lulc", 1:6, ".npp.lo", sep=""))
+names(hyb.lulc.hi) <- c("iter", paste("hyb.lulc", 1:6, ".npp.hi", sep=""))
+
+## quantile spreads
+### total
+apply(hyb.npp.med, MARGIN=1, FUN=median)
+## medians
+median(hyb.lulc.med[,2])
+median(hyb.lulc.med[,3])
+median(hyb.lulc.med[,4])
+median(hyb.lulc.med[,5])
+median(hyb.lulc.med[,6])
+median(hyb.lulc.med[,7])
+
+## lows
+median(hyb.lulc.lo[,2])
+median(hyb.lulc.lo[,3])
+median(hyb.lulc.lo[,4])
+median(hyb.lulc.lo[,5])
+median(hyb.lulc.lo[,6])
+median(hyb.lulc.lo[,7])
+
+## highs
+median(hyb.lulc.hi[,2])
+median(hyb.lulc.hi[,3])
+median(hyb.lulc.hi[,4])
+median(hyb.lulc.hi[,5])
+median(hyb.lulc.hi[,6])
+median(hyb.lulc.hi[,7])
+
+
+
+
 
 
 
