@@ -128,6 +128,7 @@ muf(60)
 
 
 ### stem growth~dbh
+library(data.table)
 street <- as.data.table(read.csv("processed/boston/street.trees.dbh.csv"))
 par(mfrow=c(1,1), mar=c(4,4,3,1))
 street[record.good==1,] ## 2592 records total
@@ -166,8 +167,8 @@ points(street[record.good==1, dbh.2006],
 points(street[record.good==1, dbh.2006], 
        (hm$coefficients[1]+(1.96*s.hm$coefficients[1,2]))+((hm$coefficients[2]+(1.96*s.hm$coefficients[2,2]))*street[record.good==1, dbh.2006]^1)+((hm$coefficients[3]+(1.96*s.hm$coefficients[3,2]))*street[record.good==1, dbh.2006]^2),
        col="red") ## reasonable-ish, let's use this one
-plot(hm)
-table(street[record.good==1, genus])
+# plot(hm)
+# table(street[record.good==1, genus])
 mod.street.dbhdelta <- hm
 save(mod.street.dbhdelta, file="processed/mod.street.dbhdelta.sav")
 
