@@ -544,9 +544,9 @@ write.csv(biom.dat, "processed/hybrid.results.V2.csv")
 ###### Analysis of results in the error-distributed models
 
 ### FIA results, error distributed
-fia.ground.rand <- as.data.table(read.csv("npp.FIA.empirV3.ground.csv"))
-fia.forest.rand <- as.data.table(read.csv("npp.FIA.empirV3.forest.csv"))
-fia.perv.rand <- as.data.table(read.csv("npp.FIA.empirV3.perv.csv"))
+fia.ground.rand <- as.data.table(read.csv("npp.FIA.empirV5.ground.csv"))
+fia.forest.rand <- as.data.table(read.csv("npp.FIA.empirV5.forest.csv"))
+fia.perv.rand <- as.data.table(read.csv("npp.FIA.empirV5.perv.csv"))
 
 ## whole aoi total NPP distributions
 sum.na <- function(x){sum(x, na.rm=T)}
@@ -559,7 +559,7 @@ mean((fia.npp.tot.forest/2000))
 hist((fia.npp.tot.ground/2000))
 median((fia.npp.tot.ground/2000))
 hist((fia.npp.tot.perv/2000))
-median((fia.npp.tot.perv/2000)) ## 20k MgC???
+median((fia.npp.tot.perv/2000))
 
 ### model realizations by lulc
 ## can't think of a clever way to get these vectors by lulc
@@ -580,18 +580,18 @@ names(fia.perv.lulc) <- c("iter", paste("fia.perv.lulc", 1:6, "npp.tot", sep="")
 rownames(fia.ground.lulc) <- NULL
 rownames(fia.forest.lulc) <- NULL
 rownames(fia.perv.lulc) <- NULL
-write.csv(fia.ground.lulc, "processed/fia.empirV3.lulc.ground.results.csv")
-write.csv(fia.forest.lulc, "processed/fia.empirV3.lulc.forest.results.csv")
-write.csv(fia.perv.lulc, "processed/fia.empirV3.lulc.perv.results.csv")
+write.csv(fia.ground.lulc, "processed/fia.empirV5.lulc.ground.results.csv")
+write.csv(fia.forest.lulc, "processed/fia.empirV5.lulc.forest.results.csv")
+write.csv(fia.perv.lulc, "processed/fia.empirV5.lulc.perv.results.csv")
 
 ## quantiles by lulc -- GROUND
 quantile((fia.npp.tot.ground/2000)/1000, probs=c(0.05, 0.5, 0.95)) ## total
-quantile(fia.ground.lulc[,2]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(fia.ground.lulc[,3]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(fia.ground.lulc[,4]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(fia.ground.lulc[,5]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(fia.ground.lulc[,6]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(fia.ground.lulc[,7]/2000/1000, probs=c(0.05, 0.5, 0.95))
+quantile(fia.ground.lulc[,2]/2000/1000, probs=c(0.05, 0.5, 0.95)) ## forest
+quantile(fia.ground.lulc[,3]/2000/1000, probs=c(0.05, 0.5, 0.95)) ## developed
+quantile(fia.ground.lulc[,4]/2000/1000, probs=c(0.05, 0.5, 0.95)) ## HDRES
+quantile(fia.ground.lulc[,5]/2000/1000, probs=c(0.05, 0.5, 0.95)) ## LDRES
+quantile(fia.ground.lulc[,6]/2000/1000, probs=c(0.05, 0.5, 0.95)) ## other veg
+quantile(fia.ground.lulc[,7]/2000/1000, probs=c(0.05, 0.5, 0.95)) ## water
 
 ## quantiles by lulc -- FOREST
 quantile((fia.npp.tot.forest/2000)/1000, probs=c(0.05, 0.5, 0.95))

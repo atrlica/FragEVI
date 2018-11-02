@@ -1204,6 +1204,7 @@ ed <- raster("processed/boston/bos.ed10.tif")
 
 ## backbay
 targ <- readOGR("processed/boston/southend_sample.shp")
+# targ <- readOGR("processed/boston/frankpark_sample.shp")
 targ.ndvi <- unlist(extract(ndvi, spTransform(targ, crs(ndvi))))
 mean(targ.ndvi, na.rm=T)
 mean(targ.ndvi, na.rm=T)-(sd(targ.ndvi, na.rm=T)*1.96)
