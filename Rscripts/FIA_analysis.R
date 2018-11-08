@@ -425,6 +425,7 @@ write.csv(plot.sum, "processed/fia.live.plot.groomedV2.csv")
 
 ## OK, figure a model and coefficient error terms
 live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomedV2.csv"))
+summary(live.plot[,YEAR-prev.sample])
 
 ### modeling growth as MgC/ha/yr(rate)~MgC/ha (density)
 plot(live.plot$biom0.MgC.ha, live.plot$biom.delt.ann) ## pretty linear, low slope

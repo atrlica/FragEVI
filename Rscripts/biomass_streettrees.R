@@ -113,6 +113,14 @@ street[record.good==1, biom.2006:=biom.pred(dbh.2006)]
 street[record.good==1, npp.ann:=(biom.2014-biom.2006)/8]
 street[record.good==1, npp.ann.rel:=npp.ann/biom.2006]
 street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny trees
+street[,delta.diam:=dbh.2014-dbh.2006]
+street[,diam.rate:=delta.diam/8] ## annualized
+
+boxplot(diam.rate~genus, data=street[record.good==1,])
+boxplot(diam.rate~genus.simp, data=street[record.good==1,])
+g <- street[record.good==1, median(diam.rate, na.rm=T), by=genus.simp]
+g[order(genus.simp),]
+View(street[record.good==1 & genus.simp=="Sapindaceae" & diam.rate<0,])
 # street[record.good==1, range(dbh.2006, na.rm=T)] 
 # street[record.good==1, range(npp.ann, na.rm=T)] ## 202 records show negative growth -- questionable 2006 dbh record?
 write.csv(street, "processed/boston/street.trees.dbh.csv")
@@ -145,10 +153,9 @@ street[record.good==1,] ## 2592 records total
 
 
 ### basics: how does delta diameter vary?
-street[,delta.diam:=dbh.2014-dbh.2006]
+
 plot(street[record.good==1, dbh.2006], street[record.good==1, delta.diam])
 summary(lm(delta.diam~dbh.2006, data=street[record.good==1,])) ## so about a 0.1 cm decline in delta per cm of diameter
-street[,diam.rate:=delta.diam/8] ## annualized
 plot(street[record.good==1, dbh.2006], street[record.good==1, diam.rate])
 summary(lm(diam.rate~dbh.2006, data=street[record.good==1,])) ## 1cm/yr, subtract 0.1 cm/yr for each 10cm increase in size
 hm <- (lm(diam.rate~poly(dbh.2006, degree=4), data=street[record.good==1,]))

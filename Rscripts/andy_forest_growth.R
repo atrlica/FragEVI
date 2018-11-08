@@ -296,7 +296,8 @@ summary(b) ### significant effect for dbh, dbh*edge, but low predictive power
 c <- lm(dbh.incr.ann~poly(dbh.start.incr, degree=1)+seg.Edge, data=ps.contain[dbh.start.incr>=5,])
 summary(c) ### significant ???POSITIVE?? effect for dbh, low predictive power
 points(ps.contain[dbh.start.incr>=5, dbh.start.incr], predict(c), cex=0.5, col="purple", pch=16)
-
+c <- lm(dbh.incr.ann~dbh.start.incr+seg.Edge, data=ps.contain[dbh.start.incr>=5, ])
+summary(c) ## simple linear effect of dbh is significant but almost nill
 ## edge slope, random slopes on plot increment interval
 library(lme4)
 d <- lmer(dbh.incr.ann~dbh.start.incr*seg.Edge + 
@@ -323,6 +324,16 @@ plot(e)
 hist(resid(e)) ## looks pretty fine
 qqnorm(resid(e)) ## good enough
 qqline(resid(e))
+
+e.null <- lmer(dbh.incr.ann~dbh.start.incr+seg.Edge + 
+            (1+dbh.start.incr|Plot.ID) + 
+            (1+dbh.start.incr|incr.ID) + 
+            (1+dbh.start.incr|interval), 
+          data=ps.contain[dbh.start.incr>=5,],
+          REML=F)  ## interesting. No effect of DBH, trees increment as they wish, but lower increment in edge
+summary(e) ## definitely no DBH effect
+
+
 
 ## what does it mean if there's no dbh effect on increment?
 dbh0 <- seq(5, 90)
@@ -362,6 +373,7 @@ f.null <- lmer(dbh.incr.ann~seg.Edge +
                REML=F)
 summary(f.null)
 anova(f, f.null, test="Chisq") ## nope, p>0.26
+
 
 ### Now push the mixed effects model of dbh increment into the areal-basis model(s) for growth
 andy.dbh <- as.data.table(read.csv("docs/ian/Reinmann_Hutyra_2016_DBH.csv"))
@@ -427,14 +439,15 @@ for(i in 1:1000){
   g[,growth.rel:=V2/V1]
   g[,MgC.ha.can:=((V1/2000)/(10*30))*1E4] ## MgC/ha
   g[,MgC.growth:=V2/2000] ## MgC growth
-  # plot(g$MgC.ha.can, g$MgC.growth, col=g$seg, main=paste("iter", i, "absolute growth"))
-  # plot(g$MgC.ha.can, g$growth.rel, col=g$seg, main=paste("iter", i, "relative growth"))
   g[,seg.F:="I"]
   g[seg==10, seg.F:="E"]
+  
+  plot(g$MgC.ha.can, g$MgC.growth, col=g$seg, main=paste("iter", i, "absolute growth"))
+  plot(g$MgC.ha.can, g$growth.rel, col=g$seg, main=paste("iter", i, "relative growth"))
   # moo <- lmer(V2~V1+seg+(1|Plot.ID),
   #             data=g, REML=F)   ### there aren't enough replications in any plot to get good estimates of the random plot effects
   aa <- lm(growth.rel~MgC.ha.can+seg.F, data=g) ## MgC-growth/MgC-biomass(MgC)~density(MgC/ha)+interior
-  # points(g$MgC.ha.can, predict(aa), col="black", pch=15)
+  points(g$MgC.ha.can, predict(aa), col="black", pch=15)
   # points(g$V1, predict(aa), col="black", cex=0.4, pch=16)
   plot.mod.b0 <- c(plot.mod.b0, coef(aa)[1])
   plot.mod.b1 <- c(plot.mod.b1, coef(aa)[2])

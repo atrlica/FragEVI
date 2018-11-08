@@ -396,9 +396,9 @@ sum(npp.dat[, andy.npp.tot.mod.lin.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.7k tC/yr ##
 
 ####
 
-
-#######
 ### PREPARATION OF A FINAL ANDY+STREET HYBRID MAP
+### static map
+#######
 ### let us then combine the andy and street maps into a single "let's get real" map: Andy forest in dense parts, street trees in scattered parts
 ## first where are the difficult sim pixels re. LULC
 npp.dat[st.sim.incomp==1, length(pix.ID), by=lulc]
@@ -420,9 +420,6 @@ plot(npp.dat[lulc==1 & aoi>800, bos.biom30m], npp.dat[lulc==1 & aoi>800, st.med.
 plot(npp.dat[lulc==1 & aoi>800, andy.npp.tot.mod.lin], npp.dat[lulc==1 & aoi>800, st.med.ann.npp.all])
 abline(a=0, b=1) ## street trees trend higher in general, but kink downward above 20000 kg/pix due to high weighting towards big trees (also lots of sim failures above 20k kg)
 
-
-######
-### let's make a hybrid ANDY + STREET TREE (ANDY for forest and pix >20k kg, street for all else)
 # ### version using growth based on avg.dbh, static
 # npp.dat[,hyb.npp:=andy.npp.tot]
 # npp.dat[lulc!=1, hyb.npp:=st.med.ann.npp.all]
@@ -511,12 +508,14 @@ hist(npp.dat[aoi>800 & lulc==3, ((bos.biom30m/2000)/(aoi*can.frac))*1E4]) ## ske
 # write.csv(npp.dat, "processed/npp.estimates.V2.csv") ## with pseudorep based andy trees
 # write.csv(npp.dat, "processed/npp.estimates.V3.csv") ## with pseudorep/model-capped based andy trees
 write.csv(npp.dat, "processed/npp.estimates.V4.csv") ## with pesudorep/model-linear based andy trees
+#######
 
 #### HYBRID MAP WITH ERROR DISTRIBUTION
-street.res <- as.data.table(read.csv("processed/streettrees.npp.simulator.v4.results.random.csv"))
+#######
+street.res <- as.data.table(read.csv("processed/streettrees.npp.simulator.v42.results.random.csv"))
 andy.res <- as.data.table(read.csv("processed/andy.forest.results.V2.csv"))
 pick <- andy.res[lulc==1 | biom>20000,] ## find the andy pixels we want
-pick[lulc!=1, range(biom, na.rm=T)] ## we good
+# pick[lulc!=1, range(biom, na.rm=T)] ## we good
 pick <- pick[,c(9,16:115)] ## pix.ID and then results
 names(pick)[2:101] <- paste0("npp.iter.", 1:100, ".hybrid") ### 14k pix
 street.pix <- copy(street.res)
@@ -539,9 +538,8 @@ biom.dat <- as.data.table(cbind(as.data.frame(aoi),
                                 as.data.frame(lulc)))
 biom.dat[, pix.ID:=seq(1:dim(biom.dat)[1])]
 biom.dat <- merge(biom.dat, hybrid, by="pix.ID", all.x=T) # here's our map
-write.csv(biom.dat, "processed/hybrid.results.V2.csv")
+write.csv(biom.dat, "processed/hybrid.results.V3.csv")
 
-###### Analysis of results in the error-distributed models
 
 ### FIA results, error distributed
 fia.ground.rand <- as.data.table(read.csv("npp.FIA.empirV5.ground.csv"))
