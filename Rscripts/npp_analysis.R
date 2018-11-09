@@ -512,17 +512,17 @@ write.csv(npp.dat, "processed/npp.estimates.V4.csv") ## with pesudorep/model-lin
 
 #### HYBRID MAP WITH ERROR DISTRIBUTION
 #######
-street.res <- as.data.table(read.csv("processed/streettrees.npp.simulator.v42.results.random.csv"))
+street.res <- as.data.table(read.csv("processed/streettrees.npp.simulator.v43.results.random.csv"))
 andy.res <- as.data.table(read.csv("processed/andy.forest.results.V2.csv"))
 pick <- andy.res[lulc==1 | biom>20000,] ## find the andy pixels we want
-# pick[lulc!=1, range(biom, na.rm=T)] ## we good
+pick[lulc!=1, range(biom, na.rm=T)] ## we good
 pick <- pick[,c(9,16:115)] ## pix.ID and then results
 names(pick)[2:101] <- paste0("npp.iter.", 1:100, ".hybrid") ### 14k pix
 street.pix <- copy(street.res)
 street.pix <- street.pix[bos.lulc30m.lumped!=1,]
 street.pix <- street.pix[bos.biom30m<=20000,]
 street.pix <- street.pix[,c(2,8:107)]
-names(street.pix)[2:101] <- paste0("npp.iter.", 1:100, ".hybrid") ### 123k pix
+names(street.pix)[2:101] <- paste0("npp.iter.", 1:100, ".hybrid") ### 136700 pix
 hybrid <- rbind(pick, street.pix) ### now need to merge these back into the complete map
 
 aoi <- raster("processed/boston/bos.aoi30m.tif")
@@ -538,7 +538,7 @@ biom.dat <- as.data.table(cbind(as.data.frame(aoi),
                                 as.data.frame(lulc)))
 biom.dat[, pix.ID:=seq(1:dim(biom.dat)[1])]
 biom.dat <- merge(biom.dat, hybrid, by="pix.ID", all.x=T) # here's our map
-write.csv(biom.dat, "processed/hybrid.results.V3.csv")
+write.csv(biom.dat, "processed/hybrid.results.V4.csv")
 
 
 ### FIA results, error distributed
@@ -678,13 +678,13 @@ quantile(andy.lulc[,7]/2000/1000, probs=c(0.05, 0.5, 0.95))
 
 
 ### HYBRID URBAN, error distributed
-hyb <- as.data.table(read.csv("processed/hybrid.results.V3.csv"))
+hyb <- as.data.table(read.csv("processed/hybrid.results.V4.csv")) ## this is the error distributed model (V3) using the urban-specific allometries (V4)
 sum.na <- function(x){sum(x, na.rm=T)}
 med.na <- function(x){median(x, na.rm=T)}
 hyb.npp.tot <- apply(hyb[bos.aoi30m>800,8:107], MARGIN=2, FUN=sum.na)
 hyb[bos.aoi30m>800,8:107/bos.aoi30m]
 hist((hyb.npp.tot/2000))
-median((hyb.npp.tot/2000)) ## about 11.6k
+median((hyb.npp.tot/2000)) ## about 10.9k (contrast -- Jenkin's allometrics give 11.6k)
 mean((hyb.npp.tot/2000))
 
 ### model realizations by lulc
@@ -695,9 +695,9 @@ for(l in 1:6){
 }
 names(hyb.lulc) <- c("iter", paste("hyb.lulc", 1:6, ".npp.tot", sep=""))
 rownames(hyb.lulc) <- NULL
-write.csv(hyb.lulc, "processed/hyb.v3.lulc.results.csv")
+write.csv(hyb.lulc, "processed/hyb.v4.lulc.results.csv")
 
-hyb.lulc <- as.data.table(read.csv("processed/hyb.v3.lulc.results.csv"))
+hyb.lulc <- as.data.table(read.csv("processed/hyb.v4.lulc.results.csv"))
 hyb.lulc[,X:=NULL]
 
 ## quantiles by lulc 

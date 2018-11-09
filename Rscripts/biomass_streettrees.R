@@ -182,8 +182,8 @@ library(data.table)
 street <- as.data.table(read.csv("processed/boston/street.trees.dbh.csv"))
 par(mfrow=c(1,1), mar=c(4,4,3,1))
 street[record.good==1,] ## 2592 records total
-
-
+dip <- as.data.frame(table(street[record.good==1, Species]))
+write.csv(dip, "docs/street.species.csv")
 ### basics: how does delta diameter vary?
 
 plot(street[record.good==1, dbh.2006], street[record.good==1, delta.diam])
@@ -546,8 +546,8 @@ write.csv(l, file=paste("processed/boston/biom_street/atwork", vers, "csv", sep=
 ##### PART 3: RECONSTRUCTION OF SIMULATOR RESULTS
 ##########
 ### version 1 (not labeled) used static biomass growth equation
-### version 2 (V42) resimmed each pixel x100 using the mixed effects dbh increment model to estimate npp
-### version 3 (V43) resimmed each pixel x100 using the mixed effect dbh increment and using urban specific allometrics for dbh-->volume-->biomass
+### version 2 (V42) resimmed each pixel x100 using the mixed effects dbh increment model and Jenkins/Chognacky allometrics to estimate npp
+### version 3 (V43) resimmed each pixel x100 using the mixed effect dbh increment and specific allometrics for dbh-->volume-->biomass
 ### urban-specific allometrics
 ## McPherson, E.G., N.S. van Doorn and P.J. Peper. 2016. Urban tree database and allometric equations. Gen. Tech. Rep. PSW-GTR-253. Albany, CA: U.S. Department of Agriculture, Forest Service, Pacific Southwest Research Station. 86 p 
 street.allo <- read.csv("docs/street.biometrics.csv") ## AG wood vol (m3) as b0*DBH(cm)^b1; multiply by density to get kg-biomass
@@ -680,8 +680,6 @@ median(med.dbh.rec, na.rm=T) ### YESSS BITCHESSSSS median is same as street tree
 # container <- container[!(duplicated(container$pix.ID)),]
 
 
-# 
-###
 # ## static results
 # ## raster reconstruction
 # biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel
@@ -762,7 +760,7 @@ write.csv(map, "processed/streettrees.npp.simulator.v43.results.random.csv")
 ## brief exploratory
 ### do simulations track cell biomass well enough?
 vers=4
-container <- read.csv(paste("processed/streettrees.npp.simulator.v", vers, ".results.csv", sep=""))
+container <- read.csv(paste("processed/streettrees.npp.simulator.v", vers, "3.results.random.csv", sep=""))
 container <- as.data.table(container)
 
 ### how well did the median biomass simulation per cell get to measured biomass?
