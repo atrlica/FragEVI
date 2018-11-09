@@ -86,11 +86,20 @@ street[Species=="Unknown", Species:="Unknown unknown"]
 street[Species=="unknown", Species:="Unknown unknown"]
 street[Species=="Purpleleaf plum", Species:="Prunus cerasifera"]
 street[Species=="Bradford pear", Species:="Pyrus calleryana"]
-street[Species=="Liriondendron tulipifera", Species:="Liriodendron tulipifera"]
+street[Species=="Liriondendron tulipifera" | Species=="Liriodendron tulipifera ", Species:="Liriodendron tulipifera"]
 street[Species=="Thornless hawthorn", Species:="Crataegus crus-galli"]
 street[Species=="Ginko biloba", Species:="Ginkgo biloba"]
 street[Species=="Cerceidiphyllum japonicum", Species:="Cercidiphyllum japonicum"]
 street[Species=="Katsura", Species :="Cercidiphyllum spp."]
+street[Species=="Pyrus cerasifera", Species :="Prunus cerasifera"]
+street[Species=="Ulmus american", Species :="Ulmus americana"]
+street[Species=="Acer palmatum atropurpureum", Species :="Acer palmatum"]
+street[Species=="Crataegus crusgalli var. inermis", Species :="Crataegus crus-galli"]
+street[Species=="Sophora japonica 'Regent'", Species :="Sophora japonica"]
+street[Species=="Gleditsia triacanthos var. inerm", Species :="Gleditsia triacanthos"]
+street[,Species:=(as.character(Species))]
+table(street$Species)
+
 genspec <- strsplit(as.character(street$Species), " ")
 gen <- unlist(lapply(genspec, "[[", 1))
 street[,genus:=gen] ## 40 genera
@@ -116,14 +125,37 @@ street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny tree
 street[,delta.diam:=dbh.2014-dbh.2006]
 street[,diam.rate:=delta.diam/8] ## annualized
 
-boxplot(diam.rate~genus, data=street[record.good==1,])
-boxplot(diam.rate~genus.simp, data=street[record.good==1,])
-g <- street[record.good==1, median(diam.rate, na.rm=T), by=genus.simp]
-g[order(genus.simp),]
-View(street[record.good==1 & genus.simp=="Sapindaceae" & diam.rate<0,])
+write.csv(street, "processed/boston/street.trees.dbh.csv")
+# boxplot(diam.rate~genus, data=street[record.good==1,])
+# boxplot(diam.rate~genus.simp, data=street[record.good==1,])
+# g <- street[record.good==1, median(diam.rate, na.rm=T), by=genus.simp]
+# g[order(genus.simp),]
 # street[record.good==1, range(dbh.2006, na.rm=T)] 
 # street[record.good==1, range(npp.ann, na.rm=T)] ## 202 records show negative growth -- questionable 2006 dbh record?
-write.csv(street, "processed/boston/street.trees.dbh.csv")
+
+# ### figure out a weighted average wood density for the unnassigned taxa given their prevalence in the data set
+# ((street[Species=="Quercus rubra", length(Species)]*560)+
+#     (street[Species=="Quercus alba", length(Species)]*600)+
+#     (street[Species=="Quercus palustris", length(Species)]*580)+
+#     (street[Species=="Quercus macrocarpa", length(Species)]*580)+
+#     (street[Species=="Pyrus calleryana" | Species=="Pyrus", length(Species)]*603)+
+#     (street[Species=="Ginkgo biloba", length(Species)]*455)+
+#     (street[Species=="Malus", length(Species)]*610)+
+#     (street[Species=="Ulmus americana" | Species=="Ulmus", length(Species)]*460))/
+#   (street[Species%in%c("Quercus rubra", "Quercus alba","Quercus macrocarpa", 
+#                        "Quercus palustris","Pyrus calleryana", "Pyrus", "Ginkgo biloba",
+#                        "Malus", "Ulmus americana", "Ulmus"), length(Species)])
+# ### weighted avg of 549 kg/m3
+# 
+# street[Species%in%c("Quercus rubra", "Quercus alba","Quercus macrocarpa", 
+#                     "Quercus palustris","Pyrus calleryana", "Pyrus", "Ginkgo biloba",
+#                     "Malus", "Ulmus americana", "Ulmus") & record.good==1, length(Species)] ## 329 good records that are not also represented by specific volume equations
+# street[!(genus%in%c("Acer", "Zelkova", "Fraxinus", "Pinus", "Platanus", "Gleditsia", "Magnolia", "Liquidambar", "Celtis", "Tilia")) & 
+#          record.good==1, length(genus)] ## 425 good records outside of the main genera, for which we have an average density representating 77% of them
+# street[genus%in%c("Acer", "Zelkova", "Fraxinus", "Pinus", "Platanus", "Gleditsia", "Magnolia", "Liquidambar", "Celtis", "Tilia") & 
+#          record.good==1, length(genus)] ## 2167 records that we can map to an urban-specific volume allometry, 83% of good stems
+# street[record.good==1, length(genus)] ## 2592 records total
+
 # hist(street[record.good==1, log(dbh.2006)])
 # qqnorm(street[record.good==1, log(dbh.2006)])
 # qqline(street[record.good==1, log(dbh.2006)])
@@ -504,31 +536,33 @@ atwork <- atwork$at.work
 atwork <- atwork[atwork%in%notyet] ## clear job records that have completed files on disk
 l <- data.frame(at.work=atwork)
 write.csv(l, file=paste("processed/boston/biom_street/atwork", vers, "csv", sep="."))
+# y=2000
+# vers=4
+# load(paste("processed/boston/biom_street/genus.street.v", vers, ".weighted.", y, ".sav", sep=""))
 ######
+
 
 
 ##### PART 3: RECONSTRUCTION OF SIMULATOR RESULTS
 ##########
+### version 1 (not labeled) used static biomass growth equation
+### version 2 (V42) resimmed each pixel x100 using the mixed effects dbh increment model to estimate npp
+### version 3 (V43) resimmed each pixel x100 using the mixed effect dbh increment and using urban specific allometrics for dbh-->volume-->biomass
+### urban-specific allometrics
+## McPherson, E.G., N.S. van Doorn and P.J. Peper. 2016. Urban tree database and allometric equations. Gen. Tech. Rep. PSW-GTR-253. Albany, CA: U.S. Department of Agriculture, Forest Service, Pacific Southwest Research Station. 86 p 
+street.allo <- read.csv("docs/street.biometrics.csv") ## AG wood vol (m3) as b0*DBH(cm)^b1; multiply by density to get kg-biomass
 
-vers <- 4 ## which simulator model run are we picking at
-#### import results objects pulled from parallel processing on the cluster (chunks of 10k pixels)
-obj.dump <- list.files("processed/boston/biom_street/")
-npp.dump <- obj.dump[grep(obj.dump, pattern = paste("ann.npp.street.v", vers, ".weighted*", sep=""))]
-npp.dump.chunks <- sub('.*weighted.', '', npp.dump)
-npp.dump.chunks <- sub("\\.sav.*", "", npp.dump.chunks) ## later version get named .sav
-
-## to get basal area and biomass of stems
+## to get basal area and biomass of stems --- static biomass growth prediction
 # ba <- function(x){(((((x/2)^2)*pi)/900))} ## this is in m2/ha (correct for 900m2 pixel footprint)
-ba <- function(x){(((x/2)^2)*pi)/1E4} ### to find JUST the BA of a tree based on dbh (in m2)
-b0 <- -2.48
-b1 <- 2.4835 ## these are eastern hardwood defaults
-biom.pred <- function(x){exp(b0+(b1*log(x)))}
+# ba <- function(x){(((x/2)^2)*pi)/1E4} ### to find JUST the BA of a tree based on dbh (in m2)
+# b0 <- -2.48
+# b1 <- 2.4835 ## these are eastern hardwood defaults
+# biom.pred <- function(x){exp(b0+(b1*log(x)))}
 
 ### for each pixel, get median estimated npp, median # trees
 container <- data.frame()
 med.dbh.rec <- numeric() ## keep a running tally of the dbh of every tree in the nearest-to-median-npp sample in each pixel
 dbh.dump <- list() ## a place to put actual dbh samples from targeted retrievals for deeper analysis (e.g. what do the median retrievals look like?)
-i=1
 load("processed/mod.street.dbhdelta.sav") ## prediction eq. for dbh change
 load("processed/mod.street.dbhdelta.me.sav") ## polynomial mixed effect with species
 
@@ -540,9 +574,16 @@ b0.rand <- rnorm(100, mean=coef(summary(mod.street.dbhdelta.me))[1,1], sd=coef(s
 b1.rand <- rnorm(100, mean=coef(summary(mod.street.dbhdelta.me))[2,1], sd=coef(summary(mod.street.dbhdelta.me))[2,2])
 b2.rand <-rnorm(100, mean=coef(summary(mod.street.dbhdelta.me))[3,1], sd=coef(summary(mod.street.dbhdelta.me))[3,2])
 
+#### import results objects pulled from parallel processing on the cluster (chunks of 10k pixels)
+vers <- 4 ## which simulator model run are we picking at
+obj.dump <- list.files("processed/boston/biom_street/")
+npp.dump <- obj.dump[grep(obj.dump, pattern = paste("ann.npp.street.v", vers, ".weighted*", sep=""))]
+npp.dump.chunks <- sub('.*weighted.', '', npp.dump)
+npp.dump.chunks <- sub("\\.sav.*", "", npp.dump.chunks) ## later version get named .sav
 
 ##### process each pixel chunk; for each pixel estimate npp in a randomly selected dbh collection 100x using b0/b1/b2 values from the vectors above
 npp.random <- list() ## container for npp simulations, will contain pixel-n elements per chunk with ~100 values in each
+i=1
 for(c in 1:length(npp.dump)){
   load(paste("processed/boston/biom_street/", npp.dump[c], sep=""))
   tmp.npp <- sapply(cage.ann.npp, FUN=median)
@@ -566,14 +607,15 @@ for(c in 1:length(npp.dump)){
   tmp.attempts <- attempts.track
   load(paste("processed/boston/biom_street/wts.street.v", vers, ".weighted.", npp.dump.chunks[c], ".sav", sep="")) ## comes in as "cage.wts" object
   tmp.wts <- sapply(cage.wts, FUN=max)
+  load(paste("processed/boston/biom_street/genus.street.v", vers, ".weighted.", npp.dump.chunks[c], ".sav", sep="")) ## comes in as "cage.wts" object
   
   ### figure median dbh and median basal area for each pixel
   load(paste("processed/boston/biom_street/dbh.street.v", vers, ".weighted.", npp.dump.chunks[c], ".sav", sep="")) ## comes in as "dbh.stret.small" object
   ba.grand <- rep(9999, length(cage.dbh)) ## BA values for every retreival per cell
   dbh.grand <- rep(9999, length(cage.dbh)) ## dbh values for the retreival nearest median NPP
   print(paste("patience! Doing pixel-level calculations on chunk", npp.dump.chunks[c]))
-  for(b in 1:length(cage.dbh)){
-    if(length(cage.ann.npp[[b]])<5){  ## if too few NPP retreivals were made
+  for(b in 1:length(cage.dbh)){ ## b is an individual pixel, with 100 separately simulated dbh samples 
+    if(length(cage.ann.npp[[b]])<5){  ## if too few NPP retreivals were made for this pixel
       ba.grand[b] <- NA
       dbh.grand[b] <- NA
       dbh.dump[[b]] <- NA
@@ -585,15 +627,20 @@ for(c in 1:length(npp.dump)){
       rrr <- which(dev==min(dev)) ## which retreival is the closest to the median
       dbh.dump[[b]] <- cage.dbh[[b]][[rrr[1]]] ## track the tree sample nearest to every npp median in every pixel (just take the first instance, fuck it)      
       
-      #### new hotness: throw varying model parameters at a random dbh collection 
-      ## current dbh record is in cage.dbh[[b]]
-      ## randomly select a dbh collection, and randomly select dbh growth coefficients
-      npp.random[[b]] <- numeric()
+      #### new hotness: throw varying model parameters at a random dbh collection
+      #### newer hotness: match dbh samples via associated genus to urban-specific volumetric growth equations
+      ## current dbh record for all simulations is in cage.dbh[[b]]
+      ## randomly select a dbh collection, and successively apply all 100 combinations of dbh growth coefficients 
+      npp.random[[b]] <- numeric() ## this is where we are storing the vectors (100 long) of npp estimates for each pixel
       for(p in 1:100){  ## individual entries in cage.dbh are pixels, which contain vectors of dbh collections
           dbh.rand <- sample(1:length(cage.dbh[[b]]), size=1) ## randomly select a dbh collection
-          tmp <- cage.dbh[[b]][[dbh.rand]]
-          tmp.biom0 <- biom.pred(tmp)
-          tmp.biom1 <- biom.pred(tmp+(b0.rand[p]+(b1.rand[p]*tmp)+(b2.rand[p]*(tmp^2)))) ## old.dbh+predicted.dbh.growth-->biomass
+          tmp.dbh0 <- cage.dbh[[b]][[dbh.rand]] ### dbh collection at time 0
+          tmp.genus <- cage.genus[[b]][[dbh.rand]] ## genera of dbh colletion
+          
+          ### fast match the genus to the specific allometric if possible, or divert to general equation at row 8
+          tmp.biom0 <- street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b0"]*(tmp.dbh0^street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b1"])*street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "dens"]
+          tmp.dbh1 <- tmp.dbh0+(b0.rand[p]+(b1.rand[p]*tmp.dbh0)+(b2.rand[p]*(tmp.dbh0^2))) ## grow the dbh to time 1
+          tmp.biom1 <- street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b0"]*(tmp.dbh1^street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b1"])*street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "dens"]
           npp.random[[b]] <- c(npp.random[[b]], sum(tmp.biom1-tmp.biom0)) ## store the change in biomass as an npp sample
         } ## end npp random estimator
       } ## end else check for number of retrievals
@@ -602,8 +649,7 @@ for(c in 1:length(npp.dump)){
     } ## end pixel loop n=b
   
   ### save out the chunk of pixels with the results of all random simulations
-  # save(npp.random, file=paste("processed/boston/biom_street/npp.random.v", vers, ".weighted.", npp.dump.chunks[c], ".sav", sep=""))
-  save(npp.random, file=paste("processed/boston/biom_street/npp.random.v", vers, "2.weighted.", npp.dump.chunks[c], ".sav", sep=""))
+  save(npp.random, file=paste("processed/boston/biom_street/npp.random.v", vers, "3.weighted.", npp.dump.chunks[c], ".sav", sep=""))
   
   ## bind (static) results in container
   container <- rbind(container, 
@@ -633,26 +679,27 @@ median(med.dbh.rec, na.rm=T) ### YESSS BITCHESSSSS median is same as street tree
 # sum(duplicated(container$pix.ID)) ## some duplicated pixels, remove
 # container <- container[!(duplicated(container$pix.ID)),]
 
-## raster reconstruction
-biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel
-aoi <- raster("processed/boston/bos.aoi30m.tif")
-biom <- crop(biom, aoi) ## biomass was slightly buffered, need to clip to match canopy fraction raster
-biom.dat <- as.data.table(as.data.frame(biom))
-biom.dat[,aoi:=as.vector(getValues(aoi))]
-can <- raster("processed/boston/bos.can30m.tif")
-can.dat <- as.data.table(as.data.frame(can))
-biom.dat <- cbind(biom.dat, can.dat)
-biom.dat[,pix.ID:=1:dim(biom.dat)[1]]
-lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
-lulc.dat <- as.data.table(as.data.frame(lulc))
 
+# 
 ###
-## static results
-map <- merge(x=biom.dat, y=container, by="pix.ID", all.x=T, all.y=T)
-write.csv(map, paste("processed/streettrees.npp.simulator.v", vers, ".results.csv", sep=""))
-map <- read.csv("processed/streettrees.npp.simulator.v4.results.csv")
-plot(map[,med.tree.num.all], map[,pixM.tree.num])
-abline(a=0,b=1)
+# ## static results
+# ## raster reconstruction
+# biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel
+# aoi <- raster("processed/boston/bos.aoi30m.tif")
+# biom <- crop(biom, aoi) ## biomass was slightly buffered, need to clip to match canopy fraction raster
+# biom.dat <- as.data.table(as.data.frame(biom))
+# biom.dat[,aoi:=as.vector(getValues(aoi))]
+# can <- raster("processed/boston/bos.can30m.tif")
+# can.dat <- as.data.table(as.data.frame(can))
+# biom.dat <- cbind(biom.dat, can.dat)
+# biom.dat[,pix.ID:=1:dim(biom.dat)[1]]
+# lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
+# lulc.dat <- as.data.table(as.data.frame(lulc))
+# map <- merge(x=biom.dat, y=container, by="pix.ID", all.x=T, all.y=T)
+# write.csv(map, paste("processed/streettrees.npp.simulator.v", vers, ".results.csv", sep=""))
+# map <- read.csv("processed/streettrees.npp.simulator.v4.results.csv")
+# plot(map[,med.tree.num.all], map[,pixM.tree.num])
+# abline(a=0,b=1)
 
 ###
 ## prepare a separate map data file with each random pixel realization as a column (within-pixel spread is across rows)
@@ -672,11 +719,11 @@ biom.dat[,pix.ID:=1:dim(biom.dat)[1]]
 
 vers=4
 npp.random.list <- list.files("processed/boston/biom_street/")
-npp.random.list <- npp.random.list[grep(npp.random.list, pattern = paste("npp.random.v", vers, "2.weighted*", sep=""))] ## v42 is the one with the mixed model and with consistent coefficients across each map realization
+npp.random.list <- npp.random.list[grep(npp.random.list, pattern = paste("npp.random.v", vers, "3.weighted*", sep=""))] ## v43 is  mixed model with urban-specific allometrics and consistent coefficients across each map realization
 npp.random.chunks <- sub('.*weighted.', '', npp.random.list)
 npp.random.chunks <- sub("\\.sav.*", "", npp.random.chunks) ## later version get named .sav
 
-gosh <- data.frame()
+gosh <- data.frame() ## this is the matrix of pixels, built up row-wise (chunks) containing 100 columns (col=resim realization)
 for(c in 1:length(npp.random.chunks)){
   load(paste("processed/boston/biom_street/", npp.random.list[c], sep="")) ## npp.random
   load(paste("processed/boston/biom_street/index.track.street.v", vers, ".weighted.", npp.random.chunks[c], ".sav", sep="")) ##  "index.track"
@@ -697,7 +744,7 @@ for(c in 1:length(npp.random.chunks)){
 # summary(map$med.ann.npp.all) ## all quite comparable
 names(gosh) <- c("pix.ID", paste("npp.street.random.iter.", 1:100, ".kg", sep=""))
 map <- merge(x=biom.dat, y=gosh, by="pix.ID", all.x=T, all.y=T)
-write.csv(map, "processed/streettrees.npp.simulator.v42.results.random.csv")
+write.csv(map, "processed/streettrees.npp.simulator.v43.results.random.csv")
 
 # ### export the tifs
 # 
@@ -986,8 +1033,3 @@ container[aoi>800 & bos.biom30m>22000, median(npp.MgC.ha, na.rm=T)] ## ### 3.65 
 # save(biom.track, file=paste("processed/boston/biom_street/biom.track.street.big"))
 # save(index.track, file=paste("processed/boston/biom_street/index.track.street.big"))
 # save(cage.genus, file=paste("processed/boston/biom_street/genus.street.big"))
-
-
-
-
-#####

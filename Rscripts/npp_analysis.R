@@ -582,23 +582,71 @@ write.csv(fia.ground.lulc, "processed/fia.empirV5.lulc.ground.results.csv")
 write.csv(fia.forest.lulc, "processed/fia.empirV5.lulc.forest.results.csv")
 write.csv(fia.perv.lulc, "processed/fia.empirV5.lulc.perv.results.csv")
 
+### summary stats
+fia.ground.lulc <- as.data.table(read.csv("processed/fia.empirV5.lulc.ground.results.csv"))
+fia.forest.lulc <-  as.data.table(read.csv("processed/fia.empirV5.lulc.forest.results.csv"))
+fia.perv.lulc <- as.data.table(read.csv("processed/fia.empirV5.lulc.perv.results.csv"))
+fia.ground.lulc[,X:=NULL]
+fia.forest.lulc[,X:=NULL]
+fia.perv.lulc[,X:=NULL]
+
 ## quantiles by lulc -- GROUND
-quantile((fia.npp.tot.ground/2000)/1000, probs=c(0.05, 0.5, 0.95)) ## total
-quantile(fia.ground.lulc[,2]/2000/1000, probs=c(0.05, 0.5, 0.95)) ## forest
-quantile(fia.ground.lulc[,3]/2000/1000, probs=c(0.05, 0.5, 0.95)) ## developed
-quantile(fia.ground.lulc[,4]/2000/1000, probs=c(0.05, 0.5, 0.95)) ## HDRES
-quantile(fia.ground.lulc[,5]/2000/1000, probs=c(0.05, 0.5, 0.95)) ## LDRES
-quantile(fia.ground.lulc[,6]/2000/1000, probs=c(0.05, 0.5, 0.95)) ## other veg
-quantile(fia.ground.lulc[,7]/2000/1000, probs=c(0.05, 0.5, 0.95)) ## water
+rangey <- function(x){quantile(x, probs=c(0.05, 0.5, 0.95))}
+rangey(fia.npp.tot.ground)/2000/1000
+apply(fia.ground.lulc[,2:7], FUN=rangey, MARGIN=2)/2000/1000
 
 ## quantiles by lulc -- FOREST
 quantile((fia.npp.tot.forest/2000)/1000, probs=c(0.05, 0.5, 0.95))
-quantile(fia.forest.lulc[,2]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(fia.forest.lulc[,3]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(fia.forest.lulc[,4]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(fia.forest.lulc[,5]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(fia.forest.lulc[,6]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(fia.forest.lulc[,7]/2000/1000, probs=c(0.05, 0.5, 0.95))
+apply(fia.forest.lulc[,2:7], FUN=rangey, MARGIN=2)/2000/1000
+
+### pixel median spreads -- FOREST
+a <- ((fia.forest.rand[, 11:110]/2000)/fia.forest.rand[,aoi])*1E4 ## get things from per kg-biomass/pix/yr to MgC/ha/yr
+a[,aoi:=fia.forest.rand[,aoi]]
+a[,lulc:=fia.forest.rand[,lulc]]
+quant.na <- function(x)(quantile(x, probs=c(0.05, 0.5, 0.95), na.rm=T))
+fia.npp.med <- apply(a[aoi>800, 1:100], MARGIN=2, FUN=quant.na)
+fia.lulc.med <- data.frame(1:100)
+fia.lulc.lo <- data.frame(1:100)
+fia.lulc.hi <- data.frame(1:100)
+for(l in 1:6){
+  tmp <- apply(a[aoi>800 & lulc==l,1:100], MARGIN=2, FUN=quant.na)
+  fia.lulc.med <- cbind(fia.lulc.med, tmp[2,])
+  fia.lulc.lo <- cbind(fia.lulc.lo, tmp[1,])
+  fia.lulc.hi <- cbind(fia.lulc.hi, tmp[3,])
+}
+names(fia.lulc.med) <- c("iter", paste("fia.lulc", 1:6, ".npp.med", sep=""))
+names(fia.lulc.lo) <- c("iter", paste("fia.lulc", 1:6, ".npp.lo", sep=""))
+names(fia.lulc.hi) <- c("iter", paste("fia.lulc", 1:6, ".npp.hi", sep=""))
+
+## quantile spreads
+### total
+apply(fia.npp.med, MARGIN=1, FUN=median)
+## medians
+median(fia.lulc.med[,2])
+median(fia.lulc.med[,3])
+median(fia.lulc.med[,4])
+median(fia.lulc.med[,5])
+median(fia.lulc.med[,6])
+median(fia.lulc.med[,7])
+
+## lows
+median(fia.lulc.lo[,2])
+median(fia.lulc.lo[,3])
+median(fia.lulc.lo[,4])
+median(fia.lulc.lo[,5])
+median(fia.lulc.lo[,6])
+median(fia.lulc.lo[,7])
+
+## highs
+median(fia.lulc.hi[,2])
+median(fia.lulc.hi[,3])
+median(fia.lulc.hi[,4])
+median(fia.lulc.hi[,5])
+median(fia.lulc.hi[,6])
+median(fia.lulc.hi[,7])
+
+
+
 
 
 ### ANDY FOREST, error distributed
@@ -630,7 +678,7 @@ quantile(andy.lulc[,7]/2000/1000, probs=c(0.05, 0.5, 0.95))
 
 
 ### HYBRID URBAN, error distributed
-hyb <- as.data.table(read.csv("processed/hybrid.results.V2.csv"))
+hyb <- as.data.table(read.csv("processed/hybrid.results.V3.csv"))
 sum.na <- function(x){sum(x, na.rm=T)}
 med.na <- function(x){median(x, na.rm=T)}
 hyb.npp.tot <- apply(hyb[bos.aoi30m>800,8:107], MARGIN=2, FUN=sum.na)
@@ -647,16 +695,21 @@ for(l in 1:6){
 }
 names(hyb.lulc) <- c("iter", paste("hyb.lulc", 1:6, ".npp.tot", sep=""))
 rownames(hyb.lulc) <- NULL
-write.csv(hyb.lulc, "processed/hyb.v2.lulc.results.csv")
+write.csv(hyb.lulc, "processed/hyb.v3.lulc.results.csv")
+
+hyb.lulc <- as.data.table(read.csv("processed/hyb.v3.lulc.results.csv"))
+hyb.lulc[,X:=NULL]
 
 ## quantiles by lulc 
-quantile((hyb.npp.tot/2000)/1000, probs=c(0.05, 0.5, 0.95)) ## total
-quantile(hyb.lulc[,2]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(hyb.lulc[,3]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(hyb.lulc[,4]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(hyb.lulc[,5]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(hyb.lulc[,6]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(hyb.lulc[,7]/2000/1000, probs=c(0.05, 0.5, 0.95))
+rangey(hyb.npp.tot)/2000/1000
+apply(hyb.lulc[,2:7], FUN=rangey, MARGIN=2)/2000/1000
+# quantile((hyb.npp.tot/2000)/1000, probs=c(0.05, 0.5, 0.95)) ## total
+# quantile(hyb.lulc[,2]/2000/1000, probs=c(0.05, 0.5, 0.95))
+# quantile(hyb.lulc[,3]/2000/1000, probs=c(0.05, 0.5, 0.95))
+# quantile(hyb.lulc[,4]/2000/1000, probs=c(0.05, 0.5, 0.95))
+# quantile(hyb.lulc[,5]/2000/1000, probs=c(0.05, 0.5, 0.95))
+# quantile(hyb.lulc[,6]/2000/1000, probs=c(0.05, 0.5, 0.95))
+# quantile(hyb.lulc[,7]/2000/1000, probs=c(0.05, 0.5, 0.95))
 
 ### pixel median spreads
 a <- ((hyb[, 8:107]/2000)/hyb[,bos.aoi30m])*1E4 ## get things from per kg-biomass/pix/yr to MgC/ha/yr
