@@ -2,8 +2,6 @@
 library(data.table)
 setwd("/projectnb/buultra/atrlica/FragEVI")
 
-
-
 ## all of the simulator dump files
 # load(file=paste("processed/boston/biom_street/ann.npp.street.v", vers, ".weighted.", y, ".sav", sep=""))
 # load(file=paste("processed/boston/biom_street/num.trees.street.v", vers, ".weighted.", y, ".sav", sep=""))
@@ -44,37 +42,20 @@ street.allo <- read.csv("docs/street.biometrics.csv") ## AG wood vol (m3) as b0*
 ## mm coefficients: had to hard code bc street data not avail on every machine
 
 ### upgrade: get a list of model coefficients to run for each repetition (dbh.delta~dbh.start)
-load("processed/mod.street.dbhdelta.me.sav")
-aaa <- summary(mod.street.dbhdelta.me)
-b0.rand <- rnorm(100, coef(aaa)[1,1], coef(aaa)[1,2])
-b1.rand <- rnorm(100, coef(aaa)[2,1], coef(aaa)[2,2])
-b2.rand <- rnorm(100, coef(aaa)[3,1], coef(aaa)[3,2])
+# library(lme4)
+# load("processed/mod.street.dbhdelta.me.sav")
+# aaa <- summary(mod.street.dbhdelta.me)
+# b0.rand <- rnorm(100, coef(aaa)[1,1], coef(aaa)[1,2])
+# b1.rand <- rnorm(100, coef(aaa)[2,1], coef(aaa)[2,2])
+# b2.rand <- rnorm(100, coef(aaa)[3,1], coef(aaa)[3,2])
+b0.hard <- c(1.234, 8.178e-02) ### have to hard code shit because R version on cluster is old
+b1.hard <- c(-1.989e-02, 3.693e-03)
+b2.hard <- c(1.340e-04, 3.366e-05)
+b0.rand <- rnorm(100, b0.hard[1], b0.hard[2])
+b1.rand <- rnorm(100, b1.hard[1], b1.hard[2])
+b2.rand <- rnorm(100, b2.hard[1], b2.hard[2])
 
 ## que up the identified street tree planting polygons, filter, and figure out how much land we are dealing with
-library(rgdal)
-box <- readOGR("processed/boston/plant10m_poly_simp_filt.shp") ## simplified polygons for acceptable planting places w/in road buffer
-box.l <- readOGR("processed/boston/plant10m_MBG.shp")## the minimum bounding geometry of the boxes --> max length
-buff <- readOGR("processed/boston/plant10m_poly_simp_filt_4mBuff.shp") ## 4m box buffer shapefile
-can.zon <- read.table("processed/boston/plant10m_buff_CanZonal.txt", sep = ",", header = T)
-### can.zon is the canopy fraction (MEAN) in each box's buffer zone, matched by OBJECTID_1
-poit <- can.zon$OBJECTID_1[can.zon$MEAN>0.5] ## identify buffers that are too tightly packed with other tree canopy
-crowded <- buff@data$OBJECTID[buff@data$OBJECTID%in%poit]
-box.dat <- box@data
-# summary(box.dat$Shape_Area)
-# box.dat[box.dat$Shape_Area<2,] ## let's just eliminate these, I'm suspicious these are bad quality
-good.size <- box.dat$OBJECTID[box.dat$Shape_Area>1.6 & box.dat$Shape_Area<1000]
-### buffer OBJECTID_1 matches zonal stats OBJECTID_1; but need buffer OBJECTID to find corresponding box and box MBG
-# box.dat[box.dat$OBJECTID==52741,]
-# buff@data[buff@data$OBJECTID==52741,]
-box.l.dat <- box.l@data
-box.l.dat <- box.l.dat[!(box.l.dat$OBJECTID %in% crowded),] ## eliminated places without enough canopy space
-box.l.dat <- box.l.dat[box.l.dat$OBJECTID %in% good.size,] ## eliminated places that are too little or too big
-
-hist(box.l.dat$MBG_Length) ## up to 250, most below 50
-box.l.dat$num.plant <- (box.l.dat$MBG_Length%/%8)+1
-hist(box.l.dat$num.plant) ## most places are good for 5 or fewer new trees
-dim(box.l.dat) ## 65k identified places to plant new street trees
-sum(box.l.dat$num.plant, na.rm=T) ## 127k new tree places
 
 # ### now need to find out where these places are
 # box@data <- merge(box@data, box.l.dat, by="OBJECTID")
@@ -86,31 +67,28 @@ sum(box.l.dat$num.plant, na.rm=T) ## 127k new tree places
 # ## so we can randomly pick places and slowly fill them in in the "expand" scenario
 
 ## load up ancillary map data
+library(raster)
+library(rgdal)
 biom <- raster("processed/boston/bos.biom30m.tif")
 aoi <- raster("processed/boston/bos.aoi30m.tif")
 biom <- crop(biom, aoi)
-ed.can <- raster("processed/boston/bos.ed1030m.tif")
 can <- raster("processed/boston/bos.can30m.tif")
-ed.biom <- raster("processed/boston/bos.biomass.ed10only_allLULC30m.tif")
 isa <- raster("processed/boston/bos.isa30m.tif")
 biom.dat <- as.data.table(as.data.frame(biom))
 aoi.dat <- as.data.table(as.data.frame(aoi))
-ed.can.dat <- as.data.table(as.data.frame(ed.can))
 can.dat <- as.data.table(as.data.frame(can))
-ed.biom.dat <- as.data.table(as.data.frame(ed.biom))
 isa.dat <- as.data.table(as.data.frame(isa))
 lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
 lulc.dat <- as.data.table(as.data.frame(lulc))
-biom.dat <- cbind(biom.dat, aoi.dat, ed.can.dat, can.dat, ed.biom.dat, isa.dat, lulc.dat)
+biom.dat <- cbind(biom.dat, aoi.dat, can.dat, isa.dat, lulc.dat)
 biom.dat[,pix.ID:=seq(1:dim(biom.dat)[1])]
 nonfor <- biom.dat[bos.lulc30m.lumped!=1 & bos.biom30m<20000, pix.ID] ### identify pixel ID's that are nonforest
 
 ######
-### set some scenario options
-## available options: BAU, oldies, lowmort, highmort, lowreplant, 
+### set scenario options 
 scenario <- c("BAU", "highmort", "lowreplant", "oldies", "lowmort", "slowreplant", "expand")
-# scen.l <- c("BAU", "highmort", "lowreplant", "oldies", "lowmort")
-# scen.num <- which(scen.l==scenario) ## apply a scenario number
+scenario <- c("BAU")
+
 ## record specific parameter sets
 resim.vers <- 2 ## what are we labeling this round of resims?
 vers <- 4 ## what simulator results version are we dealing with?
@@ -131,8 +109,9 @@ lowreplant.factor <- 0.5 ## what fraction of morts are replanted in "lowreplant"
 oldies.mortfactor <- 0.5 ## how much to reduce mortalities in large trees
 oldies.sizecutoff <- 40 ## how to define "big" trees
 slowreplant.delay <- c(0,2) ## 1 to 3 year delay between death and regrowth starting
-expand.timeline <- 10 ### how many years to implement the expand scenario
-expand.rate.default <- (sum(box.l.dat$num.plant, na.rm=T)/expand.timeline)/length(nonfor) ## this is the per non-forest pixel annual rate of planting needed to fill out the city
+# expand.timeline <- 10 ### how many years to implement the expand scenario
+# expand.rate.go <- (sum(box.l.dat$num.plant, na.rm=T)/expand.timeline)/length(nonfor) ## this is the per non-forest pixel annual rate of planting needed to fill out the city
+expand.rate <- 0
 
 # record run parameters to text file
 # params.list <- list(c(scenario, resim.vers, vers,
@@ -150,7 +129,6 @@ cat(c("oldies mortality factor = ", oldies.mortfactor), "\n")
 cat(c("oldies size cutoff = ", oldies.sizecutoff), "\n")
 cat(c("lowreplant replanting rate = ", lowreplant.factor), "\n")
 cat(c("slowreplant delay time (yrs) = ", slowreplant.delay), "\n")
-cat(c("planting expansion rate per cell/yr = ", expand.rate.default), "\n")
 sink()
 
 ## loops for simulating growth+mortality in pixel dbh samples
@@ -211,14 +189,14 @@ for(s in 1:length(scenario)){
     largemort.mod <- 1
     replant.factor <- 1 ## rate of replanting
     delay.factor <- default.delay
-    expand.rate <- expand.rate.default
+    expand.rate <- expand.rate.go
   }
   print(paste("starting resim run scenario", scenario[s]))
   ### avoid processing shit that's already done
   already <- list.files("processed/boston/biom_street")
   already <- already[grep(already, pattern=".resim.")]
   already <- already[grep(already, pattern=paste(".", scenario[s], ".", sep=""))]
-  # sub('.*oldies\\.', '', already)
+  already <- already[grep(already, pattern=paste0(".V", resim.vers))]
   already <- strsplit(already, split = "[.]")
   already <- sapply(already, "[[" ,5)
   
@@ -238,8 +216,8 @@ for(s in 1:length(scenario)){
     expand.plant.num <- list() ## keeping track of the number of new plants put in
     num.box <- list() ## keep track of the number of live stems
     
-    # procset <- sample(1:length(dbh.sav), size=50) ## test a random subset
-    procset <- 1:length(dbh.sav) ## FULL PROCESS
+    # procset <- sample(1:length(cage.dbh), size=50) ## test a random subset
+    procset <- 1:length(cage.dbh) ## FULL PROCESS
 
     for(pix in procset){ ## the number of pixels in this sim chunk
       print(paste("working on", pix))
@@ -251,10 +229,6 @@ for(s in 1:length(scenario)){
         num.box[[pix]] <- list()
         
         for(a in 1:100){   ### resimulate every pixel 'a' number of times
-          ## select a coefficients set to use in this resim run
-          b0.r <- b0.rand[a]
-          b1.r <- b1.rand[a]
-          b2.r <- b2.rand[a]
           ## can select dbh populations based on proximity to median simulated biomass...
           # biom.lims <- quantile(cage.biom.sim[[pix]], probs=c(0.40, 0.6)) ## figure out which of the simulations to draw and modify
           # j <- sample(which(cage.biom.sim[[pix]]>=biom.lims[1] & cage.biom.sim[[pix]]<=biom.lims[2]),1) ## get a random dbh sample from the the middle 10% of simulator results close to the target biomass
@@ -308,7 +282,7 @@ for(s in 1:length(scenario)){
           
           ## grow up the survivors using estimated growth regression
           # tree.samp <- tree.samp[tree.samp>0]*(1+dbhg.pred(tree.samp[tree.samp>0])) ## static realization of growth model
-          tree.samp[tree.samp>0] <- tree.samp[tree.samp>0]+(b0.r+(b1.r*tree.samp[tree.samp>0])+(b2.r*tree.samp[tree.samp>0]^2))
+          tree.samp[tree.samp>0] <- tree.samp[tree.samp>0]+(b0.rand[a]+(b1.rand[a]*tree.samp[tree.samp>0])+(b2.rand[a] *tree.samp[tree.samp>0]^2))
           
           ### upgrade: urban specific allometries to determine biomass change
           tmp.dbh0 <- tree.samp[tree.samp>0] ## exclude dead trees from dbh/biomass change
@@ -316,7 +290,7 @@ for(s in 1:length(scenario)){
 
           ### fast match the genus to the specific allometric if possible, or divert to general equation at row 8
           tmp.biom0 <- street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b0"]*(tmp.dbh0^street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b1"])*street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "dens"]
-          tmp.dbh1 <- tmp.dbh0+(b0.rand[p]+(b1.rand[p]*tmp.dbh0)+(b2.rand[p]*(tmp.dbh0^2))) ## grow the dbh to time 1, no growth in dead trees
+          tmp.dbh1 <- tmp.dbh0+(b0.rand[a]+(b1.rand[a]*tmp.dbh0)+(b2.rand[a]*(tmp.dbh0^2))) ## grow the dbh to time 1, no growth in dead trees
           tmp.biom1 <- street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b0"]*(tmp.dbh1^street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b1"])*street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "dens"]
           if(length(tmp.biom0)==0){tmp.biom0 <- 0; tmp.biom1 <- 0} ## if everything is dead
           
@@ -356,11 +330,11 @@ for(s in 1:length(scenario)){
         } # loop for number of resims in this pixel
         if(pix%%500 == 0){print(paste("chunk", o, "resimmed pix", pix))} ## give status updates
       } else{  ## if too few successful simulations for this pixel
-        npp.box[[pix]][[a]] <- NA
-        biom.box[[pix]][[a]] <- NA
+        npp.box[[pix]] <- NA
+        biom.box[[pix]] <- NA
         expand.plant.num[[pix]] <- NA
         deaths.sav[[pix]] <- NA
-        num.box[[pix]][[a]] <- NA
+        num.box[[pix]] <- NA
       }
 
     } # end loop for this pixel   
@@ -376,183 +350,183 @@ for(s in 1:length(scenario)){
 
 
 
-###
-### process resim results by scenario
-##########
-b0 <- -2.48
-b1 <- 2.4835 ## these are eastern hardwood defaults
-biom.pred <- function(x){exp(b0+(b1*log(x)))}
-load("processed/mod.street.dbhdelta.sav") ## delta dbh predictor
-dbh.b0 <- summary(mod.street.dbhdelta)$coefficients[1]
-dbh.b1 <- summary(mod.street.dbhdelta)$coefficients[2]
-dbh.b2 <- summary(mod.street.dbhdelta)$coefficients[3]
-dbh.grow <- function(x){dbh.b0+(x*dbh.b1)+((x^2)*dbh.b2)}
-biom.grow <- function(x){biom.pred(x+dbh.grow(x))-biom.pred(x)}
-
-## get a general list of the resim results and the corresponding pixel index
-obj.list <- list.files("processed/boston/biom_street/")
-obj.list <- obj.list[grep(obj.list, pattern=paste("scenario",sep=""))]
-obj.list <- obj.list[grep(obj.list, pattern="dbh")]
-index.list <- list.files("processed/boston/biom_street/")
-index.list <- index.list[grep(index.list, pattern="index")]
-index.list <- index.list[grep(index.list, pattern="v4")]
-
-### BAU scenario
-scen <- "BAU"
-dbh.list <- obj.list[grep(obj.list, pattern=paste(scen))]
-dbh.list <- sub('.*BAU\\.', '', dbh.list)
-dbh.list <- (sub('\\..*', '', dbh.list))
-hitlist <- as.character(dbh.list)
-hitlist[hitlist=="100000"] <- "1e+05"
-preamb <- "processed/boston/biom_street/"
-dump <- data.frame()
-for(o in 1:length(hitlist)){
-  load(paste0(preamb,"dbh.resim.scenario-0.BAU.", hitlist[o], ".V1.sav")) ## as dbh.sav
-  load(paste0(preamb, "index.track.street.v4.weighted.", hitlist[o], ".sav")) ## as index.track
-  load(paste0(preamb, "dbh.street.v4.weighted.", hitlist[o], ".sav", sep="")) # as cage.dbh
-  
-  pix.track <- integer()
-  growth.track <- numeric()
-  for(pix in 1:length(dbh.sav)){ ## loop each pixel
-    if(length(cage.dbh[[pix]])>=40){ ## we only resimmed if we got enough successful retreivals
-      growth.track <- c(growth.track, median(sapply(sapply(dbh.sav[[pix]], biom.grow),sum), na.rm=T)) ## the median of the sums of each pixel sim, translated dbh to biom gain
-      pix.track <- c(pix.track, index.track[pix])
-    } else{
-      growth.track <- c(growth.track, NA)
-      pix.track <- c(pix.track, index.track[pix])
-    }
-  }
-  print(paste("finished chunk", hitlist[o], "of BAU resim"))
-  tmp <- cbind(pix.track, growth.track)
-  dump <- rbind(dump, tmp)
-}
-names(dump) <- c("pix.ID", "BAU.2040med")
-write.csv(dump, paste("processed/scenario.BAU.med2040.results.csv"))
-
-
-### all other scenarios
-scen <- c("highmort", "lowmort", "lowreplant", "oldies", "slowreplant")
-for(s in 1:length(scen)){
-  dbh.list <- obj.list[grep(obj.list, pattern=paste(scen[s]))]
-#   dbh.list <- sub('.*scenario\\.', '', dbh.list)
-  dbh.list <- sub(paste0(".*", scen[s], "\\."), '', dbh.list)
-  dbh.list <- (sub('\\..*', '', dbh.list))
-  hitlist <- as.character(dbh.list)
-  hitlist[hitlist=="100000"] <- "1e+05"
-  preamb <- "processed/boston/biom_street/"
-  dump <- data.frame()
-  for(o in 1:length(hitlist)){
-    load(paste0(preamb,"dbh.resim.scenario.", scen[s], ".", hitlist[o], ".V1.sav")) ## as dbh.sav
-    load(paste0(preamb, "index.track.street.v4.weighted.", hitlist[o], ".sav")) ## as index.track
-    load(paste0(preamb, "dbh.street.v4.weighted.", hitlist[o], ".sav", sep="")) # as cage.dbh
-    
-    pix.track <- integer()
-    growth.track <- numeric()
-    for(pix in 1:length(dbh.sav)){ ## loop each pixel
-      if(length(cage.dbh[[pix]])>=40){ ## we only resimmed if we got enough successful retreivals
-        growth.track <- c(growth.track, median(sapply(sapply(dbh.sav[[pix]], biom.grow),sum), na.rm=T)) ## the median of the sums of each pixel sim, translated dbh to biom gain
-        pix.track <- c(pix.track, index.track[pix])
-      } else{
-        growth.track <- c(growth.track, NA)
-        pix.track <- c(pix.track, index.track[pix])
-      }
-    }
-    print(paste("finished chunk", hitlist[o], "of", scen[s], "resim"))
-    tmp <- cbind(pix.track, growth.track)
-    dump <- rbind(dump, tmp)
-  }
-  names(dump) <- c("pix.ID", paste0(scen[s], ".2040med"))
-  write.csv(dump, paste0("processed/scenario.", scen[s], ".med2040.results.csv"))
-}
-
-### put them back together with the map data
-lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
-extent(lulc)
-biom <- raster("processed/boston/bos.biom30m.tif")
-extent(biom)
-biom <- crop(biom, lulc)
-biom <- as.data.table(as.data.frame(biom))
-lulc <- as.data.table(as.data.frame(lulc))
-lulc[,pix.ID:=seq(1:dim(lulc)[1])]
-lulc[,bos.biom30m:=biom]
-aoi <- as.data.table(as.data.frame(raster("processed/boston/bos.aoi30m.tif")))
-lulc[,aoi:=aoi]
-bau <- read.csv(paste("processed/scenario.BAU.med2040.results.csv"))
-bau$X <- NULL
-lowreplant <- read.csv(paste("processed/scenario.lowreplant.med2040.results.csv"))
-lowreplant$X <- NULL ## this is coming in doubled for reasons unknown
-lowreplant <- lowreplant[!(duplicated(lowreplant$pix.ID)),]
-highmort <- read.csv(paste("processed/scenario.highmort.med2040.results.csv"))
-highmort$X <- NULL
-lowmort <- read.csv(paste("processed/scenario.lowmort.med2040.results.csv"))
-lowmort$X <- NULL
-oldies <- read.csv(paste("processed/scenario.oldies.med2040.results.csv"))
-oldies$X <- NULL
-slowreplant <- read.csv(paste("processed/scenario.slowreplant.med2040.results.csv"))
-slowreplant$X <- NULL
-
-resim.dat <- merge(lulc, bau, by="pix.ID", all.x=T)
-# resim.dat <- resim.dat[, c(1,2,4)]
-resim.dat <- merge(resim.dat, lowreplant, by="pix.ID", all.x=T)
-# resim.dat <- resim.dat[, c(1,2,3,5)]
-resim.dat <- merge(resim.dat, highmort, by="pix.ID", all.x=T)
-# resim.dat <- resim.dat[, c(1,2,3,4,6)]
-resim.dat <- merge(resim.dat, lowmort, by="pix.ID", all.x=T)
-# resim.dat <- resim.dat[, c(1,2,3,4,5,7)]
-resim.dat <- merge(resim.dat, oldies, by="pix.ID", all.x=T)
-# resim.dat <- resim.dat[, c(1,2,3,4,5,6,8)]
-resim.dat <- merge(resim.dat, slowreplant, by="pix.ID", all.x=T)
-# resim.dat <- resim.dat[, c(1,2,3,4,6,7,9)]
-resim.dat[aoi>800 & bos.lulc30m.lumped!=1 & bos.biom30m<20000, .(median(BAU.2040med, na.rm=T),
-                                                                 median(lowreplant.2040med, na.rm=T),
-                                                                 median(highmort.2040med, na.rm=T),
-                                                                 median(lowmort.2040med, na.rm=T),
-                                                                 median(oldies.2040med, na.rm=T),
-                                                                 median(slowreplant.2040med, na.rm=T))]
-
-resim.dat[aoi>800 & bos.lulc30m.lumped!=1 & bos.biom30m<20000, .(sum(BAU.2040med, na.rm=T)/2000,
-                                                                 sum(lowreplant.2040med, na.rm=T)/2000,
-                                                                 sum(highmort.2040med, na.rm=T)/2000,
-                                                                 sum(lowmort.2040med, na.rm=T)/2000,
-                                                                 sum(oldies.2040med, na.rm=T)/2000,
-                                                                 sum(slowreplant.2040med, na.rm=T)/2000)]
-
-
-resim.dat[aoi>800 & bos.lulc30m.lumped==3 & bos.biom30m<20000, .(median(BAU.2040med, na.rm=T),
-                                                                 median(lowreplant.2040med, na.rm=T),
-                                                                 median(highmort.2040med, na.rm=T),
-                                                                 median(lowmort.2040med, na.rm=T),
-                                                                 median(oldies.2040med, na.rm=T),
-                                                                 median(slowreplant.2040med, na.rm=T))]
-
-resim.dat[aoi>800 & bos.lulc30m.lumped%in%c(3,4) & bos.biom30m<20000, .(sum(BAU.2040med, na.rm=T)/2000,
-                                                                 sum(lowreplant.2040med, na.rm=T)/2000,
-                                                                 sum(highmort.2040med, na.rm=T)/2000,
-                                                                 sum(lowmort.2040med, na.rm=T)/2000,
-                                                                 sum(oldies.2040med, na.rm=T)/2000,
-                                                                 sum(slowreplant.2040med, na.rm=T)/2000)]
-
-resim.dat[aoi>800 & bos.lulc30m.lumped==3 & bos.biom30m<20000, .(quantile(((BAU.2040med/2000)/aoi)*1E4, na.rm=T, probs=c(0.05, 0.5, 0.95)),
-                                                                 quantile(((lowreplant.2040med/2000)/aoi)*1E4, na.rm=T, probs=c(0.05, 0.5, 0.95)),
-                                                                 quantile(((highmort.2040med/2000)/aoi)*1E4, na.rm=T, probs=c(0.05, 0.5, 0.95)),
-                                                                 quantile(((lowmort.2040med/2000)/aoi)*1E4, na.rm=T, probs=c(0.05, 0.5, 0.95)),
-                                                                 quantile(((oldies.2040med/2000)/aoi)*1E4, na.rm=T, probs=c(0.05, 0.5, 0.95)),
-                                                                 quantile(((slowreplant.2040med/2000)/aoi)*1E4, na.rm=T, probs=c(0.05, 0.5, 0.95)))]
-
-
-resid <- resim.dat[aoi>800 & bos.lulc30m.lumped %in%c(3,4) & bos.biom30m<20000,] ## 54k
-library(tidyr)
-library(ggplot2)
-resid.long <- gather(resid, scenario, biom.growth, BAU.2040med:slowreplant.2040med, factor_key=TRUE)
-head(resid.long)
-unique(resid.long$bos.lulc30m.lumped)
-unique(resid.long$scenario)
-resid.long <- as.data.table(resid.long)
-resid.long[,MgC.ha.yr:=((biom.growth/2000)/aoi)*1E4]
-ggplot(resid.long, aes(x=scenario, y=MgC.ha.yr))+
-  geom_boxplot(outlier.shape=NA)+
-  scale_y_continuous(limits=c(0, 2))+
-  ylab("Annual C uptake (MgC/ha/yr)")
+# ###
+# ### process resim results by scenario
+# ##########
+# b0 <- -2.48
+# b1 <- 2.4835 ## these are eastern hardwood defaults
+# biom.pred <- function(x){exp(b0+(b1*log(x)))}
+# load("processed/mod.street.dbhdelta.sav") ## delta dbh predictor
+# dbh.b0 <- summary(mod.street.dbhdelta)$coefficients[1]
+# dbh.b1 <- summary(mod.street.dbhdelta)$coefficients[2]
+# dbh.b2 <- summary(mod.street.dbhdelta)$coefficients[3]
+# dbh.grow <- function(x){dbh.b0+(x*dbh.b1)+((x^2)*dbh.b2)}
+# biom.grow <- function(x){biom.pred(x+dbh.grow(x))-biom.pred(x)}
+# 
+# ## get a general list of the resim results and the corresponding pixel index
+# obj.list <- list.files("processed/boston/biom_street/")
+# obj.list <- obj.list[grep(obj.list, pattern=paste("scenario",sep=""))]
+# obj.list <- obj.list[grep(obj.list, pattern="dbh")]
+# index.list <- list.files("processed/boston/biom_street/")
+# index.list <- index.list[grep(index.list, pattern="index")]
+# index.list <- index.list[grep(index.list, pattern="v4")]
+# 
+# ### BAU scenario
+# scen <- "BAU"
+# dbh.list <- obj.list[grep(obj.list, pattern=paste(scen))]
+# dbh.list <- sub('.*BAU\\.', '', dbh.list)
+# dbh.list <- (sub('\\..*', '', dbh.list))
+# hitlist <- as.character(dbh.list)
+# hitlist[hitlist=="100000"] <- "1e+05"
+# preamb <- "processed/boston/biom_street/"
+# dump <- data.frame()
+# for(o in 1:length(hitlist)){
+#   load(paste0(preamb,"dbh.resim.scenario-0.BAU.", hitlist[o], ".V1.sav")) ## as dbh.sav
+#   load(paste0(preamb, "index.track.street.v4.weighted.", hitlist[o], ".sav")) ## as index.track
+#   load(paste0(preamb, "dbh.street.v4.weighted.", hitlist[o], ".sav", sep="")) # as cage.dbh
+#   
+#   pix.track <- integer()
+#   growth.track <- numeric()
+#   for(pix in 1:length(dbh.sav)){ ## loop each pixel
+#     if(length(cage.dbh[[pix]])>=40){ ## we only resimmed if we got enough successful retreivals
+#       growth.track <- c(growth.track, median(sapply(sapply(dbh.sav[[pix]], biom.grow),sum), na.rm=T)) ## the median of the sums of each pixel sim, translated dbh to biom gain
+#       pix.track <- c(pix.track, index.track[pix])
+#     } else{
+#       growth.track <- c(growth.track, NA)
+#       pix.track <- c(pix.track, index.track[pix])
+#     }
+#   }
+#   print(paste("finished chunk", hitlist[o], "of BAU resim"))
+#   tmp <- cbind(pix.track, growth.track)
+#   dump <- rbind(dump, tmp)
+# }
+# names(dump) <- c("pix.ID", "BAU.2040med")
+# write.csv(dump, paste("processed/scenario.BAU.med2040.results.csv"))
+# 
+# 
+# ### all other scenarios
+# scen <- c("highmort", "lowmort", "lowreplant", "oldies", "slowreplant")
+# for(s in 1:length(scen)){
+#   dbh.list <- obj.list[grep(obj.list, pattern=paste(scen[s]))]
+# #   dbh.list <- sub('.*scenario\\.', '', dbh.list)
+#   dbh.list <- sub(paste0(".*", scen[s], "\\."), '', dbh.list)
+#   dbh.list <- (sub('\\..*', '', dbh.list))
+#   hitlist <- as.character(dbh.list)
+#   hitlist[hitlist=="100000"] <- "1e+05"
+#   preamb <- "processed/boston/biom_street/"
+#   dump <- data.frame()
+#   for(o in 1:length(hitlist)){
+#     load(paste0(preamb,"dbh.resim.scenario.", scen[s], ".", hitlist[o], ".V1.sav")) ## as dbh.sav
+#     load(paste0(preamb, "index.track.street.v4.weighted.", hitlist[o], ".sav")) ## as index.track
+#     load(paste0(preamb, "dbh.street.v4.weighted.", hitlist[o], ".sav", sep="")) # as cage.dbh
+#     
+#     pix.track <- integer()
+#     growth.track <- numeric()
+#     for(pix in 1:length(dbh.sav)){ ## loop each pixel
+#       if(length(cage.dbh[[pix]])>=40){ ## we only resimmed if we got enough successful retreivals
+#         growth.track <- c(growth.track, median(sapply(sapply(dbh.sav[[pix]], biom.grow),sum), na.rm=T)) ## the median of the sums of each pixel sim, translated dbh to biom gain
+#         pix.track <- c(pix.track, index.track[pix])
+#       } else{
+#         growth.track <- c(growth.track, NA)
+#         pix.track <- c(pix.track, index.track[pix])
+#       }
+#     }
+#     print(paste("finished chunk", hitlist[o], "of", scen[s], "resim"))
+#     tmp <- cbind(pix.track, growth.track)
+#     dump <- rbind(dump, tmp)
+#   }
+#   names(dump) <- c("pix.ID", paste0(scen[s], ".2040med"))
+#   write.csv(dump, paste0("processed/scenario.", scen[s], ".med2040.results.csv"))
+# }
+# 
+# ### put them back together with the map data
+# lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
+# extent(lulc)
+# biom <- raster("processed/boston/bos.biom30m.tif")
+# extent(biom)
+# biom <- crop(biom, lulc)
+# biom <- as.data.table(as.data.frame(biom))
+# lulc <- as.data.table(as.data.frame(lulc))
+# lulc[,pix.ID:=seq(1:dim(lulc)[1])]
+# lulc[,bos.biom30m:=biom]
+# aoi <- as.data.table(as.data.frame(raster("processed/boston/bos.aoi30m.tif")))
+# lulc[,aoi:=aoi]
+# bau <- read.csv(paste("processed/scenario.BAU.med2040.results.csv"))
+# bau$X <- NULL
+# lowreplant <- read.csv(paste("processed/scenario.lowreplant.med2040.results.csv"))
+# lowreplant$X <- NULL ## this is coming in doubled for reasons unknown
+# lowreplant <- lowreplant[!(duplicated(lowreplant$pix.ID)),]
+# highmort <- read.csv(paste("processed/scenario.highmort.med2040.results.csv"))
+# highmort$X <- NULL
+# lowmort <- read.csv(paste("processed/scenario.lowmort.med2040.results.csv"))
+# lowmort$X <- NULL
+# oldies <- read.csv(paste("processed/scenario.oldies.med2040.results.csv"))
+# oldies$X <- NULL
+# slowreplant <- read.csv(paste("processed/scenario.slowreplant.med2040.results.csv"))
+# slowreplant$X <- NULL
+# 
+# resim.dat <- merge(lulc, bau, by="pix.ID", all.x=T)
+# # resim.dat <- resim.dat[, c(1,2,4)]
+# resim.dat <- merge(resim.dat, lowreplant, by="pix.ID", all.x=T)
+# # resim.dat <- resim.dat[, c(1,2,3,5)]
+# resim.dat <- merge(resim.dat, highmort, by="pix.ID", all.x=T)
+# # resim.dat <- resim.dat[, c(1,2,3,4,6)]
+# resim.dat <- merge(resim.dat, lowmort, by="pix.ID", all.x=T)
+# # resim.dat <- resim.dat[, c(1,2,3,4,5,7)]
+# resim.dat <- merge(resim.dat, oldies, by="pix.ID", all.x=T)
+# # resim.dat <- resim.dat[, c(1,2,3,4,5,6,8)]
+# resim.dat <- merge(resim.dat, slowreplant, by="pix.ID", all.x=T)
+# # resim.dat <- resim.dat[, c(1,2,3,4,6,7,9)]
+# resim.dat[aoi>800 & bos.lulc30m.lumped!=1 & bos.biom30m<20000, .(median(BAU.2040med, na.rm=T),
+#                                                                  median(lowreplant.2040med, na.rm=T),
+#                                                                  median(highmort.2040med, na.rm=T),
+#                                                                  median(lowmort.2040med, na.rm=T),
+#                                                                  median(oldies.2040med, na.rm=T),
+#                                                                  median(slowreplant.2040med, na.rm=T))]
+# 
+# resim.dat[aoi>800 & bos.lulc30m.lumped!=1 & bos.biom30m<20000, .(sum(BAU.2040med, na.rm=T)/2000,
+#                                                                  sum(lowreplant.2040med, na.rm=T)/2000,
+#                                                                  sum(highmort.2040med, na.rm=T)/2000,
+#                                                                  sum(lowmort.2040med, na.rm=T)/2000,
+#                                                                  sum(oldies.2040med, na.rm=T)/2000,
+#                                                                  sum(slowreplant.2040med, na.rm=T)/2000)]
+# 
+# 
+# resim.dat[aoi>800 & bos.lulc30m.lumped==3 & bos.biom30m<20000, .(median(BAU.2040med, na.rm=T),
+#                                                                  median(lowreplant.2040med, na.rm=T),
+#                                                                  median(highmort.2040med, na.rm=T),
+#                                                                  median(lowmort.2040med, na.rm=T),
+#                                                                  median(oldies.2040med, na.rm=T),
+#                                                                  median(slowreplant.2040med, na.rm=T))]
+# 
+# resim.dat[aoi>800 & bos.lulc30m.lumped%in%c(3,4) & bos.biom30m<20000, .(sum(BAU.2040med, na.rm=T)/2000,
+#                                                                  sum(lowreplant.2040med, na.rm=T)/2000,
+#                                                                  sum(highmort.2040med, na.rm=T)/2000,
+#                                                                  sum(lowmort.2040med, na.rm=T)/2000,
+#                                                                  sum(oldies.2040med, na.rm=T)/2000,
+#                                                                  sum(slowreplant.2040med, na.rm=T)/2000)]
+# 
+# resim.dat[aoi>800 & bos.lulc30m.lumped==3 & bos.biom30m<20000, .(quantile(((BAU.2040med/2000)/aoi)*1E4, na.rm=T, probs=c(0.05, 0.5, 0.95)),
+#                                                                  quantile(((lowreplant.2040med/2000)/aoi)*1E4, na.rm=T, probs=c(0.05, 0.5, 0.95)),
+#                                                                  quantile(((highmort.2040med/2000)/aoi)*1E4, na.rm=T, probs=c(0.05, 0.5, 0.95)),
+#                                                                  quantile(((lowmort.2040med/2000)/aoi)*1E4, na.rm=T, probs=c(0.05, 0.5, 0.95)),
+#                                                                  quantile(((oldies.2040med/2000)/aoi)*1E4, na.rm=T, probs=c(0.05, 0.5, 0.95)),
+#                                                                  quantile(((slowreplant.2040med/2000)/aoi)*1E4, na.rm=T, probs=c(0.05, 0.5, 0.95)))]
+# 
+# 
+# resid <- resim.dat[aoi>800 & bos.lulc30m.lumped %in%c(3,4) & bos.biom30m<20000,] ## 54k
+# library(tidyr)
+# library(ggplot2)
+# resid.long <- gather(resid, scenario, biom.growth, BAU.2040med:slowreplant.2040med, factor_key=TRUE)
+# head(resid.long)
+# unique(resid.long$bos.lulc30m.lumped)
+# unique(resid.long$scenario)
+# resid.long <- as.data.table(resid.long)
+# resid.long[,MgC.ha.yr:=((biom.growth/2000)/aoi)*1E4]
+# ggplot(resid.long, aes(x=scenario, y=MgC.ha.yr))+
+#   geom_boxplot(outlier.shape=NA)+
+#   scale_y_continuous(limits=c(0, 2))+
+#   ylab("Annual C uptake (MgC/ha/yr)")
 
 ## how many trees do you get in each re-sim  
 # num.resim.trees <- unlist(lapply(dbh.sav[[pix]], length))
