@@ -336,6 +336,7 @@ abline(h=street[record.good==1, median(diam.rate.rel)], lwd=1, col="black")
 ## V2: Sampling window on DBH was moving/shrinking as a function of cell biomass (never fully processed)
 ## V3: Sample weighting of dbh distribution was adjusted towards large end if simulations failed
 ## V4: tolerance on matching biomass distribution was adjusted to a static threshold (addresses consistent undershoot in large biomass cells)
+## V5: urban-specific allometrics on the front end
 
 ###### Approach 5: Reconfigure street tree analysis for more effective search
 ## Look at cell biomass sample smartly from dbh data, bounded to stop excessive density or BA to reach the biomass total
@@ -352,11 +353,17 @@ biom.dat <- cbind(biom.dat, can.dat)
 biom.dat[,index:=1:dim(biom.dat)[1]] ## master pixel index for stack of biom/aoi/can, 354068 pix
 # p <- ecdf(biom.dat[!is.na(bos.biom30m) & bos.biom30m>10,bos.biom30m]) ## cdf of cell biomass
 
-## prep street tree data and biomass data for processing (small biomass first)
+## prep street tree data and biomass data for processing
+street <- as.data.table(read.csv("processed/boston/street.trees.dbh.csv"))
+street.allo <- read.csv("docs/street.biometrics.csv")
+street[, biom.2006.urb:=street.allo[match(street[,genus], street.allo$genus, nomatch=8), "b0"]*(street[,dbh.2006]^street.allo[match(street[,genus], street.allo$genus, nomatch=8), "b1"])*street.allo[match(street[,genus], street.allo$genus, nomatch=8), "dens"]]
+# plot(street[,biom.2006], street[,biom.2006.urb], col=as.numeric(street[,genus]))
+# abline(a=0, b=1)
+
 ba.pred <- function(x){(x/2)^2*pi*0.0001} ## get BA per stump from dbh
 clean <- street[record.good==1,] # get a good street tree set ready
 clean[, ba:=ba.pred(dbh.2006)]
-setkey(clean, biom.2006) # 2390 records in final selection, dbh range 5-112 cm
+setkey(clean, biom.2006.urb) # 2390 records in final selection, dbh range 5-112 cm
 clean <- clean[order(clean$dbh.2006),]
 clean[,rank:=seq(from=1, to=dim(clean)[1])] ## all the trees have a fixed size rank now (used in adjusting sampling weights)
 
@@ -371,7 +378,7 @@ runme <- biom.dat[!is.na(bos.biom30m) & bos.biom30m>10 & !is.na(aoi) & !is.na(bo
 chunk.size=2000 ## how many pixel to handle per job ## 10000 is probably too big, if you do this again go for smaller chunks
 file.num=ceiling(dim(runme)[1]/chunk.size)
 pieces.list <- seq(chunk.size, by=chunk.size, length.out=file.num) ## how the subfiles will be processed
-vers <- 4 ## set version for different model runs here
+vers <- 5 ## set version for different model runs here
 
 ## check existing npp files, find next file to write
 check <- list.files("processed/boston/biom_street")
@@ -451,7 +458,7 @@ for(t in 1:dim(runme.x)[1]){
   tol.window <- c(max(c((runme.x[t, bos.biom30m]-tol), (0.9*runme.x[t, bos.biom30m]))), 
                   min(c((runme.x[t, bos.biom30m]+tol), (1.1*runme.x[t, bos.biom30m]))))
   ### or take a "groomed" record and sample it with adjusting weights if the algorithm fails on density
-  grasp <- clean[biom.2006<(tol.window[2]), .(dbh.2006, biom.2006, ba, rank, genus)] ## exclude sampling in this simulation any single trees too big to fit cell biomass
+  grasp <- clean[biom.2006.urb<(tol.window[2]), .(dbh.2006, biom.2006.urb, ba, rank, genus)] ## exclude sampling in this simulation any single trees too big to fit cell biomass
   
   ### sample street trees and try to fill the cells
   while(x<100 & q<1000){ ## select 100 workable samples, or quit after q attempts with no success
@@ -461,11 +468,11 @@ for(t in 1:dim(runme.x)[1]){
     ## OR: figure out the dynamic weighting to use based on previous failures
     wts=(k-(g*D))+(((g*D)/(dim(grasp)[1]-1))*((grasp$rank)-1))
     # sample grasp with replacement only up to density limit, with specified weights based on iterative reweighting
-    samp <- grasp[sample(dim(grasp)[1], size=dens.lim, replace=F, prob = wts),] 
-    w=samp[1, biom.2006] ## keep cummulative tally of biomass
+    samp <- grasp[sample(dim(grasp)[1], size=dens.lim, replace=T, prob = wts),] 
+    w=samp[1, biom.2006.urb] ## keep cummulative tally of biomass
     d=1 # keep track of the number of trees
     while(w<tol.window[1] & d<dens.lim){ ## keep adding trees until you just get over the target biomass or run out of records
-      w=w+samp[d+1, biom.2006]
+      w=w+samp[d+1, biom.2006.urb]
       d=d+1
     }
     ### if this is too many trees too tightly packed (over 40m2/ha BA) or not enough biomass in the sample, readjust weights
@@ -478,7 +485,7 @@ for(t in 1:dim(runme.x)[1]){
     }
     if(((samp[1:d, sum(ba)]/runme.x[t, aoi*bos.can30m])*1E4)<40 & w<tol.window[2] & w>tol.window[1]){ ## if the BA density is low enough & got the biomass simulated properly
       x <- x+1 ## record successful sample
-      ann.npp <- c(ann.npp, sum(samp[1:d, biom.2006]*exp((mod.biom.rel$coefficients[2]*log(samp[1:d, dbh.2006]))+mod.biom.rel$coefficients[1])))
+      ann.npp <- c(ann.npp, sum(samp[1:d, biom.2006.urb]*exp((mod.biom.rel$coefficients[2]*log(samp[1:d, dbh.2006]))+mod.biom.rel$coefficients[1])))
       num.trees <- c(num.trees, d)
       biom.sim.track <- c(biom.sim.track, w) ## simulated biomass in this sample
       cage.dbh[[t]][[x]] <- samp[1:d, dbh.2006] ## which dbhs did you select

@@ -341,56 +341,56 @@ e.null.null <- lmer(dbh.incr.ann~1+
                               data=ps.contain[dbh.start.incr>=5,],
                               REML=F)  ## interesting. No effect of DBH, trees increment as they wish, but lower increment in edge
 summary(e.null.null) ## definitely no DBH effect
-anova(e.null.null, e.null, test="Chisq") ## no dbh effect
+anova(e.null.null, e.null, test="Chisq") ## definitely an edge effect
 coef(summary(e.null))
 sigma(e.null)
 
-## what does it mean if there's no dbh effect on increment?
-dbh0 <- seq(5, 90)
-dbh1 <- dbh0+0.5 ## say a tree just grows half an inch per year, like model predicts for edge trees
-b0 <- -2.48
-b1 <- 2.4835 ## these are eastern hardwood defaults, Jenkins et al., 2003 (following approach of Smith et al. 2018)
-biom.pred <- function(x){exp(b0+(b1*log(x)))}
-biom.inv <- function(x){exp((log(x)-b0)/b1)}
-biom0 <- biom.pred(dbh0)
-biom1 <- biom.pred(dbh1)
-
-plot(dbh0, (biom1-biom0)/biom0) ## Fan fookin tastic, here's our good ol hyperbola and based on a static dbh change
-
-### what if we are taking too much out of the dbh effect by modeling it separately for everyone?
-f <- lmer(dbh.incr.ann~dbh.start.incr+seg.Edge + 
-            (1|Plot.ID) + 
-            (1|incr.ID) + 
-            (1|interval), 
-          data=ps.contain[dbh.start.incr>=5,],
-          REML=F)  ## even here, not a lot going on with dbh, probably not significant
-summary(f) 
-plot(ps.contain[dbh.start.incr>=5, dbh.start.incr], ps.contain[dbh.start.incr>=5, dbh.incr.ann],
-     col=ps.contain[dbh.start.incr>=5, seg.Edge])
-points(ps.contain[dbh.start.incr>=5, dbh.start.incr], predict(f),
-       col=ps.contain[dbh.start.incr>=5, seg.Edge], pch=16)
-
-plot(f)
-hist(resid(f)) ## looks pretty fine
-qqnorm(resid(f)) ## good enough
-qqline(resid(f))
-
-f.null <- lmer(dbh.incr.ann~seg.Edge + 
-                 (1|Plot.ID) + 
-                 (1|incr.ID) + 
-                 (1|interval), 
-               data=ps.contain[dbh.start.incr>=5,],
-               REML=F)
-summary(f.null)
-anova(f, f.null, test="Chisq") ## nope, p>0.26
-f.null.null <- lmer(dbh.incr.ann~1 + 
-                 (1|Plot.ID) + 
-                 (1|incr.ID) + 
-                 (1|interval), 
-               data=ps.contain[dbh.start.incr>=5,],
-               REML=F)
-summary(f.null.null)
-anova(f.null, f.null.null, test="Chisq") ## yessir, p<0.001
+# ## what does it mean if there's no dbh effect on increment?
+# dbh0 <- seq(5, 90)
+# dbh1 <- dbh0+0.5 ## say a tree just grows half an inch per year, like model predicts for edge trees
+# b0 <- -2.48
+# b1 <- 2.4835 ## these are eastern hardwood defaults, Jenkins et al., 2003 (following approach of Smith et al. 2018)
+# biom.pred <- function(x){exp(b0+(b1*log(x)))}
+# biom.inv <- function(x){exp((log(x)-b0)/b1)}
+# biom0 <- biom.pred(dbh0)
+# biom1 <- biom.pred(dbh1)
+# 
+# plot(dbh0, (biom1-biom0)/biom0) ## Fan fookin tastic, here's our good ol hyperbola and based on a static dbh change
+# 
+# ### what if we are taking too much out of the dbh effect by modeling it separately for everyone?
+# f <- lmer(dbh.incr.ann~dbh.start.incr+seg.Edge + 
+#             (1|Plot.ID) + 
+#             (1|incr.ID) + 
+#             (1|interval), 
+#           data=ps.contain[dbh.start.incr>=5,],
+#           REML=F)  ## even here, not a lot going on with dbh, probably not significant
+# summary(f) 
+# plot(ps.contain[dbh.start.incr>=5, dbh.start.incr], ps.contain[dbh.start.incr>=5, dbh.incr.ann],
+#      col=ps.contain[dbh.start.incr>=5, seg.Edge])
+# points(ps.contain[dbh.start.incr>=5, dbh.start.incr], predict(f),
+#        col=ps.contain[dbh.start.incr>=5, seg.Edge], pch=16)
+# 
+# plot(f)
+# hist(resid(f)) ## looks pretty fine
+# qqnorm(resid(f)) ## good enough
+# qqline(resid(f))
+# 
+# f.null <- lmer(dbh.incr.ann~seg.Edge + 
+#                  (1|Plot.ID) + 
+#                  (1|incr.ID) + 
+#                  (1|interval), 
+#                data=ps.contain[dbh.start.incr>=5,],
+#                REML=F)
+# summary(f.null)
+# anova(f, f.null, test="Chisq") ## nope, p>0.26
+# f.null.null <- lmer(dbh.incr.ann~1 + 
+#                  (1|Plot.ID) + 
+#                  (1|incr.ID) + 
+#                  (1|interval), 
+#                data=ps.contain[dbh.start.incr>=5,],
+#                REML=F)
+# summary(f.null.null)
+# anova(f.null, f.null.null, test="Chisq") ## yessir, p<0.001
 
 
 ### Now push the mixed effects model of dbh increment into the areal-basis model(s) for growth
@@ -430,8 +430,8 @@ for(i in 1:100){
   # dump[seg!=10, dbh1:=dbh+sel0+sel1]
   for(b in 1:dim(biom.pred.key)[1]){
     ## apply the next-year predicted dbh to the species-specific allometrics to get next years biomass
-    dump[Spp==biom.pred.key[b, Spp] & seg==10, biom.t:=exp(biom.pred.key[b, b0]+(biom.pred.key[b, b1]*log(dbh+b0.rand[i])))]
-    dump[Spp==biom.pred.key[b, Spp] & seg!=10, biom.t:=exp(biom.pred.key[b, b0]+(biom.pred.key[b, b1]*log(dbh+b0.rand[i]+b1.rand[i])))]
+    dump[Spp==biom.pred.key[b, Spp] & seg==10, biom.t:=exp(biom.pred.key[b, b0]+(biom.pred.key[b, b1]*log(dbh+b0.rand[i])))] ## bump up dbh only by the intercept
+    dump[Spp==biom.pred.key[b, Spp] & seg!=10, biom.t:=exp(biom.pred.key[b, b0]+(biom.pred.key[b, b1]*log(dbh+b0.rand[i]+b1.rand[i])))] ## bump up dbh by the intercept and interior correction
   }
   growth <- dump[,biom.t-biom0] ## record the annual biomass change per stem
   andy.dbh <- cbind(andy.dbh, growth)
@@ -465,9 +465,10 @@ for(i in 1:100){
   aa <- lm(growth.rel~MgC.ha.can+seg.F, data=g) ## MgC-growth/MgC-biomass(MgC)~density(MgC/ha)+interior
   # points(g$MgC.ha.can, predict(aa), col="black", pch=15)
   # points(g$V1, predict(aa), col="black", cex=0.4, pch=16)
-  plot.mod.b0 <- c(plot.mod.b0, coef(aa)[1])
-  plot.mod.b1 <- c(plot.mod.b1, coef(aa)[2])
-  plot.mod.b2 <- c(plot.mod.b2, coef(aa)[3])
+  ## new hotness: sample the coefficient at random from its distribution
+  plot.mod.b0 <- c(plot.mod.b0, rnorm(n=1, mean=summary(aa)$coefficients[1,1], sd=summary(aa)$coefficients[1,2]))
+  plot.mod.b1 <- c(plot.mod.b1, rnorm(n=1, mean=summary(aa)$coefficients[2,1], sd=summary(aa)$coefficients[2,2]))
+  plot.mod.b2 <- c(plot.mod.b2, rnorm(n=1, mean=summary(aa)$coefficients[3,1], sd=summary(aa)$coefficients[3,2]))
   ### need some basic stats to constrain estimates in the npp calculation step
   edge.max <- c(edge.max, g[seg.F=="E", max(growth.rel)])
   edge.min <- c(edge.min, g[seg.F=="E", min(growth.rel)])
@@ -477,9 +478,9 @@ for(i in 1:100){
 }
 
 #### these distributions of plot model coefficients be used to estimate biomass gain in the map WITH NOISE
-mean(plot.mod.b0)
-mean(plot.mod.b1)
-mean(plot.mod.b2)
+mean(plot.mod.b0);sd(plot.mod.b0)
+mean(plot.mod.b1);sd(plot.mod.b1)
+mean(plot.mod.b2);sd(plot.mod.b2)
 t.test(plot.mod.b1, mu=0)
 t.test(plot.mod.b2, mu=0)
 
