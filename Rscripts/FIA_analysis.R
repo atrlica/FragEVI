@@ -32,6 +32,7 @@ live$GENUS <- as.character(live$GENUS)
 live$GENUS <- as.factor(live$GENUS)
 live$GENUS.num <- as.numeric(live$GENUS)
 
+
 ### calculate species specific allometrics and biomass changes
 live[,spp:=paste(substr(GENUS, 1,1), ".", SPECIES, sep="")]
 live <- merge(x=live, y=spp.allo[,c("spp", "b0", "b1")], by="spp", all.x=T)
@@ -130,17 +131,33 @@ write.csv(live, "processed/fia.live.stem.dbh.growth.csv")
 ### Modeling growth~dbh (individual stem level) ## this is purely out of curiosity
 #####
 live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv"))  ##  too-sparse subplots removed
+live$taxa <- live[,paste(GENUS, SPECIES)]
 ### new hotness: dbh increment modeling
 plot(live$DIAM_T0, live$delta.diam)
 plot(live$DIAM_T0, live$diam.rate); mean(live[lag>0, mean(diam.rate)]) ### these boys grow about 0.2 cm/yr
 lo <- (lm(diam.rate~DIAM_T0, data=live[lag>0,])) ## very low avg. rate, 0.1 cm/yr, 0.07 gain per 10cm --> contrast andy forest intercept is 0.5 cm/yr
 points(live[lag>0,DIAM_T0], predict(lo), col="red", cex=0.3, pch=15)
-hm <- (lm(diam.rate~poly(DIAM_T0, degree=4), data=live))
-points(live[is.finite(diam.rate),DIAM_T0], predict(hm), col="red", pch=16, cex=0.2)
+hm <- (lm(diam.rate~poly(DIAM_T0, degree=2), data=live))
+points(live[is.finite(diam.rate),DIAM_T0], predict(hm), col="blue", pch=16, cex=0.2)
 summary(hm) ## low predictive, RSE 0.24, R2 0.08, not an improvement from the linear model
 live[,diam.rate.rel:=diam.rate/DIAM_T0]
-plot(live$DIAM_T0, live$diam.rate.rel) ## same exponential-looking curve -- you're inducing this structure by taking a basically constant value and dividing by x
+plot(live$DIAM_T0, live$diam.rate) ## same exponential-looking curve -- you're inducing this structure by taking a basically constant value and dividing by x
+plot(live[lag>0 & STATUS==1 & diam.rate>0, log(DIAM_T0)], live[lag>0 & STATUS==1 & diam.rate>0, diam.rate])
+yyy <- lmer(diam.rate~DIAM_T0 +
+       (1|PlotID) +
+       (1|GENUS)+
+       (1|YEAR), data=live[lag>0 & STATUS ==1,], REML=F)
 
+zzz <- lmer(diam.rate~DIAM_T0 +
+              (1+DIAM_T0|PlotID) +
+              (1+DIAM_T0|GENUS)+
+              (1+DIAM_T0|YEAR), data=live[lag>0 & STATUS ==1,], REML=F)
+yyy.null <- lmer(diam.rate~1 +
+              (1|PlotID) +
+              (1|GENUS)+
+              (1|YEAR), data=live[lag>0 & STATUS ==1,], REML=F)
+
+anova(yyy.null, yyy)
 ## log model of BIOMASS growth rate, growth>0, no hard/soft designation
 summary(live$growth.ann.rel) ## 0.9-3.4%, (-13-53%) -- so looks lower generally than Andy or Street trees
 mod.fia.stem.log <- lm(log(growth.ann.rel)~log(DIAM_T0), data=live[growth.ann.rel>0])
@@ -295,6 +312,8 @@ plot.sum[,biom.delt.ann.HW.MgC.ha:=((biom.delt.ann.HW/2000)/(subplot.area*num.su
 plot.sum[,biom.delt.ann.rel:=biom.delt.ann/biom0.sum] ### annualized total biomass change vs. starting total biomass 
 plot.sum[,biom.delt.ann.rel.HW:=biom.delt.ann.HW/biom0.sum] ## annualized HW biomass change vs. starting total biomass
 plot.sum[,biom0.MgC.ha:=((biom0.sum/2000)/(subplot.area*num.subplots))*1E4] ## the biomass density avg across all included subplots
+plot.sum[,biom0.MgC.ha.HW:=((biom0.HW/2000)/(subplot.area*num.subplots))*1E4]
+plot.sum[,biom.delt.ann.rel.HW.HW:=biom.delt.ann.HW/biom0.HW] ## biomass gain relative only to the HW present
 
 ## basic exploratory -- what does the data and relationship look like?
 length(unique(plot.sum$PlotID)) ## 216 unique plots out of 333 entries, some with more than 1 interval
@@ -302,7 +321,8 @@ length(unique(plot.sum$PlotID)) ## 216 unique plots out of 333 entries, some wit
 # aaaa <- plot.sum[PlotID %in% mult,] ## 107 plots appear twice as successive samples
 # View(aaaa[order(PlotID),])
 plot.sum[HWfrac>0.25, length(unique(PlotID))] ## 200 plots with 1) at least 1 subplot maintaining 5 or more LIVE stems across measurement period and 2) at least 25% HW biomass at start of measurement window
-
+hist(plot.sum[HWfrac>0.25, biom.delt.ann.rel.HW])
+hist(plot.sum[HWfrac>0.25, biom.delt.ann.rel.HW.HW])
 write.csv(plot.sum, "processed/fia.live.plot.groomedV2.csv")
 
 
@@ -439,6 +459,19 @@ check2 <- lm(biom.delt.ann.HW.MgC.ha~poly(biom0.MgC.ha, degree=2, raw=T), data=l
 points(live.plot[HWfrac>0.25, biom0.MgC.ha], predict(check2), cex=0.4, col="blue") ## nothing, not significant model
 sigma(check) ## 0.88 MgC/ha/yr, R2 0.05
 
+## how different is the scatter based on how we calculate the biomass density or relative biomass gain rate?
+plot(live.plot[HWfrac>0.25, biom0.MgC.ha], 
+     live.plot[HWfrac>0.25, biom.delt.ann.rel.HW]) ## HW gain rel to TOTAL, vs total biomass
+points(live.plot[HWfrac>0.25, biom0.MgC.ha], 
+       live.plot[HWfrac>0.25, biom.delt.ann.rel.HW.HW], pch=13, col="blue") ## HW gain rel to HW, vs total biomass
+points(live.plot[HWfrac>0.25, biom0.MgC.ha.HW],
+       live.plot[HWfrac>0.25, biom.delt.ann.rel.HW.HW], pch=14, col="red") ## HW gain rel to HW, vs HW biomass
+summary(live.plot[HWfrac>0.25, biom.delt.ann.rel.HW])
+summary(live.plot[HWfrac>0.25, biom.delt.ann.rel.HW.HW]) ## pretty similar
+
+## I think total biomass density is the right metric, and the two metrics of rate are pretty similar
+
+### absolute biomass gain rate
 check.me <- lmer(biom.delt.ann.HW.MgC.ha~biom0.MgC.ha+
                    (1|PlotID)+
                    (1|prev.sample), 
@@ -458,65 +491,73 @@ for(i in 1:100){
 } ## OK so this is how it be -- a model with error of linear/low-predictive MgC/ha/yr to MgC/ha relationship
 
 
-
-## modeling growth as MgC/MgC (rate)~MgC/ha (density)
+## relative growth rate MgC/MgC (rate)~MgC/ha (density)
 library(lme4)
 hist(live.plot[,biom0.MgC.ha]) ## looks a lot like urban -- peaks 50-100, long tail up to 300
 
 plot(live.plot$biom0.MgC.ha, live.plot$biom.delt.ann.rel.HW) ## there we are
 plot(live.plot$biom0.MgC.ha, live.plot[,log(biom.delt.ann.rel.HW)])
-points(plot.sum[HWfrac<0.25, biom0.MgC.ha], plot.sum[HWfrac<0.25, biom.delt.rel.ann], pch=3, col="red")
-points(plot.sum$biom0.MgC.ha, plot.sum$biom.delt.rel.ann.HW, col="green", pch=14) ## HW only
-points(plot.sum[HWfrac<0.25, biom0.MgC.ha], plot.sum[HWfrac<0.25, biom.delt.rel.ann.HW], col="blue", pch=15) ## low HW plots, all low growth in the HW (understory?)
-plot(plot.sum[, biom0.MgC.ha], plot.sum[, biom.delt.rel.ann.HW], col=plot.sum[, as.factor(prev.sample)], pch=15) ### allz over
-
+points(plot.sum[HWfrac<0.25, biom0.MgC.ha], plot.sum[HWfrac<0.25, log(biom.delt.ann.rel.HW)], pch=3, col="red") ## low HW = low growth across density -- understory?
 
 library(lme4)
-a <- lmer(biom.delt.rel.ann.HW~biom0.MgC.ha+
+### linear model
+a <- lmer(biom.delt.ann.rel.HW~biom0.MgC.ha+
        (1|PlotID)+
        (1|prev.sample),
-     data=live.plot, REML=F)
+     data=live.plot[HWfrac>0.25], REML=F)
 summary(a) ## tiny negative association with density
 hist(residuals(a))
 ## contrast: mean growth in andy edge is 0.064 MgC/MgC, here it is 0.032 MgC/MgC
 sigma(a) ## 0.0057
 AIC(a)
 co <- coef(summary(a))
-plot(live.plot[, biom0.MgC.ha], live.plot[, biom.delt.rel.ann.HW])
+plot(live.plot[, biom0.MgC.ha], live.plot[, biom.delt.ann.rel.HW])
 points(live.plot[, biom0.MgC.ha],
        co[1]+
          (co[2]*live.plot[, biom0.MgC.ha]),
        col="red", pch=16, cex=0.3)
-a.hw <- lmer(biom.delt.rel.ann.HW~biom0.MgC.ha+
-            (1|PlotID)+
-            (1|prev.sample),
-          data=live.plot[HWfrac>0.25], REML=F)
-AIC(a.hw)
-sigma(a.hw) #0.0059
 
-## what if we just linear model the log-transformed relative growth rate
+## log xform the response
 a.log <- lmer(log(biom.delt.ann.rel.HW)~biom0.MgC.ha+
             (1|PlotID)+
             (1|prev.sample),
-          data=live.plot, REML=F)
+          data=live.plot[HWfrac>0.25], REML=F)
 summary(a.log) ## tiny negative association with density
 summary(lm(log(biom.delt.ann.rel.HW)~biom0.MgC.ha, data=live.plot))
 hist(residuals(a.log))
 ## contrast: mean growth in andy edge is 0.064 MgC/MgC, here it is 0.032 MgC/MgC
-sigma(a.log) ## 0.0057
-AIC(a)
-co <- coef(summary(a.log))
-plot(live.plot[, biom0.MgC.ha], live.plot[, biom.delt.rel.ann.HW])
-points(live.plot[, biom0.MgC.ha],
-       co[1]+
-         (co[2]*live.plot[, biom0.MgC.ha]),
+sigma(a.log) ## 0.235
+AIC(a.log) ##535.8
+co.log <- coef(summary(a.log))
+plot(live.plot[HWfrac>0.25, biom0.MgC.ha], live.plot[HWfrac>0.25, biom.delt.ann.rel.HW])
+points(live.plot[HWfrac>0.25, biom0.MgC.ha],
+       exp(co.log[1]+(co.log[2]*live.plot[HWfrac>0.25, biom0.MgC.ha])),
        col="red", pch=16, cex=0.3)
-a.hw <- lmer(biom.delt.rel.ann.HW~biom0.MgC.ha+
-               (1|PlotID)+
-               (1|prev.sample),
-             data=live.plot[HWfrac>0.25], REML=F)
-AIC(a.hw)
-sigma(a.hw) #0.0059
+points(live.plot[HWfrac>0.25, biom0.MgC.ha],
+       co[1]+(co[2]*live.plot[HWfrac>0.25, biom0.MgC.ha]),
+       col="blue", pch=16, cex=0.3)
+a.log.null <- lmer(log(biom.delt.ann.rel.HW)~1+
+                (1|PlotID)+
+                (1|prev.sample),
+              data=live.plot[HWfrac>0.25], REML=F)
+anova(a.log.null, a.log, test="Chisq") ## yep significant
+coef(summary(a.log))
+# ### log xform the predictor
+# a.log2 <- lmer(biom.delt.ann.rel.HW~log(biom0.MgC.ha)+
+#                (1|PlotID)+
+#                (1|prev.sample),
+#              data=live.plot[HWfrac>0.25], REML=F)
+# AIC(a.log2)
+# sigma(a.log2) #0.0059
+# summary(a.log2)
+# plot(live.plot[, biom0.MgC.ha], live.plot[, biom.delt.ann.rel.HW])
+# points(live.plot[, (biom0.MgC.ha)],
+#       exp(co[1]+(co[2]*live.plot[, (biom0.MgC.ha)])),
+#        col="red", pch=16, cex=0.3)
+# points(live.plot[, biom0.MgC.ha],
+#        exp(co[1]+(co[2]*live.plot[, biom0.MgC.ha])),
+#        col="blue", pch=16, cex=0.3) ## these are the same -- log xform the y or the x
+
 
 # ## looks bent to me
 # b <- lmer(biom.delt.rel.ann.HW~poly(biom0.MgC.ha, degree=2, raw=T)+

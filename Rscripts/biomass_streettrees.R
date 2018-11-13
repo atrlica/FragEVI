@@ -81,6 +81,17 @@ biom.inv <- function(x){exp((log(x)-b0)/b1)}
 ## read data and clean up
 street <- read.csv("docs/ian/Boston_Street_Trees.csv") ## Street tree resurvey, biomass 2006/2014, species
 street <- as.data.table(street)
+street[, record.good:=0] ## ID records with good data quality
+street[is.finite(dbh.2014) & is.finite(dbh.2006) & dead.by.2014==0 & Health!="Poor", record.good:=1] #2603 records good
+street[record.good==1, biom.2014:=biom.pred(dbh.2014)]
+street[record.good==1, biom.2006:=biom.pred(dbh.2006)]
+street[record.good==1, npp.ann:=(biom.2014-biom.2006)/8]
+street[record.good==1, npp.ann.rel:=npp.ann/biom.2006]
+street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny trees
+street[,delta.diam:=dbh.2014-dbh.2006]
+street[,diam.rate:=delta.diam/8] ## annualized
+
+### fix taxa and assign to categories of use
 street[is.na(Species), Species:="Unknown unknown"]
 street[Species=="Unknown", Species:="Unknown unknown"]
 street[Species=="unknown", Species:="Unknown unknown"]
@@ -109,21 +120,12 @@ street[,genus.simp:=genus]
 street[genus%in%c("Amelanchier", "Crataegus"), genus.simp:="Malus"] ## not calling it "Malinae" because we are not including Pyrus
 street[genus%in%c("Quercus", "Betula", "Carpinus", "Carya", "Corylus", "Fagus", "Ostrya"), genus.simp:="Fagales"]
 street[genus%in%c("Aesculus", "Koelreuteria", "Acer"), genus.simp:="Sapindaceae"]
-street[genus%in%c("Catalpa", "Celtis", "Cercidiphyllum", "Cornus",
+street[genus%in%c("Catalpa", "Celtis", "Cercidiphyllum", "Cornus", "Liquidambar", "Syringa",
                   "Halesia", "Liriodendron", "Magnolia", "Morus", "Pinus", "Populus", "Unknown"), genus.simp:="Other"] ## 129 of these, 84 w/o valid genus
 street[genus%in%c("Cercis", "Maackia", "Robinia", "Sophora", "Gleditsia"), genus.simp:="Fabaceae"] ## 21 of these
-# table(street$genus.simp) ## 15 taxonomic groups
+table(street[record.good==1,genus.simp]) ## 15 taxonomic groups
 # table(street$genus) ## 39 unique genera
 
-street[, record.good:=0] ## ID records with good data quality
-street[is.finite(dbh.2014) & is.finite(dbh.2006) & dead.by.2014==0 & Health!="Poor", record.good:=1] #2603 records good
-street[record.good==1, biom.2014:=biom.pred(dbh.2014)]
-street[record.good==1, biom.2006:=biom.pred(dbh.2006)]
-street[record.good==1, npp.ann:=(biom.2014-biom.2006)/8]
-street[record.good==1, npp.ann.rel:=npp.ann/biom.2006]
-street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny trees
-street[,delta.diam:=dbh.2014-dbh.2006]
-street[,diam.rate:=delta.diam/8] ## annualized
 
 write.csv(street, "processed/boston/street.trees.dbh.csv")
 # boxplot(diam.rate~genus, data=street[record.good==1,])
@@ -272,8 +274,7 @@ hm0.me2 <- lmer(diam.rate~1+
 anova(hm0.me2, hm2.me2) ## better to have a polynomial dbh term than not
 mod.street.dbhdelta.me <- hm2.me2
 save(mod.street.dbhdelta.me, file="processed/mod.street.dbhdelta.me.sav")
-
-
+load("processed/mod.street.dbhdelta.me.sav")
 
 ### the models for FIA stem growth rate
 bu1 <- lm(diam.rate~poly(DIAM_T0, degree=1), data=live[DIAM_T0>0,]);AIC(bu1)
