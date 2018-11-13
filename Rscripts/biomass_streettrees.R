@@ -81,6 +81,17 @@ biom.inv <- function(x){exp((log(x)-b0)/b1)}
 ## read data and clean up
 street <- read.csv("docs/ian/Boston_Street_Trees.csv") ## Street tree resurvey, biomass 2006/2014, species
 street <- as.data.table(street)
+street[, record.good:=0] ## ID records with good data quality
+street[is.finite(dbh.2014) & is.finite(dbh.2006) & dead.by.2014==0 & Health!="Poor", record.good:=1] #2603 records good
+street[record.good==1, biom.2014:=biom.pred(dbh.2014)]
+street[record.good==1, biom.2006:=biom.pred(dbh.2006)]
+street[record.good==1, npp.ann:=(biom.2014-biom.2006)/8]
+street[record.good==1, npp.ann.rel:=npp.ann/biom.2006]
+street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny trees
+street[,delta.diam:=dbh.2014-dbh.2006]
+street[,diam.rate:=delta.diam/8] ## annualized
+
+### fix taxa and assign to categories of use
 street[is.na(Species), Species:="Unknown unknown"]
 street[Species=="Unknown", Species:="Unknown unknown"]
 street[Species=="unknown", Species:="Unknown unknown"]
@@ -109,21 +120,12 @@ street[,genus.simp:=genus]
 street[genus%in%c("Amelanchier", "Crataegus"), genus.simp:="Malus"] ## not calling it "Malinae" because we are not including Pyrus
 street[genus%in%c("Quercus", "Betula", "Carpinus", "Carya", "Corylus", "Fagus", "Ostrya"), genus.simp:="Fagales"]
 street[genus%in%c("Aesculus", "Koelreuteria", "Acer"), genus.simp:="Sapindaceae"]
-street[genus%in%c("Catalpa", "Celtis", "Cercidiphyllum", "Cornus",
+street[genus%in%c("Catalpa", "Celtis", "Cercidiphyllum", "Cornus", "Liquidambar", "Syringa",
                   "Halesia", "Liriodendron", "Magnolia", "Morus", "Pinus", "Populus", "Unknown"), genus.simp:="Other"] ## 129 of these, 84 w/o valid genus
 street[genus%in%c("Cercis", "Maackia", "Robinia", "Sophora", "Gleditsia"), genus.simp:="Fabaceae"] ## 21 of these
-# table(street$genus.simp) ## 15 taxonomic groups
+table(street[record.good==1,genus.simp]) ## 15 taxonomic groups
 # table(street$genus) ## 39 unique genera
 
-street[, record.good:=0] ## ID records with good data quality
-street[is.finite(dbh.2014) & is.finite(dbh.2006) & dead.by.2014==0 & Health!="Poor", record.good:=1] #2603 records good
-street[record.good==1, biom.2014:=biom.pred(dbh.2014)]
-street[record.good==1, biom.2006:=biom.pred(dbh.2006)]
-street[record.good==1, npp.ann:=(biom.2014-biom.2006)/8]
-street[record.good==1, npp.ann.rel:=npp.ann/biom.2006]
-street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny trees
-street[,delta.diam:=dbh.2014-dbh.2006]
-street[,diam.rate:=delta.diam/8] ## annualized
 
 write.csv(street, "processed/boston/street.trees.dbh.csv")
 # boxplot(diam.rate~genus, data=street[record.good==1,])
@@ -182,8 +184,8 @@ library(data.table)
 street <- as.data.table(read.csv("processed/boston/street.trees.dbh.csv"))
 par(mfrow=c(1,1), mar=c(4,4,3,1))
 street[record.good==1,] ## 2592 records total
-
-
+dip <- as.data.frame(table(street[record.good==1, Species]))
+write.csv(dip, "docs/street.species.csv")
 ### basics: how does delta diameter vary?
 
 plot(street[record.good==1, dbh.2006], street[record.good==1, delta.diam])
@@ -272,8 +274,7 @@ hm0.me2 <- lmer(diam.rate~1+
 anova(hm0.me2, hm2.me2) ## better to have a polynomial dbh term than not
 mod.street.dbhdelta.me <- hm2.me2
 save(mod.street.dbhdelta.me, file="processed/mod.street.dbhdelta.me.sav")
-
-
+load("processed/mod.street.dbhdelta.me.sav")
 
 ### the models for FIA stem growth rate
 bu1 <- lm(diam.rate~poly(DIAM_T0, degree=1), data=live[DIAM_T0>0,]);AIC(bu1)
@@ -335,6 +336,7 @@ abline(h=street[record.good==1, median(diam.rate.rel)], lwd=1, col="black")
 ## V2: Sampling window on DBH was moving/shrinking as a function of cell biomass (never fully processed)
 ## V3: Sample weighting of dbh distribution was adjusted towards large end if simulations failed
 ## V4: tolerance on matching biomass distribution was adjusted to a static threshold (addresses consistent undershoot in large biomass cells)
+## V5: urban-specific allometrics on the front end
 
 ###### Approach 5: Reconfigure street tree analysis for more effective search
 ## Look at cell biomass sample smartly from dbh data, bounded to stop excessive density or BA to reach the biomass total
@@ -351,11 +353,17 @@ biom.dat <- cbind(biom.dat, can.dat)
 biom.dat[,index:=1:dim(biom.dat)[1]] ## master pixel index for stack of biom/aoi/can, 354068 pix
 # p <- ecdf(biom.dat[!is.na(bos.biom30m) & bos.biom30m>10,bos.biom30m]) ## cdf of cell biomass
 
-## prep street tree data and biomass data for processing (small biomass first)
+## prep street tree data and biomass data for processing
+street <- as.data.table(read.csv("processed/boston/street.trees.dbh.csv"))
+street.allo <- read.csv("docs/street.biometrics.csv")
+street[, biom.2006.urb:=street.allo[match(street[,genus], street.allo$genus, nomatch=8), "b0"]*(street[,dbh.2006]^street.allo[match(street[,genus], street.allo$genus, nomatch=8), "b1"])*street.allo[match(street[,genus], street.allo$genus, nomatch=8), "dens"]]
+# plot(street[,biom.2006], street[,biom.2006.urb], col=as.numeric(street[,genus]))
+# abline(a=0, b=1)
+
 ba.pred <- function(x){(x/2)^2*pi*0.0001} ## get BA per stump from dbh
 clean <- street[record.good==1,] # get a good street tree set ready
 clean[, ba:=ba.pred(dbh.2006)]
-setkey(clean, biom.2006) # 2390 records in final selection, dbh range 5-112 cm
+setkey(clean, biom.2006.urb) # 2390 records in final selection, dbh range 5-112 cm
 clean <- clean[order(clean$dbh.2006),]
 clean[,rank:=seq(from=1, to=dim(clean)[1])] ## all the trees have a fixed size rank now (used in adjusting sampling weights)
 
@@ -370,7 +378,7 @@ runme <- biom.dat[!is.na(bos.biom30m) & bos.biom30m>10 & !is.na(aoi) & !is.na(bo
 chunk.size=2000 ## how many pixel to handle per job ## 10000 is probably too big, if you do this again go for smaller chunks
 file.num=ceiling(dim(runme)[1]/chunk.size)
 pieces.list <- seq(chunk.size, by=chunk.size, length.out=file.num) ## how the subfiles will be processed
-vers <- 4 ## set version for different model runs here
+vers <- 5 ## set version for different model runs here
 
 ## check existing npp files, find next file to write
 check <- list.files("processed/boston/biom_street")
@@ -450,7 +458,7 @@ for(t in 1:dim(runme.x)[1]){
   tol.window <- c(max(c((runme.x[t, bos.biom30m]-tol), (0.9*runme.x[t, bos.biom30m]))), 
                   min(c((runme.x[t, bos.biom30m]+tol), (1.1*runme.x[t, bos.biom30m]))))
   ### or take a "groomed" record and sample it with adjusting weights if the algorithm fails on density
-  grasp <- clean[biom.2006<(tol.window[2]), .(dbh.2006, biom.2006, ba, rank, genus)] ## exclude sampling in this simulation any single trees too big to fit cell biomass
+  grasp <- clean[biom.2006.urb<(tol.window[2]), .(dbh.2006, biom.2006.urb, ba, rank, genus)] ## exclude sampling in this simulation any single trees too big to fit cell biomass
   
   ### sample street trees and try to fill the cells
   while(x<100 & q<1000){ ## select 100 workable samples, or quit after q attempts with no success
@@ -460,11 +468,11 @@ for(t in 1:dim(runme.x)[1]){
     ## OR: figure out the dynamic weighting to use based on previous failures
     wts=(k-(g*D))+(((g*D)/(dim(grasp)[1]-1))*((grasp$rank)-1))
     # sample grasp with replacement only up to density limit, with specified weights based on iterative reweighting
-    samp <- grasp[sample(dim(grasp)[1], size=dens.lim, replace=F, prob = wts),] 
-    w=samp[1, biom.2006] ## keep cummulative tally of biomass
+    samp <- grasp[sample(dim(grasp)[1], size=dens.lim, replace=T, prob = wts),] 
+    w=samp[1, biom.2006.urb] ## keep cummulative tally of biomass
     d=1 # keep track of the number of trees
     while(w<tol.window[1] & d<dens.lim){ ## keep adding trees until you just get over the target biomass or run out of records
-      w=w+samp[d+1, biom.2006]
+      w=w+samp[d+1, biom.2006.urb]
       d=d+1
     }
     ### if this is too many trees too tightly packed (over 40m2/ha BA) or not enough biomass in the sample, readjust weights
@@ -477,7 +485,7 @@ for(t in 1:dim(runme.x)[1]){
     }
     if(((samp[1:d, sum(ba)]/runme.x[t, aoi*bos.can30m])*1E4)<40 & w<tol.window[2] & w>tol.window[1]){ ## if the BA density is low enough & got the biomass simulated properly
       x <- x+1 ## record successful sample
-      ann.npp <- c(ann.npp, sum(samp[1:d, biom.2006]*exp((mod.biom.rel$coefficients[2]*log(samp[1:d, dbh.2006]))+mod.biom.rel$coefficients[1])))
+      ann.npp <- c(ann.npp, sum(samp[1:d, biom.2006.urb]*exp((mod.biom.rel$coefficients[2]*log(samp[1:d, dbh.2006]))+mod.biom.rel$coefficients[1])))
       num.trees <- c(num.trees, d)
       biom.sim.track <- c(biom.sim.track, w) ## simulated biomass in this sample
       cage.dbh[[t]][[x]] <- samp[1:d, dbh.2006] ## which dbhs did you select
@@ -546,8 +554,8 @@ write.csv(l, file=paste("processed/boston/biom_street/atwork", vers, "csv", sep=
 ##### PART 3: RECONSTRUCTION OF SIMULATOR RESULTS
 ##########
 ### version 1 (not labeled) used static biomass growth equation
-### version 2 (V42) resimmed each pixel x100 using the mixed effects dbh increment model to estimate npp
-### version 3 (V43) resimmed each pixel x100 using the mixed effect dbh increment and using urban specific allometrics for dbh-->volume-->biomass
+### version 2 (V42) resimmed each pixel x100 using the mixed effects dbh increment model and Jenkins/Chognacky allometrics to estimate npp
+### version 3 (V43) resimmed each pixel x100 using the mixed effect dbh increment and specific allometrics for dbh-->volume-->biomass
 ### urban-specific allometrics
 ## McPherson, E.G., N.S. van Doorn and P.J. Peper. 2016. Urban tree database and allometric equations. Gen. Tech. Rep. PSW-GTR-253. Albany, CA: U.S. Department of Agriculture, Forest Service, Pacific Southwest Research Station. 86 p 
 street.allo <- read.csv("docs/street.biometrics.csv") ## AG wood vol (m3) as b0*DBH(cm)^b1; multiply by density to get kg-biomass
@@ -680,8 +688,6 @@ median(med.dbh.rec, na.rm=T) ### YESSS BITCHESSSSS median is same as street tree
 # container <- container[!(duplicated(container$pix.ID)),]
 
 
-# 
-###
 # ## static results
 # ## raster reconstruction
 # biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel
@@ -762,7 +768,7 @@ write.csv(map, "processed/streettrees.npp.simulator.v43.results.random.csv")
 ## brief exploratory
 ### do simulations track cell biomass well enough?
 vers=4
-container <- read.csv(paste("processed/streettrees.npp.simulator.v", vers, ".results.csv", sep=""))
+container <- read.csv(paste("processed/streettrees.npp.simulator.v", vers, "3.results.random.csv", sep=""))
 container <- as.data.table(container)
 
 ### how well did the median biomass simulation per cell get to measured biomass?
