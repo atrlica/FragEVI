@@ -1,7 +1,7 @@
 ---
-title: "Boston NPP estimates"
+title: "Boston NPP estimates -- Results"
 author: "Drew Trlica"
-date: "Oct. 10, 2018"
+date: "November 15, 2018"
 output:
   word_document: default
   html_document: default
@@ -17,9 +17,7 @@ library(ggplot2)
 library(raster)
 
 ```
-### Methods (notes)
-Due to skewed distributions, median values are reported with upper and lower limits of central 90% of observations.
-Unless otherwise noted, the realtionship between biomass gain (stem or area basis) and biomass quantity was modeled as an exponential negative relationship to log-DBH ($growth = e^{a+b \times \log{DBH}}$).
+
 
 
 ```{r canopy_frag, echo=FALSE, cache=FALSE}

@@ -507,13 +507,13 @@ hist(npp.dat[aoi>800 & lulc==3, ((bos.biom30m/2000)/(aoi*can.frac))*1E4]) ## ske
 # write.csv(npp.dat, "processed/npp.estimates.V1.csv")
 # write.csv(npp.dat, "processed/npp.estimates.V2.csv") ## with pseudorep based andy trees
 # write.csv(npp.dat, "processed/npp.estimates.V3.csv") ## with pseudorep/model-capped based andy trees
-write.csv(npp.dat, "processed/npp.estimates.V4.csv") ## with pesudorep/model-linear based andy trees
+write.csv(npp.dat, "processed/npp.estimates.V4.csv") ## mixed model (slope+intercept) on pseudoreps+
 #######
 
 #### HYBRID MAP WITH ERROR DISTRIBUTION
 #######
-street.res <- as.data.table(read.csv("processed/streettrees.npp.simulator.v43.results.random.csv"))
-andy.res <- as.data.table(read.csv("processed/andy.forest.results.V2.csv"))
+street.res <- as.data.table(read.csv("processed/streettrees.npp.simulator.v5.results.random.csv"))
+andy.res <- as.data.table(read.csv("processed/andy.forest.results.V3.csv"))
 pick <- andy.res[lulc==1 | biom>20000,] ## find the andy pixels we want
 pick[lulc!=1, range(biom, na.rm=T)] ## we good
 pick <- pick[,c(9,16:115)] ## pix.ID and then results
@@ -538,9 +538,14 @@ biom.dat <- as.data.table(cbind(as.data.frame(aoi),
                                 as.data.frame(lulc)))
 biom.dat[, pix.ID:=seq(1:dim(biom.dat)[1])]
 biom.dat <- merge(biom.dat, hybrid, by="pix.ID", all.x=T) # here's our map
-write.csv(biom.dat, "processed/hybrid.results.V4.csv")
+write.csv(biom.dat, "processed/hybrid.results.V5.csv")
 
 
+
+
+
+
+### analysis of error distributed results
 ### FIA results, error distributed
 fia.ground.rand <- as.data.table(read.csv("npp.FIA.empirV5.ground.csv"))
 fia.forest.rand <- as.data.table(read.csv("npp.FIA.empirV5.forest.csv"))
@@ -650,7 +655,8 @@ median(fia.lulc.hi[,7])
 
 
 ### ANDY FOREST, error distributed
-andy <- as.data.table(read.csv("processed/andy.forest.results.V2.csv"))
+andy <- as.data.table(read.csv("processed/andy.forest.results.V3.csv"))
+# andy <- as.data.table(read.csv("processed/andy.forest.results.V2.csv"))
 sum.na <- function(x){sum(x, na.rm=T)}
 andy.npp.tot <- apply(andy[aoi>800,16:115], MARGIN=2, FUN=sum.na) 
 hist((andy.npp.tot/2000))
@@ -665,7 +671,7 @@ for(l in 1:6){
 }
 names(andy.lulc) <- c("iter", paste("andy.lulc", 1:6, ".npp.tot", sep=""))
 rownames(andy.lulc) <- NULL
-write.csv(andy.lulc, "processed/andy.v2.lulc.results.csv")
+write.csv(andy.lulc, "processed/andy.v3.lulc.results.csv")
 
 ## quantiles by lulc 
 quantile((andy.npp.tot/2000)/1000, probs=c(0.05, 0.5, 0.95)) ## total
@@ -677,14 +683,15 @@ quantile(andy.lulc[,6]/2000/1000, probs=c(0.05, 0.5, 0.95))
 quantile(andy.lulc[,7]/2000/1000, probs=c(0.05, 0.5, 0.95))
 
 
+
 ### HYBRID URBAN, error distributed
-hyb <- as.data.table(read.csv("processed/hybrid.results.V4.csv")) ## this is the error distributed model (V3) using the urban-specific allometries (V4)
+hyb <- as.data.table(read.csv("processed/hybrid.results.V5.csv")) ## this is the error distributed model (V3) using the urban-specific allometries (V4), with biomass simulation run V5 with urban-specific growth rates
 sum.na <- function(x){sum(x, na.rm=T)}
 med.na <- function(x){median(x, na.rm=T)}
 hyb.npp.tot <- apply(hyb[bos.aoi30m>800,8:107], MARGIN=2, FUN=sum.na)
 hyb[bos.aoi30m>800,8:107/bos.aoi30m]
 hist((hyb.npp.tot/2000))
-median((hyb.npp.tot/2000)) ## about 10.9k (contrast -- Jenkin's allometrics give 11.6k)
+median((hyb.npp.tot/2000)) ## about 10.9k (contrast -- Jenkin's allometrics give 11.6k).... wtf why is the andy forest model so high now?
 mean((hyb.npp.tot/2000))
 
 ### model realizations by lulc
