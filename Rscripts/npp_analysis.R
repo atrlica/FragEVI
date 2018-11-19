@@ -655,13 +655,20 @@ median(fia.lulc.hi[,7])
 
 
 ### ANDY FOREST, error distributed
-andy <- as.data.table(read.csv("processed/andy.forest.results.V3.csv"))
-# andy <- as.data.table(read.csv("processed/andy.forest.results.V2.csv"))
+andy.newmod <- as.data.table(read.csv("processed/andy.forest.results.V3.csv"))
+andy <- as.data.table(read.csv("processed/andy.forest.results.V2.csv")) ## this is the 7000 MgC version
+andy.retest <- as.data.table(read.csv("processed/andy.forest.results.V2-retest.csv")) ## this is the 7000 MgC version
 sum.na <- function(x){sum(x, na.rm=T)}
 andy.npp.tot <- apply(andy[aoi>800,16:115], MARGIN=2, FUN=sum.na) 
+andy.npp.tot.retest <- apply(andy.retest[aoi>800,16:115], MARGIN=2, FUN=sum.na) 
+andy.npp.tot.newmod <- apply(andy.newmod[aoi>800,16:115], MARGIN=2, FUN=sum.na) 
 hist((andy.npp.tot/2000))
+hist((andy.npp.tot.retest/2000))## no variance, something is broken in the model
+hist((andy.npp.tot.newmod/2000))
 median((andy.npp.tot/2000)) ## about 7k
-mean((andy.npp.tot/2000))
+median((andy.npp.tot.retest/2000)) ## about 6.2k
+median((andy.npp.tot.newmod/2000)) ## about 12.4k
+
 
 ### model realizations by lulc
 andy.lulc <- data.frame(1:100)
