@@ -696,9 +696,9 @@ hyb <- as.data.table(read.csv("processed/hybrid.results.V5.csv")) ## this is the
 sum.na <- function(x){sum(x, na.rm=T)}
 med.na <- function(x){median(x, na.rm=T)}
 hyb.npp.tot <- apply(hyb[bos.aoi30m>800,8:107], MARGIN=2, FUN=sum.na)
-hyb[bos.aoi30m>800,8:107/bos.aoi30m]
+# hist(hyb[bos.aoi30m>800 & bos.biom30m>0,8:107/bos.biom30m]) ## this is measure of the productivity of the shit in each cell
 hist((hyb.npp.tot/2000))
-median((hyb.npp.tot/2000)) ## about 10.9k (contrast -- Jenkin's allometrics give 11.6k).... wtf why is the andy forest model so high now?
+median((hyb.npp.tot/2000)) ## about 11.9k (contrast -- Jenkin's allometrics give 11.6k).... wtf why is the andy forest model so high now?
 mean((hyb.npp.tot/2000))
 
 ### model realizations by lulc

@@ -1,4 +1,3 @@
-################
 #########
 ### final script for estimating tree distribution based on street tree records and running on the cluster
 #### NOTE for running on cluster, be sure to comment out Part 1 (analysis) and Part 3 (reconstruction) and let just the simulator run.
@@ -76,10 +75,10 @@ library(rgeos)
 ## Not all trees in any pixel are street trees, not clear that survey is exhaustive in any pixel
 #####
 
+
 ######### Part 1: Develop prediction for growth~dbh in street trees
-### Data cleanup, taxon classification
-#####
 ## read data and clean up
+#####
 street <- read.csv("docs/ian/Boston_Street_Trees.csv") ## Street tree resurvey, biomass 2006/2014, species
 street <- as.data.table(street)
 street[, record.good:=0] ## ID records with good data quality
@@ -179,6 +178,7 @@ write.csv(street, "processed/boston/street.trees.dbh.csv")
 # unique(a[a%%1==0]) ## basically every inch reading up to 60"
 #####
 
+
 ### stem growth~dbh
 #####
 library(data.table)
@@ -255,7 +255,7 @@ boxplot(dbh.2006~genus, data=street[record.good==1,])
 boxplot(diam.rate~genus.simp, data=street[record.good==1,])
 boxplot(dbh.2006~genus.simp, data=street[record.good==1,])
 
-
+#### mixed effects accounting for taxa differences
 library(lme4)
 hm2.me <- lmer(diam.rate~poly(dbh.2006, degree=2, raw=T)+
                  (1|genus.simp), REML=F, data=street[record.good==1,])
@@ -276,9 +276,19 @@ anova(hm1.me2, hm2.me2) ## helps to have the polynomial term
 hm0.me2 <- lmer(diam.rate~1+
                   (1+dbh.2006|genus.simp), REML=F, data=street[record.good==1,])
 anova(hm0.me2, hm2.me2) ## better to have a polynomial dbh term than not
-mod.street.dbhdelta.me <- hm2.me2
+
+## different RE formulation
+hm2.me3 <-  lmer(diam.rate~poly(dbh.2006, degree=2, raw=T)+
+                             (dbh.2006|genus.simp), REML=F, data=street[record.good==1,]) ## same results
+hm3.me3 <- lmer(diam.rate~poly(dbh.2006, degree=3, raw=T)+
+                      (dbh.2006|genus.simp), REML=F, data=street[record.good==1,]) ## kills sig of poly terms
+anova(hm2.me3, hm3.me3) ## NS 3rd order
+
+mod.street.dbhdelta.me <- hm2.me3
 save(mod.street.dbhdelta.me, file="processed/mod.street.dbhdelta.me.sav")
 load("processed/mod.street.dbhdelta.me.sav")
+plot(mod.street.dbhdelta.me)
+hist(residuals(mod.street.dbhdelta.me)) ## looks good enough to me
 
 ### the models for FIA stem growth rate
 bu1 <- lm(diam.rate~poly(DIAM_T0, degree=1), data=live[DIAM_T0>0,]);AIC(bu1)
@@ -345,7 +355,6 @@ abline(h=street[record.good==1, median(diam.rate.rel)], lwd=1, col="black")
 
 ###### Approach 5: Reconfigure street tree analysis for more effective search
 ## Look at cell biomass sample smartly from dbh data, bounded to stop excessive density or BA to reach the biomass total
-################
 ## read in biomass and canopy data
 biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel
 aoi <- raster("processed/boston/bos.aoi30m.tif")
@@ -557,9 +566,8 @@ write.csv(l, file=paste("processed/boston/biom_street/atwork", vers, "csv", sep=
 ######
 
 
-
 ##### PART 3: RECONSTRUCTION OF SIMULATOR RESULTS
-##########
+######
 ### version 1 (not labeled) used static biomass growth equation
 ### version 2 (V42) resimmed each pixel x100 using the mixed effects dbh increment model and Jenkins/Chognacky allometrics to estimate npp
 ### version 3 (V43) resimmed each pixel x100 using the mixed effect dbh increment and specific allometrics for dbh-->volume-->biomass
@@ -593,7 +601,7 @@ b2.rand <-rnorm(100, mean=coef(summary(mod.street.dbhdelta.me))[3,1], sd=coef(su
 #### import results objects pulled from parallel processing on the cluster (chunks of 10k pixels)
 vers <- 5 ## which simulator model run are we picking at
 obj.dump <- list.files("processed/boston/biom_street/")
-npp.dump <- obj.dump[grep(obj.dump, pattern = paste("ann.npp.street.v", vers, ".weighted*", sep=""))]
+npp.dump <- obj.dump[grep(obj.dump, pattern = paste("ann.npp.street.v", vers, ".weighted*", sep=""))] ## use npp empty file as a way of organizing the work
 npp.dump.chunks <- sub('.*weighted.', '', npp.dump)
 npp.dump.chunks <- sub("\\.sav.*", "", npp.dump.chunks) ## later version get named .sav
 
@@ -625,7 +633,7 @@ for(c in 1:length(npp.dump)){
   tmp.wts <- sapply(cage.wts, FUN=max)
   load(paste("processed/boston/biom_street/genus.street.v", vers, ".weighted.", npp.dump.chunks[c], ".sav", sep="")) ## comes in as "cage.wts" object
 
-  ### figure median dbh and median basal area for each pixel
+  ### get the dbh collection for every simulation in every pixel
   load(paste("processed/boston/biom_street/dbh.street.v", vers, ".weighted.", npp.dump.chunks[c], ".sav", sep="")) ## comes in as "dbh.stret.small" object
   ba.grand <- rep(9999, length(cage.dbh)) ## BA values for every retreival per cell
   dbh.grand <- rep(9999, length(cage.dbh)) ## dbh values for the retreival nearest median NPP
@@ -669,31 +677,46 @@ for(c in 1:length(npp.dump)){
 
   ## bind (static) results in container
   container <- rbind(container,
-                     cbind(tmp.index, tmp.biom, ## basic cell tracking here. each row is 1 pixel
-                           tmp.npp, tmp.num, dbh.grand, ba.grand, tmp.biom.sim, ## median npp and tree number for all retrievals
-                           tmp.wts, tmp.num.sims, tmp.sim.incomp, tmp.attempts, tmp.proc) ### metrics for how well the simulator performed
+                     cbind(tmp.index, tmp.biom, ## pixel index and map biomass 
+                           tmp.num, dbh.grand, ba.grand, tmp.biom.sim, ## median npp and tree number for simulator run
+                           tmp.wts, tmp.num.sims, tmp.sim.incomp, tmp.attempts, tmp.proc, ### metrics for how well the simulator performed
+                           median(npp.random[[b]])) ## median npp for pixel w randomly selected dbh + model error
   )
 } ## end chunk loop
 
 ## collect, export, make maps
 names(container) <- c("pix.ID", "biom.kg",
-                      "med.ann.npp.all", "med.tree.num.all", "med.dbh.all", "med.ba.all", "med.biom.all",
-                      "max.wts", "num.sims", "sim.incomp", "attempts", "proc.status")
+                       "med.tree.num.sim", "med.dbh.sim", "med.ba.sim", "med.biom.sim", ### simulator medians
+                      "max.wts", "num.sims", "sim.incomp", "attempts", "proc.status", ## simulator health indicators
+                      "med.npp.rand")
 
-# ## figure out median dbh, ba, and count for the tree sample in each pixel closest to median npp
-pixM.tree.num <- sapply(dbh.dump, FUN=length) ## tree number in median npp retreival per pixel
-pixM.dbh <- sapply(dbh.dump, FUN=median) ## the median dbh for the selection of trees nearest the median npp in each cell
-pixM.ba <- sapply(sapply(dbh.dump, FUN=ba), FUN=sum) ## summed BA for the selection of trees in the sample nearest median npp
-hist(pixM.tree.num) ## so this is the distribution in tree density per pixel in the most common retreival in each cell
-hist(pixM.dbh) ## this is the distribution of MEDIAN dbh for the most common retreival in each cell
-hist(pixM.ba) ## this is the distribution of total BA (m2) in each cell (not corrected for canopy) according to the tree sample nearest the median npp
-med.dbh.rec <- c(med.dbh.rec, unlist(dbh.dump)) ## append the median dbh record
-hist(med.dbh.rec) ## this is the distribution of dbh if you actually went out and counted every simulated tree in the pixels
-median(med.dbh.rec, na.rm=T) ### YESSS BITCHESSSSS median is same as street tree records
+# # ## figure out median dbh, ba, and count for the tree sample in each pixel closest to median npp
+# pixM.tree.num <- sapply(dbh.dump, FUN=length) ## tree number in median npp retreival per pixel
+# pixM.dbh <- sapply(dbh.dump, FUN=median) ## the median dbh for the selection of trees nearest the median npp in each cell
+# pixM.ba <- sapply(sapply(dbh.dump, FUN=ba), FUN=sum) ## summed BA for the selection of trees in the sample nearest median npp
+# hist(pixM.tree.num) ## so this is the distribution in tree density per pixel in the most common retreival in each cell
+# hist(pixM.dbh) ## this is the distribution of MEDIAN dbh for the most common retreival in each cell
+# hist(pixM.ba) ## this is the distribution of total BA (m2) in each cell (not corrected for canopy) according to the tree sample nearest the median npp
+# med.dbh.rec <- c(med.dbh.rec, unlist(dbh.dump)) ## append the median dbh record
+# hist(med.dbh.rec) ## this is the distribution of dbh if you actually went out and counted every simulated tree in the pixels
+# median(med.dbh.rec, na.rm=T) ### YESSS BITCHESSSSS median is same as street tree records
+hist(container$med.ba.sim) ## UP TO 3.5, @900m2/100% canopy = 39 m2/ha
+hist(container$biom.kg)
+hist(container$med.tree.num.sim); summary(container$med.tree.num.sim) # med 7 per pixel, up to 39
+hist(container$med.dbh.sim); summary(container$med.dbh.sim) ## the median dbh of every sim
+hist(container$max.wts) ## most get it done before 50 wt
+hist(container$num.sims) ## most get all 100 sims
+hist(container$med.npp.rand); summary(container$med.npp.rand) ## maxes out at 685 kg/pix
+
 ## could also look at these distributions in e.g. the 25h and 75th percentile retreivals of NPP for each pixel
 # container <- cbind(container, pixM.ba, pixM.dbh, pixM.tree.num)
 # sum(duplicated(container$pix.ID)) ## some duplicated pixels, remove
 # container <- container[!(duplicated(container$pix.ID)),]
+# ### export the tifs
+#
+# r <- biom
+# r <- setValues(r, map[,pixM.tree.num])
+# writeRaster(r, "processed/boston/bos.medNPP.tree.num.tif", format="GTiff", overwrite=T)
 
 
 # # ## static results
@@ -735,7 +758,7 @@ biom.dat[,pix.ID:=1:dim(biom.dat)[1]]
 
 vers=5
 npp.random.list <- list.files("processed/boston/biom_street/")
-npp.random.list <- npp.random.list[grep(npp.random.list, pattern = paste("npp.random.v", vers, sep=""))] ## V5 is 1)mixed model for DBH change; 2) urban-specific allometrics 3) consistent coefficients across each map realization;  4) uses biomass simulator V5 that also used urban-specific allometrics
+npp.random.list <- npp.random.list[grep(npp.random.list, pattern = paste("npp.random.v", vers, ".weighted.*", sep=""))] ## V5 is 1)mixed model for DBH change; 2) urban-specific allometrics 3) consistent coefficients across each map realization;  4) uses biomass simulator V5 that also used urban-specific allometrics
 npp.random.chunks <- sub('.*weighted.', '', npp.random.list)
 npp.random.chunks <- sub("\\.sav.*", "", npp.random.chunks) ## later version get named .sav
 
@@ -772,6 +795,33 @@ for(c in 1:length(npp.results.list)){
 names(gosh)[2:102] <- c("pix.ID", paste("npp.street.random.iter.", 1:100, ".kg", sep=""))
 map <- merge(x=biom.dat, y=gosh[2:102], by="pix.ID", all.x=T, all.y=T)
 write.csv(map, "processed/streettrees.npp.simulator.v5.results.random.csv")
+
+### Exploratory of what's in the random street tree results iterations
+npp.street <- as.data.table(read.csv("processed/streettrees.npp.simulator.v5.results.random.csv"))
+sum.na <- function(x){sum(x, na.rm=T)}
+street.tot <- apply(npp.street[, 8:107], MARGIN=2, FUN=sum.na)
+hist(street.tot/2000)
+median(street.tot/2000) ## 11.1k tC across all map
+nonfor.tot <- apply(npp.street[bos.lulc30m.lumped!=1 & bos.biom30m<20000, 8:107], MARGIN=2, FUN=sum.na)
+hist(nonfor.tot/2000)
+median(nonfor.tot/2000) ### 8.4k tC in the non-forest pixels
+for.tot <- apply(npp.street[bos.lulc30m.lumped==1 | bos.biom30m>=20000, 8:107], MARGIN=2, FUN=sum.na)
+hist(for.tot/2000); median(for.tot/2000)
+quantile(nonfor.tot/2000, probs=c(0.05, 0.5, 0.95)) ## 4.8-12.2k tC for simulated street trees
+
+#### compare, andy forest results V3
+npp.andy <- as.data.table(read.csv("processed/andy.forest.results.V3.csv"))
+andy.tot <- apply(npp.andy[, 16:115], MARGIN=2, FUN=sum.na)
+hist(andy.tot/2000)
+median(andy.tot/2000) ## 12.2k tC across whole map
+andy.for.tot <- apply(npp.andy[lulc==1 | biom>=20000, 16:115], MARGIN=2, FUN=sum.na)
+hist(andy.for.tot/2000)
+median(andy.for.tot/2000) #3.4k tC in total forest (i.e 29% of final map NPP)
+andy.nonfor.tot <- apply(npp.andy[lulc!=1 & biom<20000, 16:115], MARGIN=2, FUN=sum.na)
+hist(andy.nonfor.tot/2000); median(andy.nonfor.tot/2000) ## 8.8k tC
+quantile(andy.nonfor.tot/2000, probs=c(0.05, 0.5, 0.95)) ## 6.0-10.9 tC for treating all city like andy forest
+
+
 
 # # ### export the tifs
 # # 
@@ -838,8 +888,9 @@ write.csv(map, "processed/streettrees.npp.simulator.v5.results.random.csv")
 # container[aoi>800 & bos.biom30m<22000, median(npp.MgC.ha, na.rm=T)] ## 0.94 MgC/ha/yr for small pixels
 # container[aoi>800 & bos.biom30m>22000, median(npp.MgC.ha, na.rm=T)] ## ### 3.65 MgC/ha/yr
 # ## contrast to Andy-forest-based estimate, #13.8k tC, 1.1 tC/ha/yr mean estimate (range was ~7k-22k)
-# 
-# 
+######
+
+
 # #### SUPPLEMENTAL
 # #### OLD SCRIPT: Treats <20k and >20k pixels with different sampling distributions
 # #####

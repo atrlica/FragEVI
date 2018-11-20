@@ -1225,20 +1225,20 @@ write.csv(biom.dat, "processed/andy.forest.results.V3.csv") ## with the many est
 ### how growth factors were distributed over the landscape based on the modeled growth rates
 ### I am inclined to believe the V3 results as I have gone over their workings very carefully
 ### and they do not appear to have any errors and get the basic idea right
-# par(mfrow=c(1,2))
-# hist(biom.dat.V1[edge.mod.factor.lin>0, edge.mod.factor.lin])
-# hist(dump[edge.fact>0, edge.fact])## as an example, higher factors overall
-# hist(biom.dat.V1[int.mod.factor.lin>0, int.mod.factor.lin])
-# hist(dump[int.fact>0, int.fact])## as an example, higher factors overall
+par(mfrow=c(1,2))
+hist(biom.dat.V1[edge.mod.factor.lin>0, edge.mod.factor.lin])
+hist(dump[edge.fact>0, edge.fact])## as an example, higher factors overall
+hist(biom.dat.V1[int.mod.factor.lin>0, int.mod.factor.lin])
+hist(dump[int.fact>0, int.fact])## as an example, higher factors overall
 # ### make a tiff to export
 # hup <- apply(biom.dat[,15:114], MARGIN=1, FUN = median)
 # rrr <- raster(biom)
 # rrr <- setValues(rrr, hup)
 # writeRaster(rrr, filename = "processed/boston/bos.andy.forest.V3.npp.tif", format="GTiff", overwrite=T)
-# sum.na <- function(x){sum(x, na.rm=T)}
-# hur <- apply(biom.dat[,15:114], MARGIN=2, FUN=sum.na)
-# hist(hur/2000) ## ca 12.5k tC in the V3 model
-# median(hur/2000)
+sum.na <- function(x){sum(x, na.rm=T)}
+hur <- apply(biom.dat[,15:114], MARGIN=2, FUN=sum.na)
+hist(hur/2000) ## ca 12.5k tC in the V3 model
+median(hur/2000)
 ## an ancillary question: why does FIA have such a pessimistic idea of productivity, maxes out at 2.5 MgC/ha/yr
 ## probably because those forests evidently grow much slower
 
