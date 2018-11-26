@@ -3,9 +3,9 @@ library(data.table)
 
 
 ##### ANALYSIS OF TREE CORE RECORDS
-## 
-andy.bai <- read.csv("docs/ian/Reinmann_Hutyra_2016_BAI.csv") 
-andy.bai <- as.data.table(andy.bai)
+##### 
+andy.bai <- as.data.table(read.csv("docs/ian/Reinmann_Hutyra_2016_BAI.csv")) 
+
 ### the basic allometrics to get biomass
 ## Jenkins, C.J., D.C. Chojnacky, L.S. Heath and R.A. Birdsey. 2003. Forest Sci 49(1):12-35.
 ## Chojnacky, D.C., L.S. Heath and J.C. Jenkins. 2014. Forestry 87: 129-151.
@@ -113,62 +113,62 @@ andy.bai[seg.F=="A", seg.Edge:="E"]
 andy.bai[seg.F %in% c("B", "C"), seg.Edge:="I"]
 andy.bai[,seg.Edge:=as.factor(seg.Edge)]
 
-### upgrade Jul 23: treat five-year time slices as pseudo-replicates
-pseudo.A <- matrix(ncol=4, rep(999,4))
-pseudo.B <- matrix(ncol=4, rep(999,4))
-pseudo.C <- matrix(ncol=4, rep(999,4))
-pseudo.D <- matrix(ncol=4, rep(999,4))
-pseudo.E <- matrix(ncol=4, rep(999,4)) ## so we have growth histories going back up to 25 years
-
-### for each tree core, calculate average annualized (forward) relative growth in successive 5-year chunks, moving chunks backward until you run out of rings
-for(d in unique(andy.bai$incr.ID)){  ### the intervals below are non-overlapping: each 5 year chunk is a distinct biomass time series moving backward
-  pseudo.A <- rbind(pseudo.A, c(((biom.hist[incr.ID==d, biom2016]-biom.hist[incr.ID==d, biom2012])/biom.hist[incr.ID==d, biom2012])/5,
-                                andy.bai[incr.ID==d, dbh2012],
-                                andy.bai[incr.ID==d, incr.ID],
-                                "A"))
-  pseudo.B <- rbind(pseudo.B, c(((biom.hist[incr.ID==d, biom2011]-biom.hist[incr.ID==d, biom2007])/biom.hist[incr.ID==d, biom2007])/5,
-                                andy.bai[incr.ID==d, dbh2007],
-                                andy.bai[incr.ID==d, incr.ID],
-                                "B"))
-  pseudo.C <- rbind(pseudo.C, c(((biom.hist[incr.ID==d, biom2006]-biom.hist[incr.ID==d, biom2002])/biom.hist[incr.ID==d, biom2002])/5,
-                                andy.bai[incr.ID==d, dbh2002],
-                                andy.bai[incr.ID==d, incr.ID],
-                                "C"))
-  pseudo.D <- rbind(pseudo.D, c(((biom.hist[incr.ID==d, biom2001]-biom.hist[incr.ID==d, biom1997])/biom.hist[incr.ID==d, biom1997])/5,
-                                andy.bai[incr.ID==d, dbh1997],
-                                andy.bai[incr.ID==d, incr.ID],
-                                "D"))
-  
-  ### pseudo.E can have from 5-6 years in a successsful sample
-  tmp <- unlist(biom.hist[incr.ID==d, 26:32, with=F])
-  t <- max(which(is.finite(tmp)), na.rm=T) ## where does the record run out?
-  if(t<5 | !is.finite(t)){ ## if record ends 1992-1996 (i.e. does not give at least 5 year run)
-    pseudo.E <- rbind(pseudo.E, c(999,999,
-                                  andy.bai[incr.ID==d, incr.ID],
-                                  "E"))
-    print("not enough data for 96-90 chunk") ## this record not long enough
-  }else{
-    g <- ((biom.hist[incr.ID==d, biom1996]-biom.hist[incr.ID==d, (26+(t-1)), with=F])/biom.hist[incr.ID==d, (26+(t-1)), with=F])/sum(is.finite(tmp))
-    deeb <- min(unlist(andy.bai[incr.ID==d, 28:34, with=F]), na.rm=T)
-    pseudo.E <- rbind(pseudo.E, c(g, deeb,
-                                  andy.bai[incr.ID==d, incr.ID],
-                                  "E"))
-    print("retreived 96-90 chunk")
-  }
-}
-
-## collate
-ps.contain <- rbind(pseudo.A[-1,], pseudo.B[-1,], pseudo.C[-1,], pseudo.D[-1,], pseudo.E[-1,])
-ps.contain <- data.frame(biom.rel.ann=as.numeric(unlist(ps.contain[,1])),
-                         dbh.start=as.numeric(unlist(ps.contain[,2])),
-                         incr.ID=as.integer(unlist(ps.contain[,3])),
-                         interval=as.character(unlist(ps.contain[,4])),
-                         stringsAsFactors = F)
-ps.contain$interval <- as.factor(ps.contain$interval)
-ps.contain <- as.data.table(ps.contain)
-ps.contain <- ps.contain[order(incr.ID),]
-ps.contain <- ps.contain[dbh.start!=999,]
-ps.contain <- merge(x=ps.contain, y=andy.bai[,.(Plot.ID, incr.ID, Spp, seg, seg.Edge)], by="incr.ID", all.x=T, all.y=F)
+# ### upgrade Jul 23: treat five-year time slices as pseudo-replicates
+# pseudo.A <- matrix(ncol=4, rep(999,4))
+# pseudo.B <- matrix(ncol=4, rep(999,4))
+# pseudo.C <- matrix(ncol=4, rep(999,4))
+# pseudo.D <- matrix(ncol=4, rep(999,4))
+# pseudo.E <- matrix(ncol=4, rep(999,4)) ## so we have growth histories going back up to 25 years
+# 
+# ### for each tree core, calculate average annualized (forward) relative growth in successive 5-year chunks, moving chunks backward until you run out of rings
+# for(d in unique(andy.bai$incr.ID)){  ### the intervals below are non-overlapping: each 5 year chunk is a distinct biomass time series moving backward
+#   pseudo.A <- rbind(pseudo.A, c(((biom.hist[incr.ID==d, biom2016]-biom.hist[incr.ID==d, biom2012])/biom.hist[incr.ID==d, biom2012])/5,
+#                                 andy.bai[incr.ID==d, dbh2012],
+#                                 andy.bai[incr.ID==d, incr.ID],
+#                                 "A"))
+#   pseudo.B <- rbind(pseudo.B, c(((biom.hist[incr.ID==d, biom2011]-biom.hist[incr.ID==d, biom2007])/biom.hist[incr.ID==d, biom2007])/5,
+#                                 andy.bai[incr.ID==d, dbh2007],
+#                                 andy.bai[incr.ID==d, incr.ID],
+#                                 "B"))
+#   pseudo.C <- rbind(pseudo.C, c(((biom.hist[incr.ID==d, biom2006]-biom.hist[incr.ID==d, biom2002])/biom.hist[incr.ID==d, biom2002])/5,
+#                                 andy.bai[incr.ID==d, dbh2002],
+#                                 andy.bai[incr.ID==d, incr.ID],
+#                                 "C"))
+#   pseudo.D <- rbind(pseudo.D, c(((biom.hist[incr.ID==d, biom2001]-biom.hist[incr.ID==d, biom1997])/biom.hist[incr.ID==d, biom1997])/5,
+#                                 andy.bai[incr.ID==d, dbh1997],
+#                                 andy.bai[incr.ID==d, incr.ID],
+#                                 "D"))
+#   
+#   ### pseudo.E can have from 5-6 years in a successsful sample
+#   tmp <- unlist(biom.hist[incr.ID==d, 26:32, with=F])
+#   t <- max(which(is.finite(tmp)), na.rm=T) ## where does the record run out?
+#   if(t<5 | !is.finite(t)){ ## if record ends 1992-1996 (i.e. does not give at least 5 year run)
+#     pseudo.E <- rbind(pseudo.E, c(999,999,
+#                                   andy.bai[incr.ID==d, incr.ID],
+#                                   "E"))
+#     print("not enough data for 96-90 chunk") ## this record not long enough
+#   }else{
+#     g <- ((biom.hist[incr.ID==d, biom1996]-biom.hist[incr.ID==d, (26+(t-1)), with=F])/biom.hist[incr.ID==d, (26+(t-1)), with=F])/sum(is.finite(tmp))
+#     deeb <- min(unlist(andy.bai[incr.ID==d, 28:34, with=F]), na.rm=T)
+#     pseudo.E <- rbind(pseudo.E, c(g, deeb,
+#                                   andy.bai[incr.ID==d, incr.ID],
+#                                   "E"))
+#     print("retreived 96-90 chunk")
+#   }
+# }
+# 
+# ## collate
+# ps.contain <- rbind(pseudo.A[-1,], pseudo.B[-1,], pseudo.C[-1,], pseudo.D[-1,], pseudo.E[-1,])
+# ps.contain <- data.frame(biom.rel.ann=as.numeric(unlist(ps.contain[,1])),
+#                          dbh.start=as.numeric(unlist(ps.contain[,2])),
+#                          incr.ID=as.integer(unlist(ps.contain[,3])),
+#                          interval=as.character(unlist(ps.contain[,4])),
+#                          stringsAsFactors = F)
+# ps.contain$interval <- as.factor(ps.contain$interval)
+# ps.contain <- as.data.table(ps.contain)
+# ps.contain <- ps.contain[order(incr.ID),]
+# ps.contain <- ps.contain[dbh.start!=999,]
+# ps.contain <- merge(x=ps.contain, y=andy.bai[,.(Plot.ID, incr.ID, Spp, seg, seg.Edge)], by="incr.ID", all.x=T, all.y=F)
 
 
 #### upgrade 16 Oct, also check out annualized dbh increment -- and change the intervals
@@ -207,7 +207,7 @@ for(d in unique(andy.bai$incr.ID)){  ### the intervals below are non-overlapping
                                   "E"))
     print("not enough data for 96-90 chunk") ## this record not long enough
   }else{
-    g <- (biom.hist[incr.ID==d, dbh1996]-biom.hist[incr.ID==d, (53+(t-1)), with=F])/(sum(is.finite(tmp))-1)
+    g <- (biom.hist[incr.ID==d, dbh1996]-biom.hist[incr.ID==d, (53+(t-1)), with=F])/(t-1)
     deeb <- min(unlist(biom.hist[incr.ID==d, 53:59, with=F]), na.rm=T)
     pseudo.E <- rbind(pseudo.E, c(g, deeb,
                                   andy.bai[incr.ID==d, incr.ID],
@@ -218,6 +218,7 @@ for(d in unique(andy.bai$incr.ID)){  ### the intervals below are non-overlapping
 
 ## collate
 ps.dbh.contain <- rbind(pseudo.A[-1,], pseudo.B[-1,], pseudo.C[-1,], pseudo.D[-1,], pseudo.E[-1,])
+# names(ps.dbh.contain) <- c("dbh.incr", "dbh.start", "incr.ID", "interval")
 ps.dbh.contain <- data.frame(dbh.incr.ann=as.numeric(unlist(ps.dbh.contain[,1])),
                              dbh.start=as.numeric(unlist(ps.dbh.contain[,2])),
                              incr.ID=as.integer(unlist(ps.dbh.contain[,3])),
@@ -226,16 +227,15 @@ ps.dbh.contain <- data.frame(dbh.incr.ann=as.numeric(unlist(ps.dbh.contain[,1]))
 ps.dbh.contain$interval <- as.factor(ps.dbh.contain$interval)
 ps.dbh.contain <- as.data.table(ps.dbh.contain)
 ps.dbh.contain <- ps.dbh.contain[order(incr.ID),]
-ps.dbh.contain <- ps.dbh.contain[dbh.start!=999,]
-ps.dbh.contain <- merge(x=ps.dbh.contain, y=andy.bai[,.(incr.ID, seg, seg.Edge)], by="incr.ID", all.x=T, all.y=F)
+ps.dbh.contain <- merge(x=ps.dbh.contain, y=andy.bai[,.(incr.ID, seg, seg.Edge, Spp, Plot.ID)], by="incr.ID", all.x=T, all.y=F)
+ps.dbh.contain <- ps.dbh.contain[dbh.start!=999 & !is.na(dbh.start),]
 
-
-ps.final <- merge(ps.contain, ps.dbh.contain[, c("dbh.incr.ann", "dbh.start", "incr.ID", "interval")],
-                  by=c("incr.ID", "interval"), all.x=T, all.y=T)
-names(ps.final)[c(4,10)] <- c("dbh.start.biom", "dbh.start.incr")
+# ps.final <- merge(ps.contain, ps.dbh.contain[, c("dbh.incr.ann", "dbh.start", "incr.ID", "interval")],
+#                   by=c("incr.ID", "interval"), all.x=T, all.y=T)
+# names(ps.final)[c(4,10)] <- c("dbh.start.biom", "dbh.start.incr")
 
 ### dump the pseudo-replicated file to disk
-write.csv(ps.final, "processed/andy.bai.ps.dbhincr.csv")
+write.csv(ps.dbh.contain, "processed/andy.bai.ps.dbhincr.csv")
 
 ## how's it look?
 par(mfrow=c(1,1))
@@ -262,7 +262,7 @@ library(data.table)
 # ps.contain <- merge(x=ps.contain, y=andy.bai[,.(incr.ID, Plot.ID)], by="incr.ID", all.x=T, all.y=F) ## put the plot IDs in
 # write.csv(ps.contain, "processed/andy.bai.dbh.pseudo.csv")
 ps.contain <- as.data.table(read.csv("processed/andy.bai.ps.dbhincr.csv")) ## this is the nicely formatted BAI data from the psueoreplicated tree cores
-
+names(ps.contain)[4] <- "dbh.start.incr"
 # ## avg.dbh~avg.growth
 # par(mfrow=c(1,2))
 # col.edge <- c("black", "red")
@@ -273,20 +273,20 @@ ps.contain <- as.data.table(read.csv("processed/andy.bai.ps.dbhincr.csv")) ## th
 # table(andy.bai$seg.Edge) ## 64 edge: 131 interior
 
 ## vs. pseudoreps
-plot(ps.contain[is.finite(biom.rel.ann) & dbh.start.biom>5, log(dbh.start.biom)],
-     ps.contain[is.finite(biom.rel.ann) & dbh.start.biom>5, log(biom.rel.ann)],
-     col=ps.contain[is.finite(biom.rel.ann) & dbh.start.biom>5, seg.Edge],
-     main="Andy trees, dbh pseudoreps")
-table(ps.contain[is.finite(biom.rel.ann) & dbh.start.biom>5, seg.Edge]) ## 270 edge:633 interior
-plot(ps.contain[is.finite(biom.rel.ann) & dbh.start.biom>5, log(dbh.start.biom)],
-     ps.contain[is.finite(biom.rel.ann) & dbh.start.biom>5, log(dbh.incr.ann)],
-     col=ps.contain[is.finite(biom.rel.ann) & dbh.start.biom>5, seg.Edge],
-     main="Andy trees, dbh pseudoreps") # pretty convincingly no size effect....
-
-summary(ps.contain$biom.rel.ann) ## comparable in the middle, pseudos a bit lower and have greater range
-summary(ps.contain$dbh.incr.ann) ## median 0.33 cm/yr
-summary(ps.contain$dbh.start.biom) ## about 19cm
-summary(ps.contain$dbh.start.incr) ## about 18cm
+# plot(ps.contain[is.finite(biom.rel.ann) & dbh.start.biom>5, log(dbh.start.biom)],
+#      ps.contain[is.finite(biom.rel.ann) & dbh.start.biom>5, log(biom.rel.ann)],
+#      col=ps.contain[is.finite(biom.rel.ann) & dbh.start.biom>5, seg.Edge],
+#      main="Andy trees, dbh pseudoreps")
+# table(ps.contain[is.finite(biom.rel.ann) & dbh.start.biom>5, seg.Edge]) ## 270 edge:633 interior
+# plot(ps.contain[is.finite(biom.rel.ann) & dbh.start.biom>5, log(dbh.start.biom)],
+#      ps.contain[is.finite(biom.rel.ann) & dbh.start.biom>5, log(dbh.incr.ann)],
+#      col=ps.contain[is.finite(biom.rel.ann) & dbh.start.biom>5, seg.Edge],
+#      main="Andy trees, dbh pseudoreps") # pretty convincingly no size effect....
+# 
+# summary(ps.contain$biom.rel.ann) ## comparable in the middle, pseudos a bit lower and have greater range
+# summary(ps.contain$dbh.incr.ann) ## median 0.33 cm/yr
+# summary(ps.contain$dbh.start.biom) ## about 19cm
+# summary(ps.contain$dbh.start.incr) ## about 18cm
 
 ### modeling growth~dbh*edge
 ### VER2, linear mixed effects on **DBH growth increment**
