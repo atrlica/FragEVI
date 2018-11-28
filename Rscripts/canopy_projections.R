@@ -35,6 +35,25 @@ mort <- function(x){(0.0008133*(x^2))-(0.0642407*x)+4.0614503}
 ### upgrade: apply urban-specific allometries
 street.allo <- read.csv("docs/street.biometrics.csv") ## AG wood vol (m3) as b0*DBH(cm)^b1; multiply by density to get kg-biomass
 
+### upgrade: use urban specific crown diameter measures to get canopy coverage
+street.canopy <- as.data.table(read.csv("docs/RDS-2016-0005/Data/TS6_Growth_coefficients.csv"))
+street.canopy <- street.canopy[Region=="NoEast", ]
+street.canopy <- street.canopy[Predicts.component=="crown dia",]
+genspec <- strsplit(as.character(street.canopy$Scientific.Name), " ")
+gen <- unlist(lapply(genspec, "[[", 1))
+street.canopy[,genus:=gen] ## 40 genera
+keepers <- c("Acer platanoides", "Aesculus hippocastanum", "Fraxinus pennsylvanica",
+             "Ginkgo biloba", "Gleditsia triacanthos", "Liquidambar styraciflua", 
+             "Malus spp.", "Platanus x acerifolia", "Prunus serrulata", "Pyrus calleryana",
+             "Quercus rubra", "Tilia cordata", "Ulmus americana", "Zelkova serrata")
+street.canopy <- street.canopy[Scientific.Name%in%keepers,]
+street.canopy$a <- as.numeric(as.character(street.canopy$a))
+street.canopy$b <- as.numeric(as.character(street.canopy$b))
+street.canopy$c <- as.numeric(as.character(street.canopy$c))
+street.canopy$d <- as.numeric(as.character(street.canopy$d))
+street.canopy$e <- as.numeric(as.character(street.canopy$e))
+street.canopy <- as.data.frame(street.canopy)
+
 ### dbh~biomass growth equation (from nls street tree model)
 # mm.a=0.2281686
 # mm.b=(-1.1043188)
@@ -251,11 +270,13 @@ for(s in 1:length(scenario)){
           biom.track <- numeric() ## annual tally of biomass in this resim
           num.track <- integer() ## annual tally of number of trees in this resim
           newplants <- 0 ## track number of new trees planted over course of 36 years
+          can.track <- numeric() ### canopy coverage in this simulation
           # delay <- sample(seq(delay.factor[1],
           #                     delay.factor[2]), 
           #                 size = length(tree.samp), 
           #                 replace=T) ## determine initial replanting delays
           delay <- rep(0, length(tree.samp))
+          nogenus <- sample(1:14, size=1) ## randomly assign a canopy equation for the handful that don't match
           for(e in 1:36){ ## simulate 36 successive years of growth/mortality/replanting/plant expansion
             if(scenario[s]=="expand" & e<=10 & expand.track[e]==1 & index.track[pix]%in%nonfor){ 
               tree.samp <- c(tree.samp, 5) ## add a 5cm tree if the expand.track wins one this year (within the first 10 years)
@@ -282,7 +303,7 @@ for(s in 1:length(scenario)){
           
           ## grow up the survivors using estimated growth regression
           # tree.samp <- tree.samp[tree.samp>0]*(1+dbhg.pred(tree.samp[tree.samp>0])) ## static realization of growth model
-          tree.samp[tree.samp>0] <- tree.samp[tree.samp>0]+(b0.rand[a]+(b1.rand[a]*tree.samp[tree.samp>0])+(b2.rand[a] *tree.samp[tree.samp>0]^2))
+          tree.samp[tree.samp>0] <- tree.samp[tree.samp>0]+(b0.rand[a]+(b1.rand[a]*tree.samp[tree.samp>0])+(b2.rand[a]*tree.samp[tree.samp>0]^2))
           
           ### upgrade: urban specific allometries to determine biomass change
           tmp.dbh0 <- tree.samp[tree.samp>0] ## exclude dead trees from dbh/biomass change
@@ -294,9 +315,29 @@ for(s in 1:length(scenario)){
           tmp.biom1 <- street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b0"]*(tmp.dbh1^street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b1"])*street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "dens"]
           if(length(tmp.biom0)==0){tmp.biom0 <- 0; tmp.biom1 <- 0} ## if everything is dead
           
+          ### same thing for canopy coverage history
+          ### get vector of equation types to use first
+          eq.form <- street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "EqName"]
+          ## add up total canopy area applying correct equation form to each
+          tmp.can1 <- sum(((((eq.form=="quad")*(street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "a"]+
+                                     (street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "b"]*tmp.dbh1)+
+                                     (street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "c"]*tmp.dbh1^2)))/2)^2)*pi, na.rm=T)+
+            sum(((((eq.form=="cub")*(street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "a"]+
+                                       (street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "b"]*tmp.dbh1)+
+                                       (street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "c"]*tmp.dbh1^2)+
+                                      (street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "d"]*tmp.dbh1^3)))/2)^2)*pi, na.rm=T)+
+            sum(((((eq.form=="lin")*(street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "a"]+
+                                        (street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "b"]*tmp.dbh1)))/2)^2)*pi, na.rm=T)+
+            sum((((eq.form=="loglogw1")*exp(street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "a"]+
+                                       (street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "b"]*
+                                          log(log(tmp.dbh1+1)+
+                                                street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "c"]/2)))/2)^2)*pi, na.rm=T)
+                                       
+          
           ### update productivity and biomass for track on this year
           npp.track <- c(npp.track, sum(tmp.biom1-tmp.biom0))
           biom.track <- c(biom.track, sum(tmp.biom1))
+          can.track <- c(can.track, tmp.can1)
           
           ### now determine which of the (previously) dead are replanted this year
           if(sum(tree.samp==0)>0){ ## if there are dead trees here          
@@ -327,6 +368,7 @@ for(s in 1:length(scenario)){
           expand.plant.num[[pix]] <- c(expand.plant.num[[pix]], newplants) ## eventually produces vector of length 100
           deaths.sav[[pix]] <- c(deaths.sav[[pix]], deaths)
           num.box[[pix]][[a]] <- num.track
+          can.box[[pix]][[a]] <- can.track
         } # loop for number of resims in this pixel
         if(pix%%500 == 0){print(paste("chunk", o, "resimmed pix", pix))} ## give status updates
       } else{  ## if too few successful simulations for this pixel
@@ -335,6 +377,7 @@ for(s in 1:length(scenario)){
         expand.plant.num[[pix]] <- NA
         deaths.sav[[pix]] <- NA
         num.box[[pix]] <- NA
+        can.box[[pix]][[a]] <- NA
       }
 
     } # end loop for this pixel   

@@ -499,7 +499,6 @@ plot(live.plot$biom0.MgC.ha, live.plot$biom.delt.ann.rel.HW) ## there we are
 plot(live.plot$biom0.MgC.ha, live.plot[,log(biom.delt.ann.rel.HW)])
 points(plot.sum[HWfrac<0.25, biom0.MgC.ha], plot.sum[HWfrac<0.25, log(biom.delt.ann.rel.HW)], pch=3, col="red") ## low HW = low growth across density -- understory?
 
-library(lme4)
 ### linear model
 a <- lmer(biom.delt.ann.rel.HW~biom0.MgC.ha+
        (1|PlotID)+

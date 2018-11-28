@@ -4,6 +4,8 @@ library(data.table)
 library(lme4)
 library(nlme)
 
+#### the summary of the underlying growth models (old)
+#####
 ### final stem growth and areal growth equations
 live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv"))
 andy <- as.data.table(read.csv("processed/andy.bai.dbh.pseudo.csv"))
@@ -140,12 +142,13 @@ write.csv(rbind(stem.table, plot.table), "processed/stem.plot.model.summstats.cs
 # summary(a) ## R2 0.18
 # b <- lm(log(growth)~log(dbh)*V3, data=dat[growth>0,])
 # summary(b) ## R2 0.52 -- all context factors significant!!!
-
+#####
 
 
 
 
 ########### Canopy configuration across study area
+#####
 ## canopy and biomass configurations in this beast -- 1m data
 a <- Sys.time()
 aoi <- raster("processed/boston/bos.aoi.tif") 
@@ -191,17 +194,17 @@ for(i in 1:6){
 fat <- cbind(c(1:6), lulc.area.tot, lulc.can.tot, lulc.ed.tot, lulc.biom.tot, lulc.isa.tot)
 
 write.csv(fat, "processed/boston/bos.lulc.1mcover.summary.csv")
-
+#####
 
 
 
 ##### Bringing together NPP estimates
-### NOTE: Growth models are specified as factor~MgC/ha; 
+### NOTE: Growth models are specified as growth.factor~MgC/ha; 
 ### biomass per cell and npp estimates per cell are in kg-biomass;
 ### Statistics and analysis on NPP is done as MgC NPP vs MgC/ha
 
 ## LULC data to bin things by
-lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
+# lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
 # aoi <- raster("processed/boston/bos.aoi30m.tif")
 # lulc <- crop(lulc, aoi)
 # lulc <- mask(lulc, aoi)
@@ -209,68 +212,69 @@ lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
 # hist(biom.dat[,lulc])
 # 
 ### FIA results, equation based, packaged with some exploratory calcs
-fia <- read.csv("processed/npp.FIA.v3.csv")
-fia <- as.data.table(fia)
-## the current npp.ann figures are in MgC/pix/yr; correct to MgC/ha/yr
-fia[,npp.ann.forest.MgC.ha:=(npp.ann.forest/aoi)*1E4/(2*1000)]
-fia[,npp.ann.ground.MgC.ha:=(npp.ann.ground/aoi)*1E4/(2*1000)]
-fia[,npp.ann.perv.MgC.ha:=(npp.ann.perv/aoi)*1E4/(2*1000)]
-names(fia) <- paste("fia", names(fia), sep=".")
+# fia <- read.csv("processed/npp.FIA.v3.csv")
+# fia <- as.data.table(fia)
+# ## the current npp.ann figures are in MgC/pix/yr; correct to MgC/ha/yr
+# fia[,npp.ann.forest.MgC.ha:=(npp.ann.forest/aoi)*1E4/(2*1000)]
+# fia[,npp.ann.ground.MgC.ha:=(npp.ann.ground/aoi)*1E4/(2*1000)]
+# fia[,npp.ann.perv.MgC.ha:=(npp.ann.perv/aoi)*1E4/(2*1000)]
+# names(fia) <- paste("fia", names(fia), sep=".")
 # hist(fia[fia.aoi>800, fia.npp.ann.forest.MgC.ha]) ## up to ~2.0
 # hist(fia[fia.aoi>800, fia.npp.ann.ground.MgC.ha]) ## up to ~2.0
 # hist(fia[fia.aoi>800, fia.npp.ann.perv.MgC.ha]) ## up to ~2.0
 
-### FIA results, empirically derived npp estiamtes
-# fia.empir <- read.csv("processed/npp.FIA.empirV22.csv")
-# fia.empir <- as.data.table(read.csv("processed/npp.FIA.empirV23.csv")) ### Aug 16 analysis
-fia.empir <- as.data.table(read.csv("processed/npp.FIA.empirV24.csv")) ## Oct 4 analysis
-names(fia.empir) <- paste("fia.empir", names(fia.empir), sep=".")
-  
-## andy forest results and exploration of beta range
-andy.res <- as.data.table(read.csv("processed/andy.forest.results.csv"))
-# andy.betas <- load("processed/andy.forest.beta.samples") ## comes in as list beta.track
-# andy.samples <- read.csv("processed/andy.forest.npp.edge.int.samples.csv")
-names(andy.res) <- paste("andy", names(andy.res), sep=".")
+# ### FIA results, empirically derived npp estiamtes
+# # fia.empir <- read.csv("processed/npp.FIA.empirV22.csv")
+# # fia.empir <- as.data.table(read.csv("processed/npp.FIA.empirV23.csv")) ### Aug 16 analysis
+# # fia.empir <- as.data.table(read.csv("processed/npp.FIA.empirV24.csv")) ## Oct 4 analysis
+# fia.empir.g <- as.data.table(read.csv("npp.FIA.empirV5.ground.csv")) ## Oct 4 analysis
+# fia.empir.f <- as.data.table(read.csv("npp.FIA.empirV5.forest.csv"))
+# 
+# ## andy forest results and exploration of beta range
+# # andy.res <- as.data.table(read.csv("processed/andy.forest.results.csv"))
+# andy.res <- as.data.table(read.csv("processed/andy.forest.results.V3.csv"))
+# # andy.betas <- load("processed/andy.forest.beta.samples") ## comes in as list beta.track
+# # andy.samples <- read.csv("processed/andy.forest.npp.edge.int.samples.csv")
+# names(andy.res) <- paste("andy", names(andy.res), sep=".")
+# 
+# ## street trees
+# st <- as.data.table(read.csv("processed/streettrees.npp.simulator.v5.results.random.csv"))
+# names(st) <- paste("st", names(st), sep=".")
 
-## street trees
-st <- as.data.table(read.csv("processed/streettrees.npp.simulator.v4.results.csv"))
-st[,med.ann.npp.MgC.ha:=med.ann.npp.all*1E-3*(1/2)/aoi*1E4]
-names(st) <- paste("st", names(st), sep=".")
-
-## pull together and clean up
-npp.dat <- merge(fia, andy.res, by.x="fia.pix.ID", by.y="andy.pix.ID", all=T)
-npp.dat <- merge(npp.dat, st, by.x="fia.pix.ID", by.y="st.pix.ID", all=T)
-npp.dat <- merge(npp.dat, fia.empir, by.x="fia.pix.ID", by.y="fia.empir.pix.ID", all=T)
-npp.dat[, fia.X:=NULL]
-npp.dat[, andy.X:=NULL]
-npp.dat[, st.X:=NULL]
-npp.dat[, fia.empir.X:=NULL]
-# sum(npp.dat$fia.aoi-npp.dat$andy.aoi, na.rm=T)
-# sum(npp.dat$fia.aoi-npp.dat$st.aoi, na.rm=T)
-npp.dat[,andy.aoi:=NULL]
-npp.dat[,st.aoi:=NULL]
-# sum(npp.dat$fia.can.frac-npp.dat$andy.can, na.rm=T)
-npp.dat[,andy.can:=NULL]
-# sum(npp.dat$fia.can.frac-npp.dat$st.bos.can30m, na.rm=T)
-npp.dat[,st.bos.can30m:=NULL]
-# sum(npp.dat$fia.isa.frac-npp.dat$andy.isa, na.rm=T)
-# mean(npp.dat$fia.isa.frac-npp.dat$andy.isa, na.rm=T) ## on avg they are extremely similar but some do deviate a lot
-# plot(npp.dat$fia.isa.frac, npp.dat$andy.isa) ## andy dat doesn't need ISA, but is using the un-re-registered one, FIA uses the re-registered
-npp.dat[,andy.isa:=NULL]
-# sum(npp.dat$fia.bos.biom30m-npp.dat$andy.biom, na.rm=T)
-npp.dat[,andy.biom:=NULL]
-# sum(npp.dat$fia.bos.biom30m-npp.dat$st.bos.biom30m, na.rm=T)
-npp.dat[,st.bos.biom30m:=NULL]
-# sum(npp.dat$fia.bos.biom30m-npp.dat$st.biom.kg, na.rm=T)
-npp.dat[,st.biom.kg:=NULL]
-# plot(npp.dat$fia.bos.biom30m, npp.dat$st.med.biom.all)
-# abline(a=0, b=1)
-npp.dat[,fia.empir.bos.biom30m:=NULL]
-npp.dat[,fia.empir.aoi:=NULL]
-npp.dat[,fia.empir.can.frac:=NULL]
-npp.dat[,fia.empir.isa.frac:=NULL]
-npp.dat <- cbind(npp.dat, getValues(lulc))
-names(npp.dat)[c(1:5, dim(npp.dat)[2])] <- c("pix.ID", "bos.biom30m", "aoi", "can.frac", "isa.frac", "lulc")
+# ## pull together and clean up
+# npp.dat <- merge(fia.empir.f, andy.res, by.x="fia.pix.ID", by.y="andy.pix.ID", all=T)
+# npp.dat <- merge(npp.dat, st, by.x="fia.pix.ID", by.y="st.pix.ID", all=T)
+# npp.dat <- merge(npp.dat, fia.empir, by.x="fia.pix.ID", by.y="fia.empir.pix.ID", all=T)
+# npp.dat[, fia.X:=NULL]
+# npp.dat[, andy.X:=NULL]
+# npp.dat[, st.X:=NULL]
+# npp.dat[, fia.empir.X:=NULL]
+# # sum(npp.dat$fia.aoi-npp.dat$andy.aoi, na.rm=T)
+# # sum(npp.dat$fia.aoi-npp.dat$st.aoi, na.rm=T)
+# npp.dat[,andy.aoi:=NULL]
+# npp.dat[,st.aoi:=NULL]
+# # sum(npp.dat$fia.can.frac-npp.dat$andy.can, na.rm=T)
+# npp.dat[,andy.can:=NULL]
+# # sum(npp.dat$fia.can.frac-npp.dat$st.bos.can30m, na.rm=T)
+# npp.dat[,st.bos.can30m:=NULL]
+# # sum(npp.dat$fia.isa.frac-npp.dat$andy.isa, na.rm=T)
+# # mean(npp.dat$fia.isa.frac-npp.dat$andy.isa, na.rm=T) ## on avg they are extremely similar but some do deviate a lot
+# # plot(npp.dat$fia.isa.frac, npp.dat$andy.isa) ## andy dat doesn't need ISA, but is using the un-re-registered one, FIA uses the re-registered
+# npp.dat[,andy.isa:=NULL]
+# # sum(npp.dat$fia.bos.biom30m-npp.dat$andy.biom, na.rm=T)
+# npp.dat[,andy.biom:=NULL]
+# # sum(npp.dat$fia.bos.biom30m-npp.dat$st.bos.biom30m, na.rm=T)
+# npp.dat[,st.bos.biom30m:=NULL]
+# # sum(npp.dat$fia.bos.biom30m-npp.dat$st.biom.kg, na.rm=T)
+# npp.dat[,st.biom.kg:=NULL]
+# # plot(npp.dat$fia.bos.biom30m, npp.dat$st.med.biom.all)
+# # abline(a=0, b=1)
+# npp.dat[,fia.empir.bos.biom30m:=NULL]
+# npp.dat[,fia.empir.aoi:=NULL]
+# npp.dat[,fia.empir.can.frac:=NULL]
+# npp.dat[,fia.empir.isa.frac:=NULL]
+# npp.dat <- cbind(npp.dat, getValues(lulc))
+# names(npp.dat)[c(1:5, dim(npp.dat)[2])] <- c("pix.ID", "bos.biom30m", "aoi", "can.frac", "isa.frac", "lulc")
 
 ## One could argue to manually set low biomass cells to 0 NPP, but better to restrict analysis to nearly complete cells to avoid v. weird artifacts due to area alone
 # ### set all npp estimates to 0 in tiny biomass cells
@@ -323,31 +327,31 @@ names(npp.dat)[c(1:5, dim(npp.dat)[2])] <- c("pix.ID", "bos.biom30m", "aoi", "ca
 ## median dbh for the median npp set is pretty even across the city -- close to median for all street trees
 ### median npp is higher in the forest fragments (but these are full of no-sim holes), but there's some anomalies of high npp like the fenway, river valleys, whole southern part is hot
 
-### how many successful estimates do we have for each approach?
-npp.dat[!is.na(bos.biom30m) & aoi>800, length(bos.biom30m)] ## 135705 biomass records in relatively complete pixels
-npp.dat[is.finite(fia.npp.ann.forest.MgC.ha) & aoi>800, length(fia.npp.ann.forest.MgC.ha)] #135705 c.p. fia retrievals
-npp.dat[is.finite(andy.npp.tot.mod.lin) & aoi>800, length(andy.npp.tot.mod.lin.MgC.ha)] ## 135705 for final andy model version
-npp.dat[is.finite(fia.empir.npp.kg.hw.forest) & aoi>800, length(fia.empir.live.MgC.ha.forest)] ## 135705 for empirical FIA model
-npp.dat[is.finite(st.med.ann.npp.MgC.ha) & aoi>800,length(st.med.ann.npp.MgC.ha)] # 103850 complete pixel street tree retrievals
-npp.dat[bos.biom30m<10, st.med.ann.npp.all:=0] ## manually fix the negligible biomass retreivals did not simulate to begin with
-npp.dat[bos.biom30m<10, st.med.ann.npp.MgC.ha:=0]
-npp.dat[is.finite(st.med.ann.npp.MgC.ha) & aoi>800,length(st.med.ann.npp.MgC.ha)] # up to 132896 retrievals
-
-## comparison: how much npp do we see by these different methods
-hist(npp.dat[aoi>800, st.med.ann.npp.MgC.ha]) ## 0-5 MgC/ha/yr
-hist(npp.dat[aoi>800, fia.npp.ann.forest.MgC.ha]) ## 0-2.5 MgC/ha/yr
-# hist(npp.dat[aoi>800, andy.npp.tot.MgC.ha]) ## 0-8 MgC/ha/yr
-hist(npp.dat[aoi>800, fia.empir.npp.kg.hw.forest*(1E4/aoi)/2000]) ## up to ~3 MgC/ha/yr
-hist(npp.dat[aoi>800, andy.npp.tot.mod.lin.MgC.ha]) ## up to ~4 MgC/ha/yr
-
-sum(npp.dat[, st.med.ann.npp.MgC.ha*(aoi/1E4)], na.rm=T) ## 13.2k tC/yr street tree sim (missing a bunch of high-value pixels)
-sum(npp.dat[, fia.npp.ann.forest.MgC.ha*(aoi/1E4)], na.rm=T) ## 4.6k tC/yr ## fia forest method
-# sum(npp.dat[, andy.npp.tot.MgC.ha*(aoi/1E4)], na.rm=T) ## 13.8k tC/yr ## andy trees, avg. dbh, static
-# sum(npp.dat[, andy.npp.tot.ps.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.1k tC/yr ## andy trees with pseudoreps, static
-sum(npp.dat[, fia.empir.npp.kg.hw.forest/2000], na.rm=T) ## 7.8k tC/yr for fia empirical(forest) method
-# sum(npp.dat[, andy.npp.tot.mod.MgC.ha*(aoi/1E4)], na.rm=T) ## 12.2k tC/yr ## andy trees with pseudoreps, exp modeled
-# sum(npp.dat[, andy.npp.tot.mod.cap.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.8k tC/yr ## andy trees with pseudoreps, exp modeled, capped at low end
-sum(npp.dat[, andy.npp.tot.mod.lin.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.7k tC/yr ## andy trees with pseudoreps, lin modeled
+# ### how many successful estimates do we have for each approach?
+# npp.dat[!is.na(bos.biom30m) & aoi>800, length(bos.biom30m)] ## 135705 biomass records in relatively complete pixels
+# npp.dat[is.finite(fia.npp.ann.forest.MgC.ha) & aoi>800, length(fia.npp.ann.forest.MgC.ha)] #135705 c.p. fia retrievals
+# npp.dat[is.finite(andy.npp.tot.mod.lin) & aoi>800, length(andy.npp.tot.mod.lin.MgC.ha)] ## 135705 for final andy model version
+# npp.dat[is.finite(fia.empir.npp.kg.hw.forest) & aoi>800, length(fia.empir.live.MgC.ha.forest)] ## 135705 for empirical FIA model
+# npp.dat[is.finite(st.med.ann.npp.MgC.ha) & aoi>800,length(st.med.ann.npp.MgC.ha)] # 103850 complete pixel street tree retrievals
+# npp.dat[bos.biom30m<10, st.med.ann.npp.all:=0] ## manually fix the negligible biomass retreivals did not simulate to begin with
+# npp.dat[bos.biom30m<10, st.med.ann.npp.MgC.ha:=0]
+# npp.dat[is.finite(st.med.ann.npp.MgC.ha) & aoi>800,length(st.med.ann.npp.MgC.ha)] # up to 132896 retrievals
+# 
+# ## comparison: how much npp do we see by these different methods
+# hist(npp.dat[aoi>800, st.med.ann.npp.MgC.ha]) ## 0-5 MgC/ha/yr
+# hist(npp.dat[aoi>800, fia.npp.ann.forest.MgC.ha]) ## 0-2.5 MgC/ha/yr
+# # hist(npp.dat[aoi>800, andy.npp.tot.MgC.ha]) ## 0-8 MgC/ha/yr
+# hist(npp.dat[aoi>800, fia.empir.npp.kg.hw.forest*(1E4/aoi)/2000]) ## up to ~3 MgC/ha/yr
+# hist(npp.dat[aoi>800, andy.npp.tot.mod.lin.MgC.ha]) ## up to ~4 MgC/ha/yr
+# 
+# sum(npp.dat[, st.med.ann.npp.MgC.ha*(aoi/1E4)], na.rm=T) ## 13.2k tC/yr street tree sim (missing a bunch of high-value pixels)
+# sum(npp.dat[, fia.npp.ann.forest.MgC.ha*(aoi/1E4)], na.rm=T) ## 4.6k tC/yr ## fia forest method
+# # sum(npp.dat[, andy.npp.tot.MgC.ha*(aoi/1E4)], na.rm=T) ## 13.8k tC/yr ## andy trees, avg. dbh, static
+# # sum(npp.dat[, andy.npp.tot.ps.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.1k tC/yr ## andy trees with pseudoreps, static
+# sum(npp.dat[, fia.empir.npp.kg.hw.forest/2000], na.rm=T) ## 7.8k tC/yr for fia empirical(forest) method
+# # sum(npp.dat[, andy.npp.tot.mod.MgC.ha*(aoi/1E4)], na.rm=T) ## 12.2k tC/yr ## andy trees with pseudoreps, exp modeled
+# # sum(npp.dat[, andy.npp.tot.mod.cap.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.8k tC/yr ## andy trees with pseudoreps, exp modeled, capped at low end
+# sum(npp.dat[, andy.npp.tot.mod.lin.MgC.ha*(aoi/1E4)], na.rm=T) ## 10.7k tC/yr ## andy trees with pseudoreps, lin modeled
 
 
 ### some very close reading of how these estimates differ on a spatial basis
@@ -542,10 +546,9 @@ write.csv(biom.dat, "processed/hybrid.results.V5.csv")
 
 
 
-
-
-
 ### analysis of error distributed results
+## NPP totals by LULC
+#####
 ### FIA results, error distributed
 fia.ground.rand <- as.data.table(read.csv("npp.FIA.empirV5.ground.csv"))
 fia.forest.rand <- as.data.table(read.csv("npp.FIA.empirV5.forest.csv"))
@@ -597,78 +600,45 @@ fia.perv.lulc[,X:=NULL]
 
 ## quantiles by lulc -- GROUND
 rangey <- function(x){quantile(x, probs=c(0.05, 0.5, 0.95))}
-rangey(fia.npp.tot.ground)/2000/1000
-apply(fia.ground.lulc[,2:7], FUN=rangey, MARGIN=2)/2000/1000
+tot <- round(rangey(fia.npp.tot.ground)/2000/1000,1)
+lulc.tot <- round(apply(fia.ground.lulc[,2:7], FUN=rangey, MARGIN=2)/2000/1000, 1)
+results.fia.ground <- character()
+for(i in 1:6){
+  results.fia.ground <- c(results.fia.ground,
+                          paste0(lulc.tot[2,i], " (", lulc.tot[1,i], "-", lulc.tot[3,i], ")"))
+}
+t <- cbind(c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"), 
+           results.fia.ground)
+t <- rbind(t, c("Total", 
+                paste0(tot[2], " (", tot[1], "-", tot[3], ")")))
+
 
 ## quantiles by lulc -- FOREST
-quantile((fia.npp.tot.forest/2000)/1000, probs=c(0.05, 0.5, 0.95))
-apply(fia.forest.lulc[,2:7], FUN=rangey, MARGIN=2)/2000/1000
-
-### pixel median spreads -- FOREST
-a <- ((fia.forest.rand[, 11:110]/2000)/fia.forest.rand[,aoi])*1E4 ## get things from per kg-biomass/pix/yr to MgC/ha/yr
-a[,aoi:=fia.forest.rand[,aoi]]
-a[,lulc:=fia.forest.rand[,lulc]]
-quant.na <- function(x)(quantile(x, probs=c(0.05, 0.5, 0.95), na.rm=T))
-fia.npp.med <- apply(a[aoi>800, 1:100], MARGIN=2, FUN=quant.na)
-fia.lulc.med <- data.frame(1:100)
-fia.lulc.lo <- data.frame(1:100)
-fia.lulc.hi <- data.frame(1:100)
-for(l in 1:6){
-  tmp <- apply(a[aoi>800 & lulc==l,1:100], MARGIN=2, FUN=quant.na)
-  fia.lulc.med <- cbind(fia.lulc.med, tmp[2,])
-  fia.lulc.lo <- cbind(fia.lulc.lo, tmp[1,])
-  fia.lulc.hi <- cbind(fia.lulc.hi, tmp[3,])
+tot <- round(rangey((fia.npp.tot.forest/2000)/1000), 1)
+lulc.tot <- round(apply(fia.forest.lulc[,2:7], FUN=rangey, MARGIN=2)/2000/1000,1)
+results.fia.forest <- character()
+for(i in 1:6){
+  results.fia.forest <- c(results.fia.forest,
+                          paste0(lulc.tot[2,i], " (", lulc.tot[1,i], "-", lulc.tot[3,i], ")"))
 }
-names(fia.lulc.med) <- c("iter", paste("fia.lulc", 1:6, ".npp.med", sep=""))
-names(fia.lulc.lo) <- c("iter", paste("fia.lulc", 1:6, ".npp.lo", sep=""))
-names(fia.lulc.hi) <- c("iter", paste("fia.lulc", 1:6, ".npp.hi", sep=""))
-
-## quantile spreads
-### total
-apply(fia.npp.med, MARGIN=1, FUN=median)
-## medians
-median(fia.lulc.med[,2])
-median(fia.lulc.med[,3])
-median(fia.lulc.med[,4])
-median(fia.lulc.med[,5])
-median(fia.lulc.med[,6])
-median(fia.lulc.med[,7])
-
-## lows
-median(fia.lulc.lo[,2])
-median(fia.lulc.lo[,3])
-median(fia.lulc.lo[,4])
-median(fia.lulc.lo[,5])
-median(fia.lulc.lo[,6])
-median(fia.lulc.lo[,7])
-
-## highs
-median(fia.lulc.hi[,2])
-median(fia.lulc.hi[,3])
-median(fia.lulc.hi[,4])
-median(fia.lulc.hi[,5])
-median(fia.lulc.hi[,6])
-median(fia.lulc.hi[,7])
-
-
-
+results.fia.forest <- c(results.fia.forest, paste0(tot[2], " (", tot[1], "-", tot[3], ")"))
+t <- cbind(t, results.fia.forest)
 
 
 ### ANDY FOREST, error distributed
-andy.newmod <- as.data.table(read.csv("processed/andy.forest.results.V3.csv"))
-andy <- as.data.table(read.csv("processed/andy.forest.results.V2.csv")) ## this is the 7000 MgC version
-andy.retest <- as.data.table(read.csv("processed/andy.forest.results.V2-retest.csv")) ## this is the 7000 MgC version
+andy <- as.data.table(read.csv("processed/andy.forest.results.V3.csv"))
+# andy <- as.data.table(read.csv("processed/andy.forest.results.V2.csv")) ## this is the 7000 MgC version
+# andy.retest <- as.data.table(read.csv("processed/andy.forest.results.V2-retest.csv")) ## this is the 7000 MgC version
 sum.na <- function(x){sum(x, na.rm=T)}
 andy.npp.tot <- apply(andy[aoi>800,16:115], MARGIN=2, FUN=sum.na) 
-andy.npp.tot.retest <- apply(andy.retest[aoi>800,16:115], MARGIN=2, FUN=sum.na) 
-andy.npp.tot.newmod <- apply(andy.newmod[aoi>800,16:115], MARGIN=2, FUN=sum.na) 
+# andy.npp.tot.retest <- apply(andy.retest[aoi>800,16:115], MARGIN=2, FUN=sum.na) 
+# andy.npp.tot.newmod <- apply(andy.newmod[aoi>800,16:115], MARGIN=2, FUN=sum.na) 
 hist((andy.npp.tot/2000))
-hist((andy.npp.tot.retest/2000))## no variance, something is broken in the model
-hist((andy.npp.tot.newmod/2000))
-median((andy.npp.tot/2000)) ## about 7k
-median((andy.npp.tot.retest/2000)) ## about 6.2k
-median((andy.npp.tot.newmod/2000)) ## about 12.4k
-
+# hist((andy.npp.tot.retest/2000))## no variance, something is broken in the model
+# hist((andy.npp.tot.newmod/2000))
+median((andy.npp.tot/2000)) ## about 13k
+# median((andy.npp.tot.retest/2000)) ## about 6.2k
+# median((andy.npp.tot.newmod/2000)) ## about 12.4k
 
 ### model realizations by lulc
 andy.lulc <- data.frame(1:100)
@@ -680,14 +650,21 @@ names(andy.lulc) <- c("iter", paste("andy.lulc", 1:6, ".npp.tot", sep=""))
 rownames(andy.lulc) <- NULL
 write.csv(andy.lulc, "processed/andy.v3.lulc.results.csv")
 
+### summary stats
+andy.lulc <- as.data.table(read.csv("processed/andy.v3.lulc.results.csv"))
+andy.lulc[,X:=NULL]
+
 ## quantiles by lulc 
-quantile((andy.npp.tot/2000)/1000, probs=c(0.05, 0.5, 0.95)) ## total
-quantile(andy.lulc[,2]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(andy.lulc[,3]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(andy.lulc[,4]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(andy.lulc[,5]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(andy.lulc[,6]/2000/1000, probs=c(0.05, 0.5, 0.95))
-quantile(andy.lulc[,7]/2000/1000, probs=c(0.05, 0.5, 0.95))
+rangey <- function(x){quantile(x, probs=c(0.05, 0.5, 0.95))}
+tot <- round(rangey(andy.npp.tot)/2000/1000,1)
+lulc.tot <- round(apply(andy.lulc[,2:7], FUN=rangey, MARGIN=2)/2000/1000, 1)
+results.andy <- character()
+for(i in 1:6){
+  results.andy <- c(results.andy,
+                          paste0(lulc.tot[2,i], " (", lulc.tot[1,i], "-", lulc.tot[3,i], ")"))
+}
+t <- cbind(t, 
+           c(results.andy, paste0(tot[2], " (", tot[1], "-", tot[3], ")")))
 
 
 
@@ -709,73 +686,92 @@ for(l in 1:6){
 }
 names(hyb.lulc) <- c("iter", paste("hyb.lulc", 1:6, ".npp.tot", sep=""))
 rownames(hyb.lulc) <- NULL
-write.csv(hyb.lulc, "processed/hyb.v4.lulc.results.csv")
+write.csv(hyb.lulc, "processed/hyb.v5.lulc.results.csv")
 
-hyb.lulc <- as.data.table(read.csv("processed/hyb.v4.lulc.results.csv"))
+hyb.lulc <- as.data.table(read.csv("processed/hyb.v5.lulc.results.csv"))
 hyb.lulc[,X:=NULL]
 
 ## quantiles by lulc 
-rangey(hyb.npp.tot)/2000/1000
-apply(hyb.lulc[,2:7], FUN=rangey, MARGIN=2)/2000/1000
-# quantile((hyb.npp.tot/2000)/1000, probs=c(0.05, 0.5, 0.95)) ## total
-# quantile(hyb.lulc[,2]/2000/1000, probs=c(0.05, 0.5, 0.95))
-# quantile(hyb.lulc[,3]/2000/1000, probs=c(0.05, 0.5, 0.95))
-# quantile(hyb.lulc[,4]/2000/1000, probs=c(0.05, 0.5, 0.95))
-# quantile(hyb.lulc[,5]/2000/1000, probs=c(0.05, 0.5, 0.95))
-# quantile(hyb.lulc[,6]/2000/1000, probs=c(0.05, 0.5, 0.95))
-# quantile(hyb.lulc[,7]/2000/1000, probs=c(0.05, 0.5, 0.95))
-
-### pixel median spreads
-a <- ((hyb[, 8:107]/2000)/hyb[,bos.aoi30m])*1E4 ## get things from per kg-biomass/pix/yr to MgC/ha/yr
-a[,aoi:=hyb[,bos.aoi30m]]
-a[,lulc:=hyb[,bos.lulc30m.lumped]]
-quant.na <- function(x)(quantile(x, probs=c(0.05, 0.5, 0.95), na.rm=T))
-hyb.npp.med <- apply(a[aoi>800, 1:100], MARGIN=2, FUN=quant.na)
-hyb.lulc.med <- data.frame(1:100)
-hyb.lulc.lo <- data.frame(1:100)
-hyb.lulc.hi <- data.frame(1:100)
-for(l in 1:6){
-  tmp <- apply(a[aoi>800 & lulc==l,1:100], MARGIN=2, FUN=quant.na)
-  hyb.lulc.med <- cbind(hyb.lulc.med, tmp[2,])
-  hyb.lulc.lo <- cbind(hyb.lulc.lo, tmp[1,])
-  hyb.lulc.hi <- cbind(hyb.lulc.hi, tmp[3,])
+rangey <- function(x){quantile(x, probs=c(0.05, 0.5, 0.95))}
+tot <- round(rangey(hyb.npp.tot)/2000/1000,1)
+lulc.tot <- round(apply(hyb.lulc[,2:7], FUN=rangey, MARGIN=2)/2000/1000, 1)
+results.hyb <- character()
+for(i in 1:6){
+  results.hyb <- c(results.hyb,
+                    paste0(lulc.tot[2,i], " (", lulc.tot[1,i], "-", lulc.tot[3,i], ")"))
 }
-names(hyb.lulc.med) <- c("iter", paste("hyb.lulc", 1:6, ".npp.med", sep=""))
-names(hyb.lulc.lo) <- c("iter", paste("hyb.lulc", 1:6, ".npp.lo", sep=""))
-names(hyb.lulc.hi) <- c("iter", paste("hyb.lulc", 1:6, ".npp.hi", sep=""))
+t <- cbind(t, 
+           c(results.hyb, paste0(tot[2], " (", tot[1], "-", tot[3], ")")))
+colnames(t) <- c("LULC", "results.fia.ground", "results.fia.forest", "results.andy", "results.hybrid")
+write.csv(t, "processed/results/npp.tot.summary.v5.csv")
+#####
 
-## quantile spreads
-### total
-apply(hyb.npp.med, MARGIN=1, FUN=median)
-## medians
-median(hyb.lulc.med[,2])
-median(hyb.lulc.med[,3])
-median(hyb.lulc.med[,4])
-median(hyb.lulc.med[,5])
-median(hyb.lulc.med[,6])
-median(hyb.lulc.med[,7])
+### pixel median spreads -- just the median estimate for each pixel
+#####
+rangey <- function(x){quantile(x, probs=c(0.05, 0.5, 0.95), na.rm=T)}
+median.na <- function(x){round(median(x, na.rm=T),1)}
+low.na <- function(x){round(quantile(x, na.rm=T, probs=0.05),1)}
+hi.na <- function(x){round(quantile(x, na.rm=T, probs=0.95),1)}
 
-## lows
-median(hyb.lulc.lo[,2])
-median(hyb.lulc.lo[,3])
-median(hyb.lulc.lo[,4])
-median(hyb.lulc.lo[,5])
-median(hyb.lulc.lo[,6])
-median(hyb.lulc.lo[,7])
+## FIA forest
+fia.forest.pix <- ((apply(fia.forest.rand[,11:110], FUN=median.na, MARGIN=1)/2000)/fia.forest.rand[,aoi])*1E4 ## pix growth in MgC/ha
+fia.forest.pix <- cbind(fia.forest.rand[, 2:10], fia.forest.pix)
+tot <- round(rangey(fia.forest.pix[aoi>800, fia.forest.pix]),1)
+results.fia.forest.pix <- character()
+for(i in 1:6){
+  results.fia.forest.pix <- c(results.fia.forest.pix,
+                              paste0(fia.forest.pix[lulc==i & aoi>800, median.na(fia.forest.pix)], " (", 
+                                     fia.forest.pix[lulc==i & aoi>800, low.na(fia.forest.pix)], "-", 
+                                     fia.forest.pix[lulc==i & aoi>800, hi.na(fia.forest.pix)], ")"))
+}
+t <- cbind(c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water"), 
+           results.fia.forest.pix)
+t <- rbind(t, c("Total", 
+                paste0(tot[2], " (", tot[1], "-", tot[3], ")")))
 
-## highs
-median(hyb.lulc.hi[,2])
-median(hyb.lulc.hi[,3])
-median(hyb.lulc.hi[,4])
-median(hyb.lulc.hi[,5])
-median(hyb.lulc.hi[,6])
-median(hyb.lulc.hi[,7])
+## FIA ground
+fia.ground.pix <- ((apply(fia.ground.rand[,11:110], FUN=median.na, MARGIN=1)/2000)/fia.ground.rand[,aoi])*1E4 ## pix growth in MgC/ha
+fia.ground.pix <- cbind(fia.ground.rand[, 2:10], fia.ground.pix)
+tot <- round(rangey(fia.ground.pix[aoi>800, fia.ground.pix]),1)
+results.fia.ground.pix <- character()
+for(i in 1:6){
+  results.fia.ground.pix <- c(results.fia.ground.pix,
+                              paste0(fia.ground.pix[lulc==i & aoi>800, median.na(fia.ground.pix)], " (", 
+                                     fia.ground.pix[lulc==i & aoi>800, low.na(fia.ground.pix)], "-", 
+                                     fia.ground.pix[lulc==i & aoi>800, hi.na(fia.ground.pix)], ")"))
+}
+t <- cbind(t, 
+           c(results.fia.ground.pix, paste0(tot[2], " (", tot[1], "-", tot[3], ")")))
 
+## Andy
+andy.pix <- ((apply(andy[,16:115], FUN=median.na, MARGIN=1)/2000)/andy[,aoi])*1E4 ## pix growth in MgC/ha
+andy.pix <- cbind(andy[, 2:15], andy.pix)
+tot <- round(rangey(andy.pix[aoi>800, andy.pix]),1)
+results.andy.pix <- character()
+for(i in 1:6){
+  results.andy.pix <- c(results.andy.pix,
+                              paste0(andy.pix[lulc==i & aoi>800, median.na(andy.pix)], " (", 
+                                     andy.pix[lulc==i & aoi>800, low.na(andy.pix)], "-", 
+                                     andy.pix[lulc==i & aoi>800, hi.na(andy.pix)], ")"))
+}
+t <- cbind(t, 
+           c(results.andy.pix, paste0(tot[2], " (", tot[1], "-", tot[3], ")")))
 
-
-
-
-
+## Hybrid
+hyb.pix <- ((apply(hyb[,8:107], FUN=median.na, MARGIN=1)/2000)/hyb[,bos.aoi30m])*1E4 ## pix growth in MgC/ha
+hyb.pix <- cbind(hyb[, 2:7], hyb.pix)
+tot <- round(rangey(hyb.pix[bos.aoi30m>800, hyb.pix]),1)
+results.hyb.pix <- character()
+for(i in 1:6){
+  results.hyb.pix <- c(results.hyb.pix,
+                        paste0(hyb.pix[bos.lulc30m.lumped==i & bos.aoi30m>800, median.na(hyb.pix)], " (", 
+                               hyb.pix[bos.lulc30m.lumped==i & bos.aoi30m>800, low.na(hyb.pix)], "-", 
+                               hyb.pix[bos.lulc30m.lumped==i & bos.aoi30m>800, hi.na(hyb.pix)], ")"))
+}
+t <- cbind(t, 
+           c(results.hyb.pix, paste0(tot[2], " (", tot[1], "-", tot[3], ")")))
+colnames(t) <- c("LULC", "fia.forest.pix", "fia.ground.pix", "andy.pix", "hybrid.pix")
+write.csv(t, "processed/results/npp.pix.summary.v5.csv")
 
 
 #### STATIC NPP RESULTS LOOKED AT HERE

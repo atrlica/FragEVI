@@ -260,9 +260,10 @@ library(data.table)
 # ps.contain <- read.csv("processed/andy.bai.dbh.pseudo.csv")
 # ps.contain <- as.data.table(ps.contain)
 # ps.contain <- merge(x=ps.contain, y=andy.bai[,.(incr.ID, Plot.ID)], by="incr.ID", all.x=T, all.y=F) ## put the plot IDs in
-# write.csv(ps.contain, "processed/andy.bai.dbh.pseudo.csv")
-ps.contain <- as.data.table(read.csv("processed/andy.bai.ps.dbhincr.csv")) ## this is the nicely formatted BAI data from the psueoreplicated tree cores
 names(ps.contain)[4] <- "dbh.start.incr"
+write.csv(ps.contain, "processed/andy.bai.ps.dbhincr.csv")
+ps.contain <- as.data.table(read.csv("processed/andy.bai.ps.dbhincr.csv")) ## this is the nicely formatted BAI data from the psueoreplicated tree cores
+
 # ## avg.dbh~avg.growth
 # par(mfrow=c(1,2))
 # col.edge <- c("black", "red")

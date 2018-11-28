@@ -157,11 +157,10 @@ library(ggplot2)
 #   lines(dat$dist, dat$frac.tot.area, col=cols[d], type="l", lwd=2)
 # }
 # legend(x=60, y=0.4, bty = "n", legend=c("Boston", hoods), fill=c("black", cols))
-
-
-
 #####
+
 ### CANOPY AREA STACKED BY DISTANCE+LULC
+#####
 # ### canopy edge area cumulative, extract by LULC collapsed classes
 # library(data.table)
 # library(raster)
@@ -253,8 +252,7 @@ library(ggplot2)
 #   results$frac.tot.area <- results$pix.less.than/area.tot
 #   write.csv(results, paste("processed/bos.can.cummdist.", lu.classes[l], ".csv", sep=""))
 # }
-
-## FIGURE 1: canopy edge area as fraction of total area (by LULC class)
+#####
 
 ## FIGURE 1: CANOPY AREA BY EDGE DISTANCE+LULC
 #####
@@ -351,9 +349,10 @@ ggplot(contain, aes(x=distance, y=ha, fill=LULC)) +
         legend.text=element_text(size=8),
         legend.title=element_text(size=10, face="bold"))
 dev.off()
-
+#####
 
 ### tables for example "pixel" summary cover
+#####
 library(rgeos)
 target <- readOGR("processed/boston/fenway_sample1.shp")
 inset <- readOGR("processed/boston/fenway_inset2.shp")
@@ -382,8 +381,10 @@ sum(b)/(2000) ### total biomass MgC
 (sum(b)/(2000))/((length(b)*(1-(sum(d%in%c(5,4))/length(d))))/1E4) ### MgC/ha-perv
 n <- unlist(extract(ndvi, target))
 mean(n) ## mean pixel ndvi
+#####
 
-# #### FIA density plots
+#### FIA density plots
+#####
 # library(raster)
 # library(data.table)
 # a=123.67
@@ -577,7 +578,6 @@ mean(n) ## mean pixel ndvi
 #                           labels=c("ground", "forest", "pervious"))+
 #     labs(x = "NPP MgC/ha/yr")+
 #     guides(fill=FALSE)
-
 #####
 
 ## FIGURE 2: STEM LEVEL BIOMASS GROWTH (FIA, ANDY, STREET)
@@ -611,8 +611,10 @@ stemg_trans <- function(){trans_new(name="stemg",
 # I.stemg.xform(stemg.xform(5)) ## it works
 
 ## set up common visual parameters
+# xlim.all <- c(4, 100)
+# ylim.all <- c(-0.1, 1)
 xlim.all <- c(4, 100)
-ylim.all <- c(-0.1, 1)
+ylim.all <- c(-1, 2.5)
 xlim.all.log <- c(log(4), log(100))
 ylim.all.log <- c(log(0.002), log(1))
 title.size <- 12
@@ -638,40 +640,109 @@ alpha.master <- 0.2
 
 ####
 ### FIA rural trees
-live <- read.csv("data/FIA/MA_Tree_Data_ID_NOMORT.csv")
-live <- as.data.table(live)
-names(live)[1] <- c("TreeID")
-names(live)[2] <- c("PlotID")
-spec <- read.csv("data/FIA/REF_SPECIES.csv")
-live <- merge(x=live, y=spec[,c("SPCD", "GENUS", "SPECIES")], by.x="SPECIES_CD", by.y="SPCD", all.x=T, all.y=F)
-live$GENUS <- as.character(live$GENUS)
-live$GENUS <- as.factor(live$GENUS)
-live$GENUS.num <- as.numeric(live$GENUS)
-spp.allo <- read.csv("data/FIA/spp_allometrics.csv") ## manually entered selected map from spp to b0+b1
-live[,spp:=paste(substr(GENUS, 1,1), ".", SPECIES, sep="")]
-live <- merge(x=live, y=spp.allo[,c("spp", "b0", "b1")], by="spp", all.x=T)
-live[is.na(b0), b0:=(-2.48)]
-live[is.na(b1), b1:=2.4835]
+live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv"))
+# spec <- read.csv("data/FIA/REF_SPECIES.csv")
+# live <- merge(x=live, y=spec[,c("SPCD", "GENUS", "SPECIES")], by.x="SPECIES_CD", by.y="SPCD", all.x=T, all.y=F)
+# live$GENUS <- as.character(live$GENUS)
+# live$GENUS <- as.factor(live$GENUS)
+# live$GENUS.num <- as.numeric(live$GENUS)
+# spp.allo <- read.csv("data/FIA/spp_allometrics.csv") ## manually entered selected map from spp to b0+b1
+# live[,spp:=paste(substr(GENUS, 1,1), ".", SPECIES, sep="")]
+# live <- merge(x=live, y=spp.allo[,c("spp", "b0", "b1")], by="spp", all.x=T)
+# live[is.na(b0), b0:=(-2.48)]
+# live[is.na(b1), b1:=2.4835]
 biom.pred2 <- function(b0, b1, x){exp(b0+(b1*log(x)))}
 ## class as hard or soft wood
-live[,type:="H"]
-live[spp%in%c("P.strobus", "P.resinosa", "T.canadensis", "A.balsamea"), type:="S"]
-live[,type:=as.factor(type)]
-live[,biom0.spp:=biom.pred2(b0, b1, DIAM_T0)]
-live[,biom1.spp:=biom.pred2(b0, b1, DIAM_T1)]
-live[,growth.ann:=(biom1.spp-biom0.spp)/4.8]
-live[,growth.ann.rel:=growth.ann/biom0.spp]
+# live[,type:="H"]
+# live[spp%in%c("P.strobus", "P.resinosa", "T.canadensis", "A.balsamea"), type:="S"]
+# live[,type:=as.factor(type)]
+# live[,biom0.spp:=biom.pred2(b0, b1, DIAM_T0)]
+# live[,biom1.spp:=biom.pred2(b0, b1, DIAM_T1)]
+# live[,growth.ann:=(biom1.spp-biom0.spp)/4.8]
+# live[,growth.ann.rel:=growth.ann/biom0.spp]
 # range(live$npp.ann.rel, na.rm=T) #-12% to 52%
-mod.fia.nls <- nls(growth.ann.rel ~ exp(a + b * log(DIAM_T0)), data=live, start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
-mm <- summary(mod.fia.nls) ## all factors significant
 
-pred_live <- data.frame(growth.pred=predict(mod.fia.nls, newdata=data.frame(DIAM_T0=seq(live[,min(DIAM_T0, na.rm=T)],
-                                                                                        100, by=0.2))),
+### specify model (either for biomass growth rate or dimater growth rate)
+yyy <- lmer(diam.rate~DIAM_T0 +
+              (1|PlotID) +
+              (1|GENUS)+
+              (1|YEAR), data=live[lag>0 & STATUS ==1,], REML=F)
+
+# mod.fia.nls <- nls(growth.ann.rel ~ exp(a + b * log(DIAM_T0)), data=live, start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
+# mm <- summary(mod.fia.nls) ## all factors significant
+# 
+# pred_live <- data.frame(growth.pred=predict(mod.fia.nls, newdata=data.frame(DIAM_T0=seq(live[,min(DIAM_T0, na.rm=T)],
+#                                                                                         100, by=0.2))),
+#                         DIAM_T0=seq(live[,min(DIAM_T0, na.rm=T)],
+#                                     100, by=0.2))
+
+pred_live <- data.frame(diam.rate.pred=coef(summary(yyy))[1]+
+                          seq(live[,min(DIAM_T0, na.rm=T)],100, by=0.2)*coef(summary(yyy))[2],
                         DIAM_T0=seq(live[,min(DIAM_T0, na.rm=T)],
                                     100, by=0.2))
+## function for confidence intervals
+######
+## x and y are data, y.pred & x.pred are predictions in pred_live, mod is model object
+y <- live[lag>0 & STATUS ==1, diam.rate]
+x <- live[lag>0 & STATUS ==1, DIAM_T0]
+mod <- yyy
+b0 <- coef(summary(mod))[1]
+b1 <- coef(summary(mod))[2]
+y.pred <- b0+(b1*x)
+x.pred <- x
+reg.conf.intervals <- function(x, y, mod, y.pred, x.pred) {
+  n <- length(y) # Find length of y to use as sample size
+  
+  # Extract fitted coefficients from model object
+  b0 <- coef(summary(mod))[1]
+  b1 <- coef(summary(mod))[2]
+  
+  # Find SSE and MSE
+  sse <- sum((y - y.pred)^2)
+  mse <- sse / (n - 2)
+  
+  t.val <- qt(0.975, n - 2) # Calculate critical t-value
+  
+  # Fit linear model with extracted coefficients
+  x_new <- sort(live[lag>0 & STATUS==1, DIAM_T0])
+  y.fit <- b1 * x_new + b0
+  
+  # Find the standard error of the regression line
+  se <- sqrt(sum((y - y.fit)^2)/(n - 2)) * sqrt((1/n) + (((x - mean(x))^2)/sum((x - mean(x))^2)))
+  
+  slope.upper <- y.fit+t.val*se
+  slope.lower <- y.fit-t.val*se
+  
+  # Collect the computed confidence bands into a data.frame and name the colums
+  bands <- data.frame(cbind(slope.lower, slope.upper))
+  colnames(bands) <- c('Lower Confidence Band', 'Upper Confidence Band')
+  
+  # Plot the fitted linear regression line and the computed confidence bands
+  plot(x, y, cex = .6, pch = 21, bg = 'gray', ylim=c(0, 1))
+  lines(y.fit, col = 'black', lwd = 2)
+  lines(bands[1], col = 'blue', lty = 2, lwd = 2)
+  lines(bands[2], col = 'blue', lty = 2, lwd = 2)
+  
+  return(bands)
+}
 
-live$density <- get_density(live$DIAM_T0, live$growth.ann.rel)
-live[is.na(density), density:=0]
+conf.intervals <- reg.conf.intervals(cars$speed, cars$dist)
+#####
+
+# live$density <- get_density(live$DIAM_T0, live$growth.ann.rel)
+# live[is.na(density), density:=0]
+
+## dbh increment
+fia.mono.incr <- ggplot(live, aes(DIAM_T0, diam.rate))+
+  geom_point(alpha=alpha.master, color=plasma(6)[1], size=pt.size)+
+  scale_y_continuous(breaks=c(-1, 0, 1, 2), limits=ylim.all)+
+  scale_x_continuous(limits=xlim.all, breaks=c(0, 20, 40, 60, 80, 100))+
+  # geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  # geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  geom_line(data = pred_live, aes(x=DIAM_T0, y=diam.rate.pred), color=fit.col, linetype=fit.type, size=fit.width)+
+  labs(x = "Stem DBH (cm)", y="Stem Growth (cm/yr)", title="Rural Forest '03-'15")+
+  theme.master
+
 
 ## single color, density via alpha density
 # fia.mono <- ggplot(live, aes(DIAM_T0, growth.ann.rel))+
@@ -684,16 +755,16 @@ live[is.na(density), density:=0]
 #   theme.master
 
 
-## log+a transformed
-fia.mono.log <- ggplot(live, aes(DIAM_T0, growth.ann.rel))+
-  geom_point(alpha=alpha.master, color=plasma(6)[1], size=pt.size)+
-  scale_y_continuous(trans="stemg", breaks=c(-0.1, 0, 0.2, 0.5, 1.0), limits=ylim.all)+
-  scale_x_continuous(trans="log", limits=xlim.all, breaks=c(5, 10, 30, 60, 100))+
-  # geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  # geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color=fit.col, linetype=fit.type, size=fit.width)+
-  labs(x = "Stem DBH (cm)", y="Stem Growth (kg/kg)", title="Rural Forest '08-'16")+
-  theme.master
+# ## log+a transformed
+# fia.mono.log <- ggplot(live, aes(DIAM_T0, growth.ann.rel))+
+#   geom_point(alpha=alpha.master, color=plasma(6)[1], size=pt.size)+
+#   scale_y_continuous(trans="stemg", breaks=c(-0.1, 0, 0.2, 0.5, 1.0), limits=ylim.all)+
+#   scale_x_continuous(trans="log", limits=xlim.all, breaks=c(5, 10, 30, 60, 100))+
+#   # geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   # geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color=fit.col, linetype=fit.type, size=fit.width)+
+#   labs(x = "Stem DBH (cm)", y="Stem Growth (kg/kg)", title="Rural Forest '08-'16")+
+#   theme.master
 
 # ## asinh transform
 # library(scales)
@@ -726,26 +797,71 @@ fia.mono.log <- ggplot(live, aes(DIAM_T0, growth.ann.rel))+
 
 ####
 ### Andy Trees
-andy.bai <- as.data.table(read.csv("processed/andy.bai.dbh.pseudo.csv"))
+# andy.bai <- as.data.table(read.csv("processed/andy.bai.dbh.pseudo.csv"))
+andy.bai <- as.data.table(read.csv("processed/andy.bai.ps.dbhincr.csv"))
+### specify model (either for biomass growth rate or dimater growth rate)
+e.null <- lmer(dbh.incr.ann~seg.Edge + 
+                 (dbh.start.incr|Plot.ID) + 
+                 (dbh.start.incr|incr.ID) + 
+                 (dbh.start.incr|interval), 
+               data=andy.bai[dbh.start.incr>=5,],
+               REML=F)  ## interesting. No effect of DBH, trees increment as they wish, but lower increment in edge
 
-### log-transformed growth~dbh*edge
-mod.andy.log <- lm(log(biom.rel.ann)~log(dbh.start)+seg.Edge, data=andy.bai[dbh.start>=5,]) #R2 0.31, dbh:edge not significant
-pred_andy.edge <- data.frame(growth.pred=exp(predict(mod.andy.log, newdata=data.frame(dbh.start=seq(from=andy.bai[dbh.start>=5,min(dbh.start, na.rm=T)], to=100, length.out=200),
-                                                                                      seg.Edge=rep("E", 200)))),
-                             dbh.start=seq(from=andy.bai[dbh.start>=5,min(dbh.start, na.rm=T)],
-                                           to=100, length.out=200))
-pred_andy.int <- data.frame(growth.pred=exp(predict(mod.andy.log, newdata=data.frame(dbh.start=seq(from=andy.bai[dbh.start>=5,min(dbh.start, na.rm=T)], to=100, length.out=200),
-                                                                                     seg.Edge=rep("I", 200)))),
-                            dbh.start=seq(from=andy.bai[dbh.start>=5, min(dbh.start, na.rm=T)],
-                                          to=100, length.out=200))
-andy.bai[dbh.start>=5, density:=get_density(andy.bai[dbh.start>=5, dbh.start], andy.bai[dbh.start>=5, biom.rel.ann])]
-andy.bai[is.na(density), density:=0.01]
+pred_andy.edge <- data.frame(diam.incr.ann=coef(summary(e.null))[1],
+                        dbh.start.incr=seq(andy.bai[,min(dbh.start.incr, na.rm=T)],
+                                    100, by=0.2))
+pred_andy.int <- data.frame(diam.incr.ann=coef(summary(e.null))[1]+coef(summary(e.null))[2],
+                             dbh.start.incr=seq(andy.bai[,min(dbh.start.incr, na.rm=T)],
+                                                100, by=0.2))
+
+
+# ### log-transformed growth~dbh*edge
+# mod.andy.log <- lm(log(biom.rel.ann)~log(dbh.start)+seg.Edge, data=andy.bai[dbh.start>=5,]) #R2 0.31, dbh:edge not significant
+# pred_andy.edge <- data.frame(growth.pred=exp(predict(mod.andy.log, newdata=data.frame(dbh.start=seq(from=andy.bai[dbh.start>=5,min(dbh.start, na.rm=T)], to=100, length.out=200),
+#                                                                                       seg.Edge=rep("E", 200)))),
+#                              dbh.start=seq(from=andy.bai[dbh.start>=5,min(dbh.start, na.rm=T)],
+#                                            to=100, length.out=200))
+# pred_andy.int <- data.frame(growth.pred=exp(predict(mod.andy.log, newdata=data.frame(dbh.start=seq(from=andy.bai[dbh.start>=5,min(dbh.start, na.rm=T)], to=100, length.out=200),
+#                                                                                      seg.Edge=rep("I", 200)))),
+#                             dbh.start=seq(from=andy.bai[dbh.start>=5, min(dbh.start, na.rm=T)],
+#                                           to=100, length.out=200))
+# andy.bai[dbh.start>=5, density:=get_density(andy.bai[dbh.start>=5, dbh.start], andy.bai[dbh.start>=5, biom.rel.ann])]
+# andy.bai[is.na(density), density:=0.01]
 
 ## split colors (seg.Edge), density via alpha
 andy.col <- plasma(6)[c(3,5)]
 names(andy.col) <- levels(andy.bai$seg.Edge)
 col.map <- scale_color_manual(name="Tree position", values=andy.col, labels=c("Edge <10m", "Interior"))
 shape.map <- scale_shape_manual(name="Tree position", values=c(16,17), labels=c("Edge <10m", "Interior"))
+
+### dbh increment 
+andy.mono.incr <- ggplot(andy.bai[dbh.start.incr>=5], aes(dbh.start.incr, dbh.incr.ann, colour=seg.Edge))+
+  geom_point(aes(shape=seg.Edge), alpha=alpha.master*1.9, size=pt.size)+
+  col.map+
+  shape.map+
+  scale_y_continuous(breaks=c(-1, 0, 1, 2), limits=ylim.all)+
+  scale_x_continuous(limits=xlim.all, breaks=c(0, 20, 40, 60, 80, 100))+
+  # geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(dbh.start, na.rm=T)], color="gray55", size=med.lines.width)+
+  # geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(biom.rel.ann, na.rm=T)], color="gray55", size=med.lines.width)+
+  # geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(dbh.start, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  # geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(biom.rel.ann, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  geom_line(data = pred_andy.edge, aes(x=dbh.start.incr, y=diam.incr.ann), color="darkmagenta", linetype=fit.type, size=fit.width)+
+  geom_line(data = pred_andy.int, aes(x=dbh.start.incr, y=diam.incr.ann), color="chocolate3", linetype=fit.type, size=fit.width)+
+  labs(x = "Stem DBH (cm)", y="Stem Growth (cm/yr)", title="Urban Forest '90-'16")+
+  theme.master+
+  theme(legend.position = c(0.8, 0.65),
+        legend.title = element_text(size=legend.title.size, face="bold"),
+        legend.background = element_rect(fill = "white"),
+        legend.key =  element_blank(),
+        legend.key.size = unit(0.6, "lines"),
+        legend.text = element_text(size=legend.title.size-1, face="plain"),
+        legend.justification = "center")+
+  guides(shape = guide_legend(override.aes = list(size=pt.size*1.7,
+                                                  alpha=0.8,
+                                                  color=c("darkmagenta",
+                                                          "chocolate3"))))
+
+
 
 # andy.mono <- ggplot(andy.bai[dbh.start>=5], aes(dbh.start, biom.rel.ann, colour=seg.Edge))+
 #   geom_point(aes(shape=seg.Edge), alpha=alpha.master*1.6, size=pt.size)+
@@ -772,33 +888,33 @@ shape.map <- scale_shape_manual(name="Tree position", values=c(16,17), labels=c(
 #                                                   color=c("darkmagenta",
 #                                                           "chocolate3"))))
 
-### log+a transformed
-andy.mono.log <- ggplot(andy.bai[dbh.start>=5], aes(dbh.start, biom.rel.ann, colour=seg.Edge))+
-  geom_point(aes(shape=seg.Edge), alpha=alpha.master*1.6, size=pt.size)+
-  col.map+
-  shape.map+
-  scale_y_continuous(trans="stemg", breaks=c(-0.1, 0, 0.2, 0.5, 1.0), limits=ylim.all)+
-  scale_x_continuous(trans="log", limits=xlim.all, breaks=c(5, 10, 30, 60, 100))+
-  # geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(dbh.start, na.rm=T)], color="gray55", size=med.lines.width)+
-  # geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(biom.rel.ann, na.rm=T)], color="gray55", size=med.lines.width)+
-  # geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(dbh.start, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  # geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(biom.rel.ann, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  geom_line(data = pred_andy.edge, aes(x=dbh.start, y=growth.pred), color="darkmagenta", linetype=fit.type, size=fit.width)+
-  geom_line(data = pred_andy.int, aes(x=dbh.start, y=growth.pred), color="chocolate3", linetype=fit.type, size=fit.width)+
-  labs(x = "Stem DBH (cm)", y="Stem Growth (kg/kg)", title="Urban Forest '90-'16")+
-  theme.master+
-  theme(legend.position = c(0.55, 0.65),
-        legend.title = element_text(size=legend.title.size, face="bold"),
-        legend.background = element_rect(fill = "white"),
-        legend.key =  element_blank(),
-        legend.key.size = unit(0.6, "lines"),
-        legend.text = element_text(size=legend.title.size-1, face="plain"),
-        legend.justification = "center")+
-  guides(shape = guide_legend(override.aes = list(size=pt.size*1.7,
-                                                  alpha=0.8,
-                                                  color=c("darkmagenta",
-                                                          "chocolate3"))))
-
+# ### log+a transformed
+# andy.mono.log <- ggplot(andy.bai[dbh.start>=5], aes(dbh.start, biom.rel.ann, colour=seg.Edge))+
+#   geom_point(aes(shape=seg.Edge), alpha=alpha.master*1.6, size=pt.size)+
+#   col.map+
+#   shape.map+
+#   scale_y_continuous(trans="stemg", breaks=c(-0.1, 0, 0.2, 0.5, 1.0), limits=ylim.all)+
+#   scale_x_continuous(trans="log", limits=xlim.all, breaks=c(5, 10, 30, 60, 100))+
+#   # geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(dbh.start, na.rm=T)], color="gray55", size=med.lines.width)+
+#   # geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(biom.rel.ann, na.rm=T)], color="gray55", size=med.lines.width)+
+#   # geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(dbh.start, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   # geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(biom.rel.ann, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   geom_line(data = pred_andy.edge, aes(x=dbh.start, y=growth.pred), color="darkmagenta", linetype=fit.type, size=fit.width)+
+#   geom_line(data = pred_andy.int, aes(x=dbh.start, y=growth.pred), color="chocolate3", linetype=fit.type, size=fit.width)+
+#   labs(x = "Stem DBH (cm)", y="Stem Growth (kg/kg)", title="Urban Forest '90-'16")+
+#   theme.master+
+#   theme(legend.position = c(0.55, 0.65),
+#         legend.title = element_text(size=legend.title.size, face="bold"),
+#         legend.background = element_rect(fill = "white"),
+#         legend.key =  element_blank(),
+#         legend.key.size = unit(0.6, "lines"),
+#         legend.text = element_text(size=legend.title.size-1, face="plain"),
+#         legend.justification = "center")+
+#   guides(shape = guide_legend(override.aes = list(size=pt.size*1.7,
+#                                                   alpha=0.8,
+#                                                   color=c("darkmagenta",
+#                                                           "chocolate3"))))
+# 
 
 # ## density via color shading
 # shape.map <- scale_shape_manual(name="Tree position", values=c(16,17), labels=c("Edge <10m", "Interior"))
@@ -830,28 +946,51 @@ andy.mono.log <- ggplot(andy.bai[dbh.start>=5], aes(dbh.start, biom.rel.ann, col
 
 ####
 ###  street trees
-b0 <- -2.48
-b1 <- 2.4835 ## these are eastern hardwood defaults
-biom.pred <- function(x){exp(b0+(b1*log(x)))}
-street <- read.csv("docs/ian/Boston_Street_Trees.csv") ## Street tree resurvey, biomass 2006/2014, species
-street <- as.data.table(street)
-street[, record.good:=0] ## ID records with good data quality
-street[is.finite(dbh.2014) & is.finite(dbh.2006) & dead.by.2014==0 & Health!="Poor", record.good:=1] #2603 records good
-street[record.good==1, biom.2014:=biom.pred(dbh.2014)]
-street[record.good==1, biom.2006:=biom.pred(dbh.2006)]
-street[record.good==1, growth.ann:=(biom.2014-biom.2006)/8]
-street[record.good==1, growth.ann.rel:=growth.ann/biom.2006]
-street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny trees
+# b0 <- -2.48
+# b1 <- 2.4835 ## these are eastern hardwood defaults
+# biom.pred <- function(x){exp(b0+(b1*log(x)))}
+# street <- read.csv("docs/ian/Boston_Street_Trees.csv") ## Street tree resurvey, biomass 2006/2014, species
+# street <- as.data.table(street)
+# street[, record.good:=0] ## ID records with good data quality
+# street[is.finite(dbh.2014) & is.finite(dbh.2006) & dead.by.2014==0 & Health!="Poor", record.good:=1] #2603 records good
+# street[record.good==1, biom.2014:=biom.pred(dbh.2014)]
+# street[record.good==1, biom.2006:=biom.pred(dbh.2006)]
+# street[record.good==1, growth.ann:=(biom.2014-biom.2006)/8]
+# street[record.good==1, growth.ann.rel:=growth.ann/biom.2006]
+# street[dbh.2006<5, record.good:=0] ## filter out the handfull of truly tiny trees
+street <- as.data.table(read.csv("processed/boston/street.trees.dbh.csv"))
 
-mod.street.nls <- nls(growth.ann.rel ~ exp(a + b * log(dbh.2006)), data=street[record.good==1,], start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
-mm <- summary(mod.street.nls) ## RSE is pretty high 0.33
+hm2.me3 <-  lmer(diam.rate~poly(dbh.2006, degree=2, raw=T)+
+                   (dbh.2006|genus.simp), REML=F, data=street[record.good==1,]) ## same results
 
-### note here that though log-transform of dbh.2006 is not specified, predict() is generating predictions consistent with log-tranforming prior to inserting
-pred_street <- data.frame(growth.pred=predict(mod.street.nls, newdata=data.frame(dbh.2006=seq(street[,min(dbh.2006, na.rm=T)],
-                                                                                              100, by=0.2))),
-                          dbh.2006=seq(street[,min(dbh.2006, na.rm=T)],
-                                       100, by=0.2))
-street[record.good==1, density:=get_density(street[record.good==1, dbh.2006], street[record.good==1, growth.ann.rel])]
+# mod.street.nls <- nls(growth.ann.rel ~ exp(a + b * log(dbh.2006)), data=street[record.good==1,], start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
+# mm <- summary(mod.street.nls) ## RSE is pretty high 0.33
+
+pred_street <- data.frame(diam.rate.pred=coef(summary(hm2.me3))[1]+
+                          seq(street[record.good==1,min(dbh.2006, na.rm=T)],100, by=0.2)*coef(summary(hm2.me3))[2]+
+                            (seq(street[record.good==1,min(dbh.2006, na.rm=T)],100, by=0.2)^2)*coef(summary(hm2.me3))[3],
+                        dbh.2006=seq(street[record.good==1,min(dbh.2006, na.rm=T)],
+                                    100, by=0.2))
+
+
+# ### note here that though log-transform of dbh.2006 is not specified, predict() is generating predictions consistent with log-tranforming prior to inserting
+# pred_street <- data.frame(growth.pred=predict(mod.street.nls, newdata=data.frame(dbh.2006=seq(street[,min(dbh.2006, na.rm=T)],
+#                                                                                               100, by=0.2))),
+#                           dbh.2006=seq(street[,min(dbh.2006, na.rm=T)],
+#                                        100, by=0.2))
+# street[record.good==1, density:=get_density(street[record.good==1, dbh.2006], street[record.good==1, growth.ann.rel])]
+
+
+# ## log x+a transform
+# street.mono.incr <- ggplot(street[record.good==1], aes(dbh.2006, diam.rate))+
+#   geom_point(alpha=alpha.master, color=plasma(6)[4], size=pt.size)+
+#   scale_y_continuous(breaks=c(-1,0,1,2), limits=ylim.all)+
+#   scale_x_continuous(limits=xlim.all, breaks=c(0,20,40,60,80,100))+
+#   # geom_vline(xintercept=street[record.good==1, median(dbh.2006, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   # geom_hline(yintercept=street[record.good==1, median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   geom_line(data = pred_street, aes(x=dbh.2006, y=diam.rate.pred), color="gray40", linetype=fit.type, size=fit.width)+
+#   labs(x = "Stem DBH (cm)", y="Stem Growth (cm/yr)", title="Street Trees '06-'14")+
+#   theme.master
 
 # ## single color, density via alpha
 # street.mono <- ggplot(street[record.good==1], aes(dbh.2006, growth.ann.rel))+
@@ -864,16 +1003,16 @@ street[record.good==1, density:=get_density(street[record.good==1, dbh.2006], st
 #   theme.master
 
 
-## log x+a transform
-street.mono.log <- ggplot(street[record.good==1], aes(dbh.2006, growth.ann.rel))+
-  geom_point(alpha=alpha.master, color=plasma(6)[4], size=pt.size)+
-  scale_y_continuous(trans="stemg", breaks=c(-0.1, 0, 0.2, 0.5, 1.0), limits=ylim.all)+
-  scale_x_continuous(trans="log", limits=xlim.all, breaks=c(5, 10, 30, 60, 100))+
-  # geom_vline(xintercept=street[record.good==1, median(dbh.2006, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  # geom_hline(yintercept=street[record.good==1, median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  geom_line(data = pred_street, aes(x=dbh.2006, y=growth.pred), color="gray40", linetype=fit.type, size=fit.width)+
-  labs(x = "Stem DBH (cm)", y="Stem Growth (kg/kg)", title="Street Trees '06-'14")+
-  theme.master
+# ## log x+a transform
+# street.mono.log <- ggplot(street[record.good==1], aes(dbh.2006, growth.ann.rel))+
+#   geom_point(alpha=alpha.master, color=plasma(6)[4], size=pt.size)+
+#   scale_y_continuous(trans="stemg", breaks=c(-0.1, 0, 0.2, 0.5, 1.0), limits=ylim.all)+
+#   scale_x_continuous(trans="log", limits=xlim.all, breaks=c(5, 10, 30, 60, 100))+
+#   # geom_vline(xintercept=street[record.good==1, median(dbh.2006, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   # geom_hline(yintercept=street[record.good==1, median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+#   geom_line(data = pred_street, aes(x=dbh.2006, y=growth.pred), color="gray40", linetype=fit.type, size=fit.width)+
+#   labs(x = "Stem DBH (cm)", y="Stem Growth (kg/kg)", title="Street Trees '06-'14")+
+#   theme.master
 
 ### test -- does log transforming either scale differently fuck something up with the way the fit line is shown?
 # plot(street[record.good==1, dbh.2006], street[record.good==1, growth.ann.rel])
@@ -908,8 +1047,8 @@ street.mono.log <- ggplot(street[record.good==1], aes(dbh.2006, growth.ann.rel))
 
 ### collate monocolored log-transformed plots
 library(gridExtra)
-png(width=8, height=3, units="in", res=600, bg="white", filename="images/Fig2A_stem-dbh-growth_mono_logxform.png")
-grid.arrange(grobs=list(fia.mono.log, andy.mono.log, street.mono.log),
+png(width=8, height=3, units="in", res=600, bg="white", filename="images/Fig2A_stem-dbh-incr_mono.png")
+grid.arrange(grobs=list(fia.mono.incr, andy.mono.incr, street.mono.incr),
              widths=c(1,1,1))
 dev.off()
 
