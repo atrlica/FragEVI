@@ -70,9 +70,11 @@ library(ggplot2)
 # results$frac.tot.area <- results$pix.less.than/area.tot
 # plot(results$dist, results$less.rel) ## cumulative distribution of canopy edge
 # write.csv(results, "processed/bos.can.cummdist.csv")
-
+#####
 
 # ### pie chart, relative canopy distance fraction
+#####
+
 # dist <- read.csv("processed/bos.can.cummdist.csv")
 # library(data.table)
 # dist <- as.data.table(dist)
@@ -159,7 +161,7 @@ library(ggplot2)
 # legend(x=60, y=0.4, bty = "n", legend=c("Boston", hoods), fill=c("black", cols))
 #####
 
-### CANOPY AREA STACKED BY DISTANCE+LULC
+### FIGURE 1: CANOPY AREA STACKED BY DISTANCE+LULC
 #####
 # ### canopy edge area cumulative, extract by LULC collapsed classes
 # library(data.table)
@@ -252,10 +254,8 @@ library(ggplot2)
 #   results$frac.tot.area <- results$pix.less.than/area.tot
 #   write.csv(results, paste("processed/bos.can.cummdist.", lu.classes[l], ".csv", sep=""))
 # }
-#####
 
-## FIGURE 1: CANOPY AREA BY EDGE DISTANCE+LULC
-#####
+###
 library(ggplot2)
 library(data.table)
 results <- read.csv("processed/bos.can.cummdist.csv")
@@ -585,6 +585,7 @@ mean(n) ## mean pixel ndvi
 library(MASS)
 library(ggplot2)
 library(viridis)
+library(lme4)
 get_density <- function(x, y, n = 100) { ## two dimensional kernel density estimation from MASS package
   dens <- MASS::kde2d(x = x, y = y, n = n) 
   ix <- findInterval(x, dens$x)
@@ -677,11 +678,12 @@ yyy <- lmer(diam.rate~DIAM_T0 +
 #                                     100, by=0.2))
 
 pred_live <- data.frame(diam.rate.pred=coef(summary(yyy))[1]+
-                          seq(live[,min(DIAM_T0, na.rm=T)],100, by=0.2)*coef(summary(yyy))[2],
-                        DIAM_T0=seq(live[,min(DIAM_T0, na.rm=T)],
-                                    100, by=0.2))
+                          seq(live[lag>0 & STATUS==1,min(DIAM_T0, na.rm=T)],
+                              live[lag>0 & STATUS==1,max(DIAM_T0, na.rm=T)], by=0.2)*coef(summary(yyy))[2],
+                        DIAM_T0=seq(live[lag>0 & STATUS==1,min(DIAM_T0, na.rm=T)],
+                                    live[lag>0 & STATUS==1,max(DIAM_T0, na.rm=T)], by=0.2))
 ## function for confidence intervals
-######
+#####
 ## x and y are data, y.pred & x.pred are predictions in pred_live, mod is model object
 y <- live[lag>0 & STATUS ==1, diam.rate]
 x <- live[lag>0 & STATUS ==1, DIAM_T0]
@@ -728,9 +730,6 @@ reg.conf.intervals <- function(x, y, mod, y.pred, x.pred) {
 
 conf.intervals <- reg.conf.intervals(cars$speed, cars$dist)
 #####
-
-# live$density <- get_density(live$DIAM_T0, live$growth.ann.rel)
-# live[is.na(density), density:=0]
 
 ## dbh increment
 fia.mono.incr <- ggplot(live, aes(DIAM_T0, diam.rate))+
@@ -795,24 +794,28 @@ fia.mono.incr <- ggplot(live, aes(DIAM_T0, diam.rate))+
 #   theme.master
 
 
-####
 ### Andy Trees
+#####
 # andy.bai <- as.data.table(read.csv("processed/andy.bai.dbh.pseudo.csv"))
 andy.bai <- as.data.table(read.csv("processed/andy.bai.ps.dbhincr.csv"))
 ### specify model (either for biomass growth rate or dimater growth rate)
-e.null <- lmer(dbh.incr.ann~seg.Edge + 
-                 (dbh.start.incr|Plot.ID) + 
-                 (dbh.start.incr|incr.ID) + 
-                 (dbh.start.incr|interval), 
-               data=andy.bai[dbh.start.incr>=5,],
-               REML=F)  ## interesting. No effect of DBH, trees increment as they wish, but lower increment in edge
 
-pred_andy.edge <- data.frame(diam.incr.ann=coef(summary(e.null))[1],
-                        dbh.start.incr=seq(andy.bai[,min(dbh.start.incr, na.rm=T)],
-                                    100, by=0.2))
-pred_andy.int <- data.frame(diam.incr.ann=coef(summary(e.null))[1]+coef(summary(e.null))[2],
-                             dbh.start.incr=seq(andy.bai[,min(dbh.start.incr, na.rm=T)],
-                                                100, by=0.2))
+g.full <- lmer(dbh.incr.ann~seg.Edge*dbh.start.incr + 
+            (dbh.start.incr|Plot.ID) + 
+            (dbh.start.incr|incr.ID), 
+          data=andy.bai[dbh.start.incr>=5,],
+          REML=F)  
+
+pred_andy.edge <- data.frame(diam.incr.ann=(coef(summary(g.full))[1]+
+                                              seq(andy.bai[seg.Edge=="E", min(dbh.start.incr, na.rm=T)],
+                                                  andy.bai[seg.Edge=="E", max(dbh.start.incr, na.rm=T)], by=0.2)*coef(summary(g.full))[3]),
+                        dbh.start.incr=seq(andy.bai[seg.Edge=="E", min(dbh.start.incr, na.rm=T)],
+                                           andy.bai[seg.Edge=="E", max(dbh.start.incr, na.rm=T)], by=0.2))
+pred_andy.int <- data.frame(diam.incr.ann=((coef(summary(g.full))[1]+coef(summary(g.full))[2])+
+                                             seq(andy.bai[seg.Edge=="I", min(dbh.start.incr, na.rm=T)],
+                                                 andy.bai[seg.Edge=="I", max(dbh.start.incr, na.rm=T)], by=0.2)*(coef(summary(g.full))[3]+coef(summary(g.full))[4])),
+                            dbh.start.incr=seq(andy.bai[seg.Edge=="I", min(dbh.start.incr, na.rm=T)],
+                                               andy.bai[seg.Edge=="I", max(dbh.start.incr, na.rm=T)], by=0.2))
 
 
 # ### log-transformed growth~dbh*edge
@@ -861,7 +864,19 @@ andy.mono.incr <- ggplot(andy.bai[dbh.start.incr>=5], aes(dbh.start.incr, dbh.in
                                                   color=c("darkmagenta",
                                                           "chocolate3"))))
 
-
+### test does this look a little ok?
+# par(mfrow=c(1,2))
+# plot(andy.bai[dbh.start.incr>5 & seg.Edge=="E", dbh.start.incr],
+#      andy.bai[dbh.start.incr>5 & seg.Edge=="E",dbh.incr.ann], col="pink", ylim=c(0, 1.2), xlim=c(0,55))
+# points(andy.bai[dbh.start.incr>5 & seg.Edge=="E", dbh.start.incr],
+#        coef(summary(g.full))[1]+
+#          (coef(summary(g.full))[3]*andy.bai[dbh.start.incr>5 & seg.Edge=="E", dbh.start.incr]), col="red")
+# plot(andy.bai[dbh.start.incr>5 & seg.Edge=="I", dbh.start.incr],
+#      andy.bai[dbh.start.incr>5 & seg.Edge=="I",dbh.incr.ann], col="lightblue", ylim=c(0, 1.2), xlim=c(0,55))
+# points(andy.bai[dbh.start.incr>5 & seg.Edge=="I", dbh.start.incr],
+#        (coef(summary(g.full))[1]+coef(summary(g.full))[2])+
+#          ((coef(summary(g.full))[3]+coef(summary(g.full))[4])*andy.bai[dbh.start.incr>5 & seg.Edge=="I", dbh.start.incr]), col="blue")
+# 
 
 # andy.mono <- ggplot(andy.bai[dbh.start>=5], aes(dbh.start, biom.rel.ann, colour=seg.Edge))+
 #   geom_point(aes(shape=seg.Edge), alpha=alpha.master*1.6, size=pt.size)+
@@ -943,9 +958,10 @@ andy.mono.incr <- ggplot(andy.bai[dbh.start.incr>=5], aes(dbh.start.incr, dbh.in
 #                                                   alpha=0.8,
 #                                                   color=c("darkmagenta",
 #                                                           "chocolate3"))))
+#####
 
-####
-###  street trees
+###  Street trees
+#####
 # b0 <- -2.48
 # b1 <- 2.4835 ## these are eastern hardwood defaults
 # biom.pred <- function(x){exp(b0+(b1*log(x)))}
@@ -967,10 +983,12 @@ hm2.me3 <-  lmer(diam.rate~poly(dbh.2006, degree=2, raw=T)+
 # mm <- summary(mod.street.nls) ## RSE is pretty high 0.33
 
 pred_street <- data.frame(diam.rate.pred=coef(summary(hm2.me3))[1]+
-                          seq(street[record.good==1,min(dbh.2006, na.rm=T)],100, by=0.2)*coef(summary(hm2.me3))[2]+
-                            (seq(street[record.good==1,min(dbh.2006, na.rm=T)],100, by=0.2)^2)*coef(summary(hm2.me3))[3],
+                          seq(street[record.good==1,min(dbh.2006, na.rm=T)],
+                              street[record.good==1,max(dbh.2006, na.rm=T)], by=0.2)*coef(summary(hm2.me3))[2]+
+                            (seq(street[record.good==1,min(dbh.2006, na.rm=T)],
+                                 street[record.good==1,max(dbh.2006, na.rm=T)], by=0.2)^2)*coef(summary(hm2.me3))[3],
                         dbh.2006=seq(street[record.good==1,min(dbh.2006, na.rm=T)],
-                                    100, by=0.2))
+                                     street[record.good==1,max(dbh.2006, na.rm=T)], by=0.2))
 
 
 # ### note here that though log-transform of dbh.2006 is not specified, predict() is generating predictions consistent with log-tranforming prior to inserting
@@ -981,16 +999,16 @@ pred_street <- data.frame(diam.rate.pred=coef(summary(hm2.me3))[1]+
 # street[record.good==1, density:=get_density(street[record.good==1, dbh.2006], street[record.good==1, growth.ann.rel])]
 
 
-# ## log x+a transform
-# street.mono.incr <- ggplot(street[record.good==1], aes(dbh.2006, diam.rate))+
-#   geom_point(alpha=alpha.master, color=plasma(6)[4], size=pt.size)+
-#   scale_y_continuous(breaks=c(-1,0,1,2), limits=ylim.all)+
-#   scale_x_continuous(limits=xlim.all, breaks=c(0,20,40,60,80,100))+
-#   # geom_vline(xintercept=street[record.good==1, median(dbh.2006, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-#   # geom_hline(yintercept=street[record.good==1, median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-#   geom_line(data = pred_street, aes(x=dbh.2006, y=diam.rate.pred), color="gray40", linetype=fit.type, size=fit.width)+
-#   labs(x = "Stem DBH (cm)", y="Stem Growth (cm/yr)", title="Street Trees '06-'14")+
-#   theme.master
+# dbh increment
+street.mono.incr <- ggplot(street[record.good==1], aes(dbh.2006, diam.rate))+
+  geom_point(alpha=alpha.master, color=plasma(6)[4], size=pt.size)+
+  scale_y_continuous(breaks=c(-1,0,1,2), limits=ylim.all)+
+  scale_x_continuous(limits=xlim.all, breaks=c(0,20,40,60,80,100))+
+  # geom_vline(xintercept=street[record.good==1, median(dbh.2006, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  # geom_hline(yintercept=street[record.good==1, median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
+  geom_line(data = pred_street, aes(x=dbh.2006, y=diam.rate.pred), color="gray40", linetype=fit.type, size=fit.width)+
+  labs(x = "Stem DBH (cm)", y="Stem Growth (cm/yr)", title="Street Trees '06-'14")+
+  theme.master
 
 # ## single color, density via alpha
 # street.mono <- ggplot(street[record.good==1], aes(dbh.2006, growth.ann.rel))+
@@ -1037,8 +1055,10 @@ pred_street <- data.frame(diam.rate.pred=coef(summary(hm2.me3))[1]+
 #   geom_line(data = pred_street, aes(x=dbh.2006, y=growth.pred), color="black", linetype=fit.type, size=fit.width)+
 #   labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Street trees '06-'14")+
 #   theme.master
+#####
 
-# ### collate monocolored plots
+### collate monocolored plots
+#####
 # library(gridExtra)
 # png(width=8, height=3, units="in", res=600, bg="white", filename="images/Fig2A_stem-dbh-growth_mono.png")
 # grid.arrange(grobs=list(fia.mono, andy.mono, street.mono),
@@ -1057,6 +1077,7 @@ dev.off()
 # grid.arrange(grobs=list(fia.dens, andy.dens, street.dens),
 #              widths=c(1,1,1))
 # dev.off()
+#####
 #####
 
 ## FIGURE 3: NPP VS BIOMASS DENSITY
@@ -1332,6 +1353,7 @@ dev.off()
 #####
 
 ## FIGURE 4: SPATIAL DEFINITIONS OF URBAN FOREST
+#####
 ## note this is just to extract summary stats on the underlying area of interest. figure itself is mainly built in Arcmap
 library(raster)
 library(rgdal)
@@ -1358,11 +1380,11 @@ targ.biom <- unlist(extract(biom, spTransform(targ, crs(biom))))
 (sum(targ.biom)/2000)/(length(targ.can)/1E4)
 (sum(targ.biom)/2000)/(sum(targ.can)/1E4)
 (sum(targ.biom)/2000)/(sum(targ.isa==0)/1E4)
+#####
 
 ### SUPPLEMENTAL FIGURES
 ## FIGURE S2: Biomass Density by LULC, different area calculation methods
 #####
-
 library(data.table)
 npp.dat <- as.data.table(read.csv("processed/npp.estimates.V4.csv"))
 npp.dat[,biom.MgC.ha.can:=((bos.biom30m/2000)/(aoi*can.frac))*1E4] ### Forest basis
@@ -1489,6 +1511,7 @@ png(width=8, height=3, units="in", res=600, bg="white", filename="images/FigS2_b
 grid.arrange(grobs=list(ground.plot, can.plot, perv.plot),
              widths=c(1,1,1))
 dev.off()
+#####
 
 ## FIGURE S1: PLOT LEVEL GROWTH RATES
 #####
@@ -1629,4 +1652,51 @@ png(width=6, height=3, units="in", res=600, bg="white", filename="images/FigS1_p
 grid.arrange(grobs=list(live.plot.mono.log, andy.plot.mono.log),
              widths=c(1,1))
 dev.off()
+#####
+
+## BOXPLOTS OF PER-PIXEL MEDIAN C UPTAKE
+#####
+hyb <- as.data.table(read.csv("processed/results/hybrid.results.V5.csv"))
+fia <- as.data.table(as.data.frame(raster("processed/results/FIA.empirV5.npp.median.tif")))
+names(hyb)[108] <- "hyb.pix.median"
+names(fia) <- "fia.pix.median"
+hyb <- cbind(hyb, fia)
+bdat <- melt(hyb, measure.vars = c("hyb.pix.median", "fia.pix.median"), id.vars = c("bos.lulc30m.lumped", "bos.aoi30m"))
+bdat$lulc <- as.factor(bdat$bos.lulc30m.lumped)
+bdat.fin <- bdat[lulc!=6 & !(is.na(lulc)) & bos.aoi30m>800,]
+bdat.fin[,MgC.ha.yr:=((value/2000)/bos.aoi30m)*1E4]
+facet.names <- c('hyb.pix.median'="Urban Hybrid", 'fia.pix.median'="Rural Forest")
+library(reshape2)
+library(viridis)
+lulc.pal <- viridis(6)
+lulc.pal <- c(lulc.pal[5],lulc.pal[2],lulc.pal[3],lulc.pal[4],lulc.pal[6],lulc.pal[1])
+bplots.pixmed <- ggplot(bdat.fin,aes(x=lulc, y=MgC.ha.yr, fill=lulc))+
+  geom_boxplot(outlier.shape=NA, coef=0)+
+  facet_wrap(~variable, labeller=as_labeller(facet.names))+
+  scale_fill_manual(values = lulc.pal,
+                    name="Land Cover",
+                    breaks=c(1,2,3,4,5),
+                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg."))+
+  ylab("Pixel median C uptake (MgC/ha/yr)")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        legend.position = c(0.8, 0.7),
+        axis.text=element_text(size=8),
+        axis.title=element_text(size=10, face="bold"),
+        legend.text=element_text(size=6.5),
+        legend.title=element_text(size=8, face="bold"),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        strip.text.x = element_text(size = 10, face="bold"),
+        legend.key = element_rect(fill = "white"))
+
+png(width=4, height=3, units="in", res=600, bg="white", filename="images/Fig3B_pixelNPP.png")
+bplots.pixmed
+dev.off()
+
+## fix color fill, kill outliers, do theme
 #####

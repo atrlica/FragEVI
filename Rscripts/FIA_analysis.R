@@ -916,7 +916,7 @@ sav.forest <- biom.dat[,1:9, with=F]
 sav.perv <- biom.dat[,1:9, with=F]
 # sav.floor <- numeric()
 # sav.floor.implemented <- numeric()
-max.fact <- plot.sum[,max(biom.delt.ann.rel.HW)]
+max.fact <- live.plot[,max(biom.delt.ann.rel.HW)]
 for(i in 1:100){
   b0.sel <- rnorm(1, coef(y)[1,1], coef(y)[1,2])
   b1.sel <- rnorm(1, coef(y)[2,1], coef(y)[2,2])
@@ -996,6 +996,8 @@ write.csv(sav.perv, "npp.FIA.empirV5.perv.csv")
 # hist(dump[aoi>800, forest.gfact])
 # hist(dump[aoi>800, perv.gfact])
 
+
+#####
 # ### static, using model coefficients
 # biom.dat[,ground.gfact:=exp(y$coefficients[1]+y$coefficients[2]*log(live.MgC.ha.ground))]
 # biom.dat[,forest.gfact:=exp(y$coefficients[1]+y$coefficients[2]*log(live.MgC.ha.forest))]

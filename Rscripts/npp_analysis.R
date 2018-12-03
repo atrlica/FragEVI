@@ -199,6 +199,8 @@ write.csv(fat, "processed/boston/bos.lulc.1mcover.summary.csv")
 
 
 ##### Bringing together NPP estimates
+## old processing
+##### 
 ### NOTE: Growth models are specified as growth.factor~MgC/ha; 
 ### biomass per cell and npp estimates per cell are in kg-biomass;
 ### Statistics and analysis on NPP is done as MgC NPP vs MgC/ha
@@ -396,13 +398,12 @@ write.csv(fat, "processed/boston/bos.lulc.1mcover.summary.csv")
 
 ## fia.FOREST vs. andy: andy is generally a tiny bit higher except for leafier parts where it is a lot higher; the only parts with FIA higher are non-forest but still moderate biomass (where it looks like a young forest)
 ## fia.FOREST vs. street: basically same as andy forest, higher all over esp. in forest except for a few little spots with moderate biomass
+#####
 
-
-####
 
 ### PREPARATION OF A FINAL ANDY+STREET HYBRID MAP
 ### static map
-#######
+#####
 ### let us then combine the andy and street maps into a single "let's get real" map: Andy forest in dense parts, street trees in scattered parts
 ## first where are the difficult sim pixels re. LULC
 npp.dat[st.sim.incomp==1, length(pix.ID), by=lulc]
@@ -512,22 +513,37 @@ hist(npp.dat[aoi>800 & lulc==3, ((bos.biom30m/2000)/(aoi*can.frac))*1E4]) ## ske
 # write.csv(npp.dat, "processed/npp.estimates.V2.csv") ## with pseudorep based andy trees
 # write.csv(npp.dat, "processed/npp.estimates.V3.csv") ## with pseudorep/model-capped based andy trees
 write.csv(npp.dat, "processed/npp.estimates.V4.csv") ## mixed model (slope+intercept) on pseudoreps+
-#######
+#####
 
-#### HYBRID MAP WITH ERROR DISTRIBUTION
-#######
+## HYBRID MAP WITH ERROR DISTRIBUTION
+#####
 street.res <- as.data.table(read.csv("processed/streettrees.npp.simulator.v5.results.random.csv"))
-andy.res <- as.data.table(read.csv("processed/andy.forest.results.V3.csv"))
+
+### figure out if there are any wayward pixels that didn't simulate properly and ID so we can fill with the andy results
+scan <- street.res[aoi>800 & bos.biom30m>0 & bos.lulc30m.lumped!=1,]
+orphans <- integer()
+for(a in 1:dim(scan)[1]){
+  tmp <- sum(is.na(scan[a, 8:107]))
+  if(tmp>40){orphans <- c(orphans, scan[a, pix.ID])}
+  print(paste("scanned pix", scan[a, pix.ID]))
+}
+
+### pull in andy forest results and pick out the pixel vectors we want
+andy.res <- as.data.table(read.csv("processed/andy.forest.results.V4.csv"))
 pick <- andy.res[lulc==1 | biom>20000,] ## find the andy pixels we want
-pick[lulc!=1, range(biom, na.rm=T)] ## we good
 pick <- pick[,c(9,16:115)] ## pix.ID and then results
-names(pick)[2:101] <- paste0("npp.iter.", 1:100, ".hybrid") ### 14k pix
+# pick[lulc!=1, range(biom, na.rm=T)] ## we good
+pick <- rbind(pick, andy.res[pix.ID%in%orphans, c(9,16:115)]) ## add in the orphaned pixels
+names(pick)[2:101] <- paste0("npp.iter.", 1:100, ".hybrid"); dim(pick) ### 14589 pix
+
+## finalize grooming the street pixels 
 street.pix <- copy(street.res)
 street.pix <- street.pix[bos.lulc30m.lumped!=1,]
 street.pix <- street.pix[bos.biom30m<=20000,]
 street.pix <- street.pix[,c(2,8:107)]
-names(street.pix)[2:101] <- paste0("npp.iter.", 1:100, ".hybrid") ### 136700 pix
-hybrid <- rbind(pick, street.pix) ### now need to merge these back into the complete map
+names(street.pix)[2:101] <- paste0("npp.iter.", 1:100, ".hybrid"); dim(street.pix) ### 122607 pix
+street.pix <- street.pix[!(pix.ID%in%orphans),]; dim(street.pix) ### 122111 pix
+hybrid <- rbind(pick, street.pix) ### 136700 pix; now need to merge these back into the complete map
 
 aoi <- raster("processed/boston/bos.aoi30m.tif")
 biom <- raster("processed/boston/bos.biom30m.tif")
@@ -542,14 +558,36 @@ biom.dat <- as.data.table(cbind(as.data.frame(aoi),
                                 as.data.frame(lulc)))
 biom.dat[, pix.ID:=seq(1:dim(biom.dat)[1])]
 biom.dat <- merge(biom.dat, hybrid, by="pix.ID", all.x=T) # here's our map
-write.csv(biom.dat, "processed/hybrid.results.V5.csv")
+biom.dat <- biom.dat[order(pix.ID),]
+write.csv(biom.dat, "processed/results/hybrid.results.V6.csv")
 
-
-
-### analysis of error distributed results
-## NPP totals by LULC
+### write a tiff of the median values
+hyb <- as.data.table(read.csv("processed/hybrid.results.V6.csv"))
+hyb <- hyb[order(pix.ID),]
+rr <- aoi
+med.na <- function(x){median(x, na.rm=T)}
+vals <- apply(hyb[,8:107], MARGIN=1, FUN=med.na)
+biom.dat[,pix.median:=vals]
+rr <- setValues(rr, vals)
+writeRaster(rr, filename="processed/results/hybrid.V5.median.tiff", format="GTiff", overwrite=T)
 #####
-### FIA results, error distributed
+
+## analysis of error distributed results
+### Results for FIA, error distributed
+#####
+aoi <- raster("processed/boston/bos.aoi30m.tif")
+biom <- raster("processed/boston/bos.biom30m.tif")
+biom <- crop(biom, aoi)
+can <- raster("processed/boston/bos.can30m.tif")
+isa <- raster("processed/boston/bos.isa30m.tif")
+lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
+biom.dat <- as.data.table(cbind(as.data.frame(aoi), 
+                                as.data.frame(biom), 
+                                as.data.frame(can), 
+                                as.data.frame(isa),
+                                as.data.frame(lulc)))
+biom.dat[, pix.ID:=seq(1:dim(biom.dat)[1])]
+
 fia.ground.rand <- as.data.table(read.csv("npp.FIA.empirV5.ground.csv"))
 fia.forest.rand <- as.data.table(read.csv("npp.FIA.empirV5.forest.csv"))
 fia.perv.rand <- as.data.table(read.csv("npp.FIA.empirV5.perv.csv"))
@@ -590,6 +628,15 @@ write.csv(fia.ground.lulc, "processed/fia.empirV5.lulc.ground.results.csv")
 write.csv(fia.forest.lulc, "processed/fia.empirV5.lulc.forest.results.csv")
 write.csv(fia.perv.lulc, "processed/fia.empirV5.lulc.perv.results.csv")
 
+### write a tiff of the median values
+fia.forest.rand <- as.data.table(read.csv("npp.FIA.empirV5.forest.csv"))
+rr <- raster(aoi)
+med.na <- function(x){median(x, na.rm=T)}
+vals <- apply(fia.forest.rand[,11:110], MARGIN=1, FUN=med.na)
+biom.dat[,pix.median:=vals]
+rr <- setValues(rr, vals)
+writeRaster(rr, filename="processed/results/FIA.empirV5.npp.median.tif", format="GTiff", overwrite=T)
+
 ### summary stats
 fia.ground.lulc <- as.data.table(read.csv("processed/fia.empirV5.lulc.ground.results.csv"))
 fia.forest.lulc <-  as.data.table(read.csv("processed/fia.empirV5.lulc.forest.results.csv"))
@@ -623,9 +670,10 @@ for(i in 1:6){
 }
 results.fia.forest <- c(results.fia.forest, paste0(tot[2], " (", tot[1], "-", tot[3], ")"))
 t <- cbind(t, results.fia.forest)
+#####
 
-
-### ANDY FOREST, error distributed
+### Results for ANDY FOREST, error distributed
+#####
 andy <- as.data.table(read.csv("processed/andy.forest.results.V3.csv"))
 # andy <- as.data.table(read.csv("processed/andy.forest.results.V2.csv")) ## this is the 7000 MgC version
 # andy.retest <- as.data.table(read.csv("processed/andy.forest.results.V2-retest.csv")) ## this is the 7000 MgC version
@@ -665,10 +713,11 @@ for(i in 1:6){
 }
 t <- cbind(t, 
            c(results.andy, paste0(tot[2], " (", tot[1], "-", tot[3], ")")))
+#####
 
 
-
-### HYBRID URBAN, error distributed
+### Results for HYBRID URBAN, error distributed
+#####
 hyb <- as.data.table(read.csv("processed/hybrid.results.V5.csv")) ## this is the error distributed model (V3) using the urban-specific allometries (V4), with biomass simulation run V5 with urban-specific growth rates
 sum.na <- function(x){sum(x, na.rm=T)}
 med.na <- function(x){median(x, na.rm=T)}
