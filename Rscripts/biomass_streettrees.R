@@ -440,6 +440,7 @@ cage.wts <- list() ## the sampling weight used in each successful simulation (ve
 cage.biom.sim <- list() ## the aggregate biomass estimated in each successful simulation (vector of 100 per cell)
 attempts.track <- rep(999999, dim(runme.x)[1]) ## the total number of simulations made (success+fail) for each cell
 proc.track <- rep(999999, dim(runme.x)[1]) ## the exit status of each cell (1=success, 0 = fail)
+cage.spp <- list() ## keep track of species of each selected tree
 
 ## for dynamic weighting of sampling of dbh records
 incr=300 ## incrememnt to change weighting, how many failures before reaching  max weighting shift
@@ -452,8 +453,9 @@ for(t in 1:dim(runme.x)[1]){
   num.trees <- integer()
   biom.sim.track <- numeric()
   wts.track <- integer()
-  cage.genus[[t]] <- list()
+  cage.genus[[t]] <- list() ### if you can't get a succseful sim, the list entry for that pixel is empty
   cage.dbh[[t]] <- list()
+  cage.spp[[t]] <- list()
   
   x <- 0 ## count successful simulations
   q <- 0 ## count attempts since last successful sample
@@ -476,7 +478,7 @@ for(t in 1:dim(runme.x)[1]){
   tol.window <- c(max(c((runme.x[t, bos.biom30m]-tol), (0.9*runme.x[t, bos.biom30m]))), 
                   min(c((runme.x[t, bos.biom30m]+tol), (1.1*runme.x[t, bos.biom30m]))))
   ### or take a "groomed" record and sample it with adjusting weights if the algorithm fails on density
-  grasp <- clean[biom.2006.urb<(tol.window[2]), .(dbh.2006, biom.2006.urb, ba, rank, genus)] ## exclude sampling in this simulation any single trees too big to fit cell biomass
+  grasp <- clean[biom.2006.urb<(tol.window[2]), .(dbh.2006, biom.2006.urb, ba, rank, genus, Species)] ## exclude sampling in this simulation any single trees too big to fit cell biomass
   
   ### sample street trees and try to fill the cells
   while(x<100 & q<1000){ ## select 100 workable samples, or quit after q attempts with no success
@@ -509,6 +511,7 @@ for(t in 1:dim(runme.x)[1]){
       biom.sim.track <- c(biom.sim.track, w) ## simulated biomass in this sample
       cage.dbh[[t]][[x]] <- samp[1:d, dbh.2006] ## which dbhs did you select
       cage.genus[[t]][[x]] <- samp[1:d, genus] # running list of which genera you select
+      cage.spp[[t]][[x]] <- samp[1:d, Species]
       wts.track <- c(wts.track, g) ## weights used to get this sample
       if(q>300){print(paste("finally got sample", x, "after", q, "tries")); jeez <- 1} ## to give status reports for difficult/long-process samples
       q=0 ## reset counter if you've found some solution
@@ -519,7 +522,12 @@ for(t in 1:dim(runme.x)[1]){
     if(q>600 & q%%100==0){print(paste("attempt clock out in", (1000-q)/100))}
     z=z+1 ## record total number of sample iterations
   }
-  if(x==0){ann.npp <- NA; num.trees <- NA; biom.sim.track <- NA; wts.track <- NA}
+  if(x==0){
+    ann.npp <- NA 
+    num.trees <- NA
+    biom.sim.track <- NA
+    wts.track <- NA
+    }
   ## store results, record exit status
   cage.ann.npp[[t]] <- ann.npp
   cage.num.trees[[t]] <- num.trees
