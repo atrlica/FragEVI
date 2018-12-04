@@ -482,10 +482,10 @@ b2.rand <- rnorm(100, mean=coef(summary(g.full))[3,1], sd=coef(summary(g.full))[
 b3.rand <- rnorm(100, mean=coef(summary(g.full))[4,1], sd=coef(summary(g.full))[4,2]) ## dbh slope, Interior
 
 ### constrain the predictions of dbh increment to the observed increment range
-dbh.incr.min.edge <- andy.bai[seg.Edge=="E" & dbh.start.incr>5, min(dbh.incr.ann, na.rm=T)]
-dbh.incr.max.edge <- andy.bai[seg.Edge=="E" & dbh.start.incr>5, max(dbh.incr.ann, na.rm=T)]
-dbh.incr.min.int <- andy.bai[seg.Edge=="I" & dbh.start.incr>5, min(dbh.incr.ann, na.rm=T)]
-dbh.incr.max.int <- andy.bai[seg.Edge=="I" & dbh.start.incr>5, max(dbh.incr.ann, na.rm=T)]
+dbh.incr.min.edge <- ps.contain[seg.Edge=="E" & dbh.start.incr>5, min(dbh.incr.ann, na.rm=T)]
+dbh.incr.max.edge <- ps.contain[seg.Edge=="E" & dbh.start.incr>5, max(dbh.incr.ann, na.rm=T)]
+dbh.incr.min.int <- ps.contain[seg.Edge=="I" & dbh.start.incr>5, min(dbh.incr.ann, na.rm=T)]
+dbh.incr.max.int <- ps.contain[seg.Edge=="I" & dbh.start.incr>5, max(dbh.incr.ann, na.rm=T)]
 
 ## hunting for why the recent runs of the andy forests are so different from the ones I got prior to CO2USA
 # b0.rand <- rnorm(100, mean=coef(summary(f.null))[1,1], sd=coef(summary(f.null))[1,2])

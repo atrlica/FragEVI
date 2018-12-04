@@ -581,6 +581,7 @@ mean(n) ## mean pixel ndvi
 #####
 
 ## FIGURE 2: STEM LEVEL BIOMASS GROWTH (FIA, ANDY, STREET)
+### general plot parameters
 #####
 library(MASS)
 library(ggplot2)
@@ -638,9 +639,9 @@ fit.type <- "4121"
 legend.title.size=9
 legend.text.size=8
 alpha.master <- 0.2
-
-####
+#####
 ### FIA rural trees
+#####
 live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv"))
 # spec <- read.csv("data/FIA/REF_SPECIES.csv")
 # live <- merge(x=live, y=spec[,c("SPCD", "GENUS", "SPECIES")], by.x="SPECIES_CD", by.y="SPCD", all.x=T, all.y=F)
@@ -683,6 +684,7 @@ pred_live <- data.frame(diam.rate.pred=coef(summary(yyy))[1]+
                         DIAM_T0=seq(live[lag>0 & STATUS==1,min(DIAM_T0, na.rm=T)],
                                     live[lag>0 & STATUS==1,max(DIAM_T0, na.rm=T)], by=0.2))
 ## function for confidence intervals
+
 #####
 ## x and y are data, y.pred & x.pred are predictions in pred_live, mod is model object
 y <- live[lag>0 & STATUS ==1, diam.rate]
@@ -795,6 +797,7 @@ fia.mono.incr <- ggplot(live, aes(DIAM_T0, diam.rate))+
 
 
 ### Andy Trees
+### Andy 
 #####
 # andy.bai <- as.data.table(read.csv("processed/andy.bai.dbh.pseudo.csv"))
 andy.bai <- as.data.table(read.csv("processed/andy.bai.ps.dbhincr.csv"))
@@ -959,7 +962,6 @@ andy.mono.incr <- ggplot(andy.bai[dbh.start.incr>=5], aes(dbh.start.incr, dbh.in
 #                                                   color=c("darkmagenta",
 #                                                           "chocolate3"))))
 #####
-
 ###  Street trees
 #####
 # b0 <- -2.48
@@ -1056,7 +1058,6 @@ street.mono.incr <- ggplot(street[record.good==1], aes(dbh.2006, diam.rate))+
 #   labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Street trees '06-'14")+
 #   theme.master
 #####
-
 ### collate monocolored plots
 #####
 # library(gridExtra)
@@ -1656,7 +1657,7 @@ dev.off()
 
 ## BOXPLOTS OF PER-PIXEL MEDIAN C UPTAKE
 #####
-hyb <- as.data.table(read.csv("processed/results/hybrid.results.V5.csv"))
+hyb <- as.data.table(read.csv("processed/results/hybrid.results.V6.csv"))
 fia <- as.data.table(as.data.frame(raster("processed/results/FIA.empirV5.npp.median.tif")))
 names(hyb)[108] <- "hyb.pix.median"
 names(fia) <- "fia.pix.median"
@@ -1668,6 +1669,7 @@ bdat.fin[,MgC.ha.yr:=((value/2000)/bos.aoi30m)*1E4]
 facet.names <- c('hyb.pix.median'="Urban Hybrid", 'fia.pix.median'="Rural Forest")
 library(reshape2)
 library(viridis)
+library(ggplot2)
 lulc.pal <- viridis(6)
 lulc.pal <- c(lulc.pal[5],lulc.pal[2],lulc.pal[3],lulc.pal[4],lulc.pal[6],lulc.pal[1])
 bplots.pixmed <- ggplot(bdat.fin,aes(x=lulc, y=MgC.ha.yr, fill=lulc))+
@@ -1678,6 +1680,7 @@ bplots.pixmed <- ggplot(bdat.fin,aes(x=lulc, y=MgC.ha.yr, fill=lulc))+
                     breaks=c(1,2,3,4,5),
                     labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg."))+
   ylab("Pixel median C uptake (MgC/ha/yr)")+
+  ylim(c(0,2.6))+
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -1698,5 +1701,4 @@ png(width=4, height=3, units="in", res=600, bg="white", filename="images/Fig3B_p
 bplots.pixmed
 dev.off()
 
-## fix color fill, kill outliers, do theme
 #####

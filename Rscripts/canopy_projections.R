@@ -81,16 +81,14 @@ b0.rand <- b0.hard[1]
 b1.rand <- b1.hard[1]
 b2.rand <- b2.hard[1]
 
+### expand scenario ancillary data
 ## que up the identified street tree planting polygons, filter, and figure out how much land we are dealing with
-
-# ### now need to find out where these places are
-# box@data <- merge(box@data, box.l.dat, by="OBJECTID")
-# head(box@data)
-# unique(box@data$num.plant)
-# # biom <- raster("processed/boston/bos.biom30m.tif")
-# # box.r <- rasterize(box, biom, field="num.plant", fun=sum)
-# # writeRaster(box.r, "processed/boston/bos.streetplanters.tif", format="GTiff", overwrite=T)
-# ## so we can randomly pick places and slowly fill them in in the "expand" scenario
+# ### still need to figure how to locate planting areas in space viz the biomass grid
+box <- as.data.table(read.csv("processed/boston/plant10m_MBG.csv")); dim(box) ## 78618
+summary(box$Shape_Area); hist(box$Shape_Area)
+box <- box[Shape_Area<1000,]; dim(box) ##78034 ## eliminate a fair chunk of the weird giant boxes
+box[,num.trees:=((MBG_Width-1)%/%8)+1] ## this gives us 2 trees per 8m planter length with a little buffer at either end
+box[,sum(num.trees)] ## 79k trees can be planted in this population of boxes
 
 ## load up ancillary map data
 library(raster)
@@ -113,7 +111,7 @@ nonfor <- biom.dat[bos.aoi30m>800 & bos.lulc30m.lumped!=1 & bos.biom30m<20000, p
 ######
 ### set scenario options 
 # scenario <- c("BAU", "highmort", "lowreplant", "oldies", "lowmort", "slowreplant", "expand")
-scenario <- c("BAU", "oldies")
+scenario <- c("BAU", "oldies", "expand")
 
 ## record specific parameter sets
 resim.vers <- 3 ## what are we labeling this round of resims?
@@ -136,9 +134,8 @@ lowreplant.factor <- 0.5 ## what fraction of morts are replanted in "lowreplant"
 oldies.mortfactor <- 0.5 ## how much to reduce mortalities in large trees
 oldies.sizecutoff <- 40 ## how to define "big" trees
 slowreplant.delay <- c(0,2) ## 1 to 3 year delay between death and regrowth starting
-# expand.timeline <- 10 ### how many years to implement the expand scenario
-# expand.rate.go <- (sum(box.l.dat$num.plant, na.rm=T)/expand.timeline)/length(nonfor) ## this is the per non-forest pixel annual rate of planting needed to fill out the city
-expand.rate <- 0
+expand.timeline <- 10 ### how many years to implement the expand scenario
+expand.rate.go <- (box[,sum(num.trees)]/expand.timeline)/length(nonfor) ## this is the per non-forest pixel annual rate of planting needed to fill out the city (assuming that only a small number of the replant boxes fall in forest pixels)
 
 # record run parameters to text file
 # params.list <- list(c(scenario, resim.vers, vers,
@@ -150,12 +147,14 @@ cat(c("Resimulation version: ", resim.vers), "\n")
 cat(c("Simulator results version: ", vers), "\n")
 cat(c("scenarios = ", scenario), "\n")
 cat(c("NPP selection quantiles = ", npp.quant.range), "\n")
+cat(c("default replant delay = ", delay.factor), "\n")
 cat(c("highmort mortality factor = ", highmort.mortfactor), "\n")
 cat(c("lowmort mortality factor = ", lowmort.mortfactor), "\n")
 cat(c("oldies mortality factor = ", oldies.mortfactor), "\n")
 cat(c("oldies size cutoff = ", oldies.sizecutoff), "\n")
 cat(c("lowreplant replanting rate = ", lowreplant.factor), "\n")
 cat(c("slowreplant delay time (yrs) = ", slowreplant.delay), "\n")
+cat(c("expansion per-pixel prob of tree increase/yr = ", expand.rate.go), "\n")
 sink()
 
 ## loops for simulating growth+mortality in pixel dbh samples
@@ -292,14 +291,9 @@ for(s in 1:length(scenario)){
                               delay.factor[2]),
                           size = length(tree.samp),
                           replace=T) ## determine initial replanting delays
-          # delay <- rep(0, length(tree.samp))
 
-          ### record biomass, canopy, and NPP at start of simulation
-          tmp.dbh0 <- tree.samp ## exclude dead trees from dbh/biomass change
-          # if(length(cage.genus[[pix]])==0){
-          #   cage.genus[[pix]] <- rep("Acer", length(tree.samp)) ## weird artifact sometimes no genus recorded
-          #   print(paste0("no genus for ", index.track[procset[pix]], ", used Acer ", length(tree.samp), " times"))
-          # }else{tmp.genus <- cage.genus[[procset[pix]]][[j]]}
+          ### figure out biomass and NPP at start of simulation without any effects of growth/mort
+          tmp.dbh0 <- tree.samp 
           tmp.genus <- cage.genus[[procset[pix]]][[j]]
           tmp.biom0 <- street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b0"]*(tmp.dbh0^street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b1"])*street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "dens"]
           biom.track <- c(biom.track, sum(tmp.biom0))
@@ -307,6 +301,8 @@ for(s in 1:length(scenario)){
           tmp.biom1 <- street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b0"]*(tmp.dbh1^street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b1"])*street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "dens"]
           if(length(tmp.biom0)==0){tmp.biom0 <- 0; tmp.biom1 <- 0} ## if everything is dead
           npp.track <- c(npp.track, sum(tmp.biom1-tmp.biom0))
+          num.track <- c(num.track, length(tmp.dbh0))
+
           ### canopy: get vector of equation types to use first
           eq.form <- street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "EqName"]
           ## add up total canopy area applying correct equation form to each
@@ -324,16 +320,18 @@ for(s in 1:length(scenario)){
                                                  log(log(tmp.dbh0+1)+
                                                        street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "c"]/2)))/2)^2)*pi, na.rm=T)
           can.track <- c(can.track, tmp.can0)
-
-
+          
           ## Now simulate 36 successive years of growth/mortality/replanting/plant expansion
+          deaths <- 0 ## keep track of how many times trees die in this pix resim
           for(e in 1:36){
-            if(scenario[s]=="expand" & e<=10 & expand.track[e]==1 & index.track[pix]%in%nonfor){
+            if(scenario[s]=="expand" & e<=10 & expand.track[e]==1){
               tree.samp <- c(tree.samp, 5) ## add a 5cm tree if the expand.track wins one this year (within the first 10 years)
               newplants <- newplants+1
-              delay <- c(delay, 0)
+              delay <- c(delay, sample(seq(delay.factor[1],
+                                           delay.factor[2]),
+                                       size = 1,
+                                       replace=T)) ## give this new tree its own delay clock
             }
-          deaths <- 0 ## keep track of how many times trees die in this pix resim
 
           ### figure mortality and determine a kill list
           deathwatch <- mort(tree.samp)*mort.mod ## mortality liklihood for each stem
@@ -345,11 +343,11 @@ for(s in 1:length(scenario)){
           tree.samp[kill.list==1] <- 0 ## the dead are nullified
 
           ## determine a delay clock for this stems killed this cycle and update old delay clocks
-          delay[kill.list==1] <- sample(seq(delay.factor[1],
+          delay[kill.list==1 & delay>0] <- sample(seq(delay.factor[1],
                                             delay.factor[2]),
-                                        size = length(delay[kill.list==1]),
+                                        size = length(delay[kill.list==1 & delay>0]),
                                         replace=T) # start a clock for any tree killed
-          delay[kill.list==0 & delay>0] <- delay[kill.list==0 & delay>0]-1 ## count down the delay clocks that had been set before
+          delay[kill.list==0 & tree.samp==0 & delay>0] <- delay[kill.list==0 & tree.samp==0 & delay>0]-1 ## count down the delay clocks that had been set before
 
           ## grow up the survivors using estimated growth regression
           # tree.samp <- tree.samp[tree.samp>0]*(1+dbhg.pred(tree.samp[tree.samp>0])) ## static realization of growth model

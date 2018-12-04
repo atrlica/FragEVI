@@ -197,7 +197,6 @@ write.csv(fat, "processed/boston/bos.lulc.1mcover.summary.csv")
 #####
 
 
-
 ##### Bringing together NPP estimates
 ## old processing
 ##### 
@@ -528,21 +527,30 @@ for(a in 1:dim(scan)[1]){
   print(paste("scanned pix", scan[a, pix.ID]))
 }
 
+summary(street.res[pix.ID%in%orphans, bos.biom30m]) ## almost all real low biomass
+length(orphans) ## 496
+
 ### pull in andy forest results and pick out the pixel vectors we want
 andy.res <- as.data.table(read.csv("processed/andy.forest.results.V4.csv"))
-pick <- andy.res[lulc==1 | biom>20000,] ## find the andy pixels we want
+forest <- andy.res[lulc==1, pix.ID]
+big <- andy.res[biom>20000, pix.ID]
+gimme <- c(forest, big); length(gimme) #19424
+sum(duplicated(gimme)) ## 5331
+gimme <- gimme[!duplicated(gimme)]; length(gimme) ## 14093 
+sum(orphans%in%gimme) ## 0
+gimme <- c(gimme, orphans); length(gimme) ## 14589
+sum(duplicated(gimme)) #0
+pick <- andy.res[pix.ID%in%gimme,] 
 pick <- pick[,c(9,16:115)] ## pix.ID and then results
-# pick[lulc!=1, range(biom, na.rm=T)] ## we good
-pick <- rbind(pick, andy.res[pix.ID%in%orphans, c(9,16:115)]) ## add in the orphaned pixels
 names(pick)[2:101] <- paste0("npp.iter.", 1:100, ".hybrid"); dim(pick) ### 14589 pix
 
 ## finalize grooming the street pixels 
-street.pix <- copy(street.res)
-street.pix <- street.pix[bos.lulc30m.lumped!=1,]
-street.pix <- street.pix[bos.biom30m<=20000,]
+street.pix <- copy(street.res); dim(street.pix) ## 354068
+street.pix <- street.pix[bos.lulc30m.lumped!=1,]; dim(street.pix) ## 126437
+street.pix <- street.pix[bos.biom30m<=20000,]; dim(street.pix) ## 122607
+street.pix <- street.pix[!(pix.ID%in%orphans),]; dim(street.pix) ### 122111
 street.pix <- street.pix[,c(2,8:107)]
-names(street.pix)[2:101] <- paste0("npp.iter.", 1:100, ".hybrid"); dim(street.pix) ### 122607 pix
-street.pix <- street.pix[!(pix.ID%in%orphans),]; dim(street.pix) ### 122111 pix
+names(street.pix)[2:101] <- paste0("npp.iter.", 1:100, ".hybrid")
 hybrid <- rbind(pick, street.pix) ### 136700 pix; now need to merge these back into the complete map
 
 aoi <- raster("processed/boston/bos.aoi30m.tif")
@@ -558,18 +566,17 @@ biom.dat <- as.data.table(cbind(as.data.frame(aoi),
                                 as.data.frame(lulc)))
 biom.dat[, pix.ID:=seq(1:dim(biom.dat)[1])]
 biom.dat <- merge(biom.dat, hybrid, by="pix.ID", all.x=T) # here's our map
-biom.dat <- biom.dat[order(pix.ID),]
+biom.dat <- biom.dat[order(pix.ID),]; dim(biom.dat)
+vals <- apply(biom.dat[,7:106], MARGIN=1, FUN=med.na)
+biom.dat[,pix.median:=vals]
+biom.dat[bos.aoi30m>800 & bos.biom30m==0, pix.median:=0]
 write.csv(biom.dat, "processed/results/hybrid.results.V6.csv")
 
 ### write a tiff of the median values
-hyb <- as.data.table(read.csv("processed/hybrid.results.V6.csv"))
-hyb <- hyb[order(pix.ID),]
+hyb <- as.data.table(read.csv("processed/results/hybrid.results.V6.csv"))
 rr <- aoi
-med.na <- function(x){median(x, na.rm=T)}
-vals <- apply(hyb[,8:107], MARGIN=1, FUN=med.na)
-biom.dat[,pix.median:=vals]
-rr <- setValues(rr, vals)
-writeRaster(rr, filename="processed/results/hybrid.V5.median.tiff", format="GTiff", overwrite=T)
+rr <- setValues(rr, hyb[,pix.median])
+writeRaster(rr, filename="processed/results/hybrid.V6.median.tiff", format="GTiff", overwrite=T)
 #####
 
 ## analysis of error distributed results
@@ -674,7 +681,7 @@ t <- cbind(t, results.fia.forest)
 
 ### Results for ANDY FOREST, error distributed
 #####
-andy <- as.data.table(read.csv("processed/andy.forest.results.V3.csv"))
+andy <- as.data.table(read.csv("processed/andy.forest.results.V4.csv"))
 # andy <- as.data.table(read.csv("processed/andy.forest.results.V2.csv")) ## this is the 7000 MgC version
 # andy.retest <- as.data.table(read.csv("processed/andy.forest.results.V2-retest.csv")) ## this is the 7000 MgC version
 sum.na <- function(x){sum(x, na.rm=T)}
@@ -684,9 +691,11 @@ andy.npp.tot <- apply(andy[aoi>800,16:115], MARGIN=2, FUN=sum.na)
 hist((andy.npp.tot/2000))
 # hist((andy.npp.tot.retest/2000))## no variance, something is broken in the model
 # hist((andy.npp.tot.newmod/2000))
-median((andy.npp.tot/2000)) ## about 13k
+median((andy.npp.tot/2000)) ## about 8.5k
 # median((andy.npp.tot.retest/2000)) ## about 6.2k
 # median((andy.npp.tot.newmod/2000)) ## about 12.4k
+
+## fuck trying to do a raster of the andy median
 
 ### model realizations by lulc
 andy.lulc <- data.frame(1:100)
@@ -696,10 +705,10 @@ for(l in 1:6){
 }
 names(andy.lulc) <- c("iter", paste("andy.lulc", 1:6, ".npp.tot", sep=""))
 rownames(andy.lulc) <- NULL
-write.csv(andy.lulc, "processed/andy.v3.lulc.results.csv")
+write.csv(andy.lulc, "processed/andy.v4.lulc.results.csv")
 
 ### summary stats
-andy.lulc <- as.data.table(read.csv("processed/andy.v3.lulc.results.csv"))
+andy.lulc <- as.data.table(read.csv("processed/andy.v4.lulc.results.csv"))
 andy.lulc[,X:=NULL]
 
 ## quantiles by lulc 
@@ -713,18 +722,19 @@ for(i in 1:6){
 }
 t <- cbind(t, 
            c(results.andy, paste0(tot[2], " (", tot[1], "-", tot[3], ")")))
+colnames(t)[4] <- "results.andy"
 #####
 
 
 ### Results for HYBRID URBAN, error distributed
 #####
-hyb <- as.data.table(read.csv("processed/hybrid.results.V5.csv")) ## this is the error distributed model (V3) using the urban-specific allometries (V4), with biomass simulation run V5 with urban-specific growth rates
+hyb <- as.data.table(read.csv("processed/results/hybrid.results.V6.csv")) ## this is the error distributed model (V3) using the urban-specific allometries (V4), with biomass simulation run V5 with urban-specific growth rates
 sum.na <- function(x){sum(x, na.rm=T)}
 med.na <- function(x){median(x, na.rm=T)}
 hyb.npp.tot <- apply(hyb[bos.aoi30m>800,8:107], MARGIN=2, FUN=sum.na)
 # hist(hyb[bos.aoi30m>800 & bos.biom30m>0,8:107/bos.biom30m]) ## this is measure of the productivity of the shit in each cell
 hist((hyb.npp.tot/2000))
-median((hyb.npp.tot/2000)) ## about 11.9k (contrast -- Jenkin's allometrics give 11.6k).... wtf why is the andy forest model so high now?
+median((hyb.npp.tot/2000)) ## about 11.3k (contrast -- Jenkin's allometrics give 11.6k)....
 mean((hyb.npp.tot/2000))
 
 ### model realizations by lulc
@@ -735,9 +745,9 @@ for(l in 1:6){
 }
 names(hyb.lulc) <- c("iter", paste("hyb.lulc", 1:6, ".npp.tot", sep=""))
 rownames(hyb.lulc) <- NULL
-write.csv(hyb.lulc, "processed/hyb.v5.lulc.results.csv")
+write.csv(hyb.lulc, "processed/hyb.v6.lulc.results.csv")
 
-hyb.lulc <- as.data.table(read.csv("processed/hyb.v5.lulc.results.csv"))
+hyb.lulc <- as.data.table(read.csv("processed/hyb.v6.lulc.results.csv"))
 hyb.lulc[,X:=NULL]
 
 ## quantiles by lulc 
@@ -752,7 +762,7 @@ for(i in 1:6){
 t <- cbind(t, 
            c(results.hyb, paste0(tot[2], " (", tot[1], "-", tot[3], ")")))
 colnames(t) <- c("LULC", "results.fia.ground", "results.fia.forest", "results.andy", "results.hybrid")
-write.csv(t, "processed/results/npp.tot.summary.v5.csv")
+write.csv(t, "processed/results/npp.tot.summary.v6.csv")
 #####
 
 ### pixel median spreads -- just the median estimate for each pixel
@@ -820,10 +830,11 @@ for(i in 1:6){
 t <- cbind(t, 
            c(results.hyb.pix, paste0(tot[2], " (", tot[1], "-", tot[3], ")")))
 colnames(t) <- c("LULC", "fia.forest.pix", "fia.ground.pix", "andy.pix", "hybrid.pix")
-write.csv(t, "processed/results/npp.pix.summary.v5.csv")
+write.csv(t, "processed/results/npp.pix.summary.v6.csv")
 
 
 #### STATIC NPP RESULTS LOOKED AT HERE
+#####
 # npp.dat <- read.csv("processed/npp.estimates.V1.csv")
 # npp.dat <- read.csv("processed/npp.estimates.V2.csv")
 # npp.dat <- read.csv("processed/npp.estimates.V3.csv")
@@ -894,7 +905,7 @@ npp.dat[aoi>800, .((sum(hyb.npp.mod.lin, na.rm=T)/1000),
 ## lower in dev hdres lowveg, but beats by a lot in forest (i.e. the most comparable parts)
 
 ### random bullshit trying to summarize and compare results of different approaches
-###### 
+#####
 # ### summary table by lulc
 # tot.area <- npp.dat[aoi>800 & !is.na(lulc), sum(aoi)]
 # fox <- npp.dat[aoi>800 & !is.na(lulc), 
