@@ -644,6 +644,7 @@ biom.dat[,pix.median:=vals]
 rr <- setValues(rr, vals)
 writeRaster(rr, filename="processed/results/FIA.empirV5.npp.median.tif", format="GTiff", overwrite=T)
 
+###
 ### summary stats
 fia.ground.lulc <- as.data.table(read.csv("processed/fia.empirV5.lulc.ground.results.csv"))
 fia.forest.lulc <-  as.data.table(read.csv("processed/fia.empirV5.lulc.forest.results.csv"))
