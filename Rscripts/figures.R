@@ -1793,6 +1793,8 @@ dev.off()
 
 ## FIGURE 3B: BOXPLOTS OF PER-PIXEL MEDIAN C UPTAKE
 #####
+library(data.table)
+library(ggplot2)
 hyb <- as.data.table(read.csv("processed/results/hybrid.results.V6.csv"))
 fia <- as.data.table(as.data.frame(raster("processed/results/FIA.empirV5.npp.median.tif")))
 names(hyb)[108] <- "hyb.pix.median"
@@ -1802,27 +1804,59 @@ bdat <- melt(hyb, measure.vars = c("hyb.pix.median", "fia.pix.median"), id.vars 
 bdat$lulc <- as.factor(bdat$bos.lulc30m.lumped)
 bdat.fin <- bdat[lulc!=6 & !(is.na(lulc)) & bos.aoi30m>800,]
 bdat.fin[,MgC.ha.yr:=((value/2000)/bos.aoi30m)*1E4]
+bdat.fin[,lulc:=factor(lulc, levels=c(2,5,3,4,1), ordered=T)]
+bdat.fin[variable=="hyb.pix.median", alpha:=1]
+bdat.fin[variable=="fia.pix.median", alpha:=0.8]
 facet.names <- c('hyb.pix.median'="Urban Hybrid", 'fia.pix.median'="Rural Forest")
 library(reshape2)
 library(viridis)
 library(ggplot2)
 lulc.pal <- viridis(6)
-lulc.pal <- c(lulc.pal[5],lulc.pal[2],lulc.pal[3],lulc.pal[4],lulc.pal[6],lulc.pal[1])
-bplots.pixmed <- ggplot(bdat.fin,aes(x=lulc, y=MgC.ha.yr, fill=lulc))+
-  geom_boxplot(outlier.shape=NA, coef=0)+
-  facet_wrap(~variable, labeller=as_labeller(facet.names))+
-  scale_fill_manual(values = lulc.pal,
-                    name="Land Cover",
-                    breaks=c(1,2,3,4,5),
-                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg."))+
+bork <- plasma(5)
+plot(c(2,5,3,4,1,6), pch=15, col=lulc.pal)
+lulc.pal <- c(lulc.pal[2],lulc.pal[6], lulc.pal[3],lulc.pal[4],lulc.pal[5])
+# bplots.pixmed <- ggplot(bdat.fin,aes(x=lulc, y=MgC.ha.yr, fill=lulc))+
+#   geom_boxplot(outlier.shape=NA, coef=0, varwidth = TRUE)+
+#   facet_wrap(~variable, labeller=as_labeller(facet.names))+
+#   scale_fill_manual(values = lulc.pal,
+#                     name="Land Cover",
+#                     breaks=c(2,5,3,4,1),
+#                     labels=c("Developed", "Other Veg.", "HD Resid.", "LD Resid.", "Forest"))+
+#   ylab("Pixel median C uptake (MgC/ha/yr)")+
+#   ylim(c(0,2.6))+
+#   theme(axis.line = element_line(colour = "black"),
+#         panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         panel.border = element_blank(),
+#         panel.background = element_blank(),
+#         legend.position = c(0.8, 0.7),
+#         axis.text=element_text(size=8),
+#         axis.title=element_text(size=10, face="bold"),
+#         legend.text=element_text(size=6.5),
+#         legend.title=element_text(size=8, face="bold"),
+#         axis.title.x=element_blank(),
+#         axis.text.x=element_blank(),
+#         axis.ticks.x=element_blank(),
+#         strip.text.x = element_text(size = 10, face="bold"),
+#         legend.key = element_rect(fill = "white"))
+
+
+bplots.pixmed <- ggplot(bdat.fin, aes(lulc, MgC.ha.yr, color=variable, alpha=variable))+
+  geom_boxplot(aes(fill=lulc), outlier.shape = NA, 
+               coef=0, varwidth=TRUE, position=position_dodge2(preserve="single",padding=0))+
+  scale_fill_manual(values = c(lulc.pal),
+                  name="Land Cover",
+                  breaks=c(2,5,3,4,1),
+                  labels=c("Developed", "Other Veg.", "HD Resid.", "LD Resid.", "Forest"))+
+  scale_color_manual(values=c("black", "black"), guide="none")+
   ylab("Pixel median C uptake (MgC/ha/yr)")+
-  ylim(c(0,2.6))+
+  ylim(c(0,2.4))+
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
         panel.background = element_blank(),
-        legend.position = c(0.8, 0.7),
+        legend.position = c(0.2, 0.70),
         axis.text=element_text(size=8),
         axis.title=element_text(size=10, face="bold"),
         legend.text=element_text(size=6.5),
@@ -1831,7 +1865,8 @@ bplots.pixmed <- ggplot(bdat.fin,aes(x=lulc, y=MgC.ha.yr, fill=lulc))+
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank(),
         strip.text.x = element_text(size = 10, face="bold"),
-        legend.key = element_rect(fill = "white"))
+        legend.key = element_rect(fill = "white"))+
+  scale_alpha_manual(values=c(1,0.3), guide="none")
 
 png(width=5, height=4, units="in", res=600, bg="white", filename="images/Fig3B_pixelNPP.png")
 bplots.pixmed

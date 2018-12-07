@@ -114,7 +114,7 @@ nonfor <- biom.dat[bos.aoi30m>800 & bos.lulc30m.lumped!=1 & bos.biom30m<20000, p
 scenario <- c("BAU", "oldies", "expand")
 
 ## record specific parameter sets
-resim.vers <- 3 ## what are we labeling this round of resims?
+resim.vers <- 4 ## what are we labeling this round of resims?
 ## 1 was prelim, 2 included full 100x pix resim per year, 3 is model mean single resim per year
 vers <- 5 ## what simulator results version are we dealing with?
 
@@ -456,7 +456,7 @@ for(s in 1:length(scenario)){
 ## get a general list of the resim results and the corresponding pixel index
 sum.na <- function(x){sum(x, na.rm=T)}
 scenario <- c("BAU", "oldies", "expand")
-resim.vers <- 3
+resim.vers <- 4
 preamb <- "processed/boston/biom_street/"
 ## containers for the histories as they unfurl themselves in the resims
 
@@ -483,7 +483,7 @@ for(s in 1:length(scenario)){
     load(paste0(preamb, "num.track.scenario.", scenario[s], ".", chunks[o], ".V", resim.vers, ".resim.sav", sep="")) ## num.box
     load(paste0(preamb, "can.track.scenario.", scenario[s], ".", chunks[o], ".V", resim.vers, ".resim.sav", sep="")) ## can.box
     load(paste0(preamb, "death.track.scenario.", scenario[s], ".", chunks[o], ".V", resim.vers, ".resim.sav", sep="")) ## deaths.sav
-    load(paste0(preamb, "expand.plant.num.scenario.", scenario[s], ".", chunks[o], "V", resim.vers, ".resim.sav", sep="")) ## expand.plant.num
+    load(paste0(preamb, "expand.plant.num.scenario.", scenario[s], ".", chunks[o], ".V", resim.vers, ".resim.sav", sep="")) ## expand.plant.num
     load(paste0(preamb, "index.track.scenario.", scenario[s], ".", chunks[o], ".V", resim.vers, ".resim.sav", sep="")) ## pixID.track
     
     kill <- sapply(npp.box, is.na) ## cancel the non-resimmed entreid
