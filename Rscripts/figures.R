@@ -684,7 +684,6 @@ pred_live <- data.frame(diam.rate.pred=coef(summary(yyy))[1]+
                         DIAM_T0=seq(live[lag>0 & STATUS==1,min(DIAM_T0, na.rm=T)],
                                     live[lag>0 & STATUS==1,max(DIAM_T0, na.rm=T)], by=0.2))
 ## function for confidence intervals
-
 #####
 ## x and y are data, y.pred & x.pred are predictions in pred_live, mod is model object
 y <- live[lag>0 & STATUS ==1, diam.rate]
@@ -809,16 +808,23 @@ g.full <- lmer(dbh.incr.ann~seg.Edge*dbh.start.incr +
           data=andy.bai[dbh.start.incr>=5,],
           REML=F)  
 
+### these are constrained to not exceed the observed range of dbh incr for edge or interior
+min.edge <- andy.bai[seg.Edge=="E",min(dbh.incr.ann)]
+max.edge <- andy.bai[seg.Edge=="E",max(dbh.incr.ann)]
+min.int <- andy.bai[seg.Edge=="I",min(dbh.incr.ann)]
+max.int <- andy.bai[seg.Edge=="I",max(dbh.incr.ann)]
 pred_andy.edge <- data.frame(diam.incr.ann=(coef(summary(g.full))[1]+
                                               seq(andy.bai[seg.Edge=="E", min(dbh.start.incr, na.rm=T)],
                                                   andy.bai[seg.Edge=="E", max(dbh.start.incr, na.rm=T)], by=0.2)*coef(summary(g.full))[3]),
                         dbh.start.incr=seq(andy.bai[seg.Edge=="E", min(dbh.start.incr, na.rm=T)],
                                            andy.bai[seg.Edge=="E", max(dbh.start.incr, na.rm=T)], by=0.2))
+pred_andy.edge <- pred_andy.edge[pred_andy.edge$diam.incr.ann>=min.edge & pred_andy.edge$diam.incr.ann<=max.edge,]
 pred_andy.int <- data.frame(diam.incr.ann=((coef(summary(g.full))[1]+coef(summary(g.full))[2])+
                                              seq(andy.bai[seg.Edge=="I", min(dbh.start.incr, na.rm=T)],
                                                  andy.bai[seg.Edge=="I", max(dbh.start.incr, na.rm=T)], by=0.2)*(coef(summary(g.full))[3]+coef(summary(g.full))[4])),
                             dbh.start.incr=seq(andy.bai[seg.Edge=="I", min(dbh.start.incr, na.rm=T)],
                                                andy.bai[seg.Edge=="I", max(dbh.start.incr, na.rm=T)], by=0.2))
+pred_andy.int <- pred_andy.int[pred_andy.int$diam.incr.ann>=min.int & pred_andy.int$diam.incr.ann<=max.int,]
 
 
 # ### log-transformed growth~dbh*edge

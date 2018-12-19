@@ -1,1 +1,0 @@
-c("BAU", "highmort", "lowreplant", "oldies", "lowmort") 1 4 1.25 0.5 c(0.25, 0.75) 0.5 40 0.5
