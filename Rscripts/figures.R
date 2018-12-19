@@ -640,6 +640,7 @@ legend.title.size=9
 legend.text.size=8
 alpha.master <- 0.2
 #####
+
 ### FIA rural trees
 #####
 live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv"))
@@ -733,6 +734,7 @@ conf.intervals <- reg.conf.intervals(cars$speed, cars$dist)
 #####
 
 ## dbh increment
+#####
 fia.mono.incr <- ggplot(live, aes(DIAM_T0, diam.rate))+
   geom_point(alpha=alpha.master, color=plasma(6)[1], size=pt.size)+
   scale_y_continuous(breaks=c(-1, 0, 1, 2), limits=ylim.all)+
@@ -793,10 +795,9 @@ fia.mono.incr <- ggplot(live, aes(DIAM_T0, diam.rate))+
 #   geom_line(data = pred_live, aes(x=DIAM_T0, y=growth.pred), color=fit.col, linetype=fit.type, size=fit.width)+
 #   labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="FIA")+
 #   theme.master
-
+#####
 
 ### Andy Trees
-### Andy 
 #####
 # andy.bai <- as.data.table(read.csv("processed/andy.bai.dbh.pseudo.csv"))
 andy.bai <- as.data.table(read.csv("processed/andy.bai.ps.dbhincr.csv"))
@@ -968,6 +969,7 @@ andy.mono.incr <- ggplot(andy.bai[dbh.start.incr>=5], aes(dbh.start.incr, dbh.in
 #                                                   color=c("darkmagenta",
 #                                                           "chocolate3"))))
 #####
+
 ###  Street trees
 #####
 # b0 <- -2.48
@@ -1064,6 +1066,7 @@ street.mono.incr <- ggplot(street[record.good==1], aes(dbh.2006, diam.rate))+
 #   labs(x = "Stem DBH (cm)", y="Relative Growth (kg/kg)", title="Street trees '06-'14")+
 #   theme.master
 #####
+
 ### collate monocolored plots
 #####
 # library(gridExtra)
@@ -1086,6 +1089,7 @@ dev.off()
 # dev.off()
 #####
 #####
+
 
 ## FIGURE 3: NPP VS BIOMASS DENSITY
 #####
@@ -1359,6 +1363,7 @@ dev.off()
 #   theme(legend.position = c(60, 1.5E04))
 #####
 
+
 ## FIGURE 4: SPATIAL DEFINITIONS OF URBAN FOREST
 #####
 ## note this is just to extract summary stats on the underlying area of interest. figure itself is mainly built in Arcmap
@@ -1388,6 +1393,138 @@ targ.biom <- unlist(extract(biom, spTransform(targ, crs(biom))))
 (sum(targ.biom)/2000)/(sum(targ.can)/1E4)
 (sum(targ.biom)/2000)/(sum(targ.isa==0)/1E4)
 #####
+
+
+## FIGURE 5: TRAJECTORIES OF C UPTAKE AND CANOPY UNDER RESIMS
+#####
+bau.npp <- read.csv("processed/results/BAU.V3.npp.trendmap.csv")
+bau.can <- read.csv("processed/results/BAU.V3.can.trendmap.csv")
+bau.biom <- read.csv("processed/results/BAU.V3.biom.trendmap.csv")
+bau.npp.t <- apply(bau.npp[,3:39], MARGIN = 2, FUN = sum.na)
+bau.can.t <- apply(bau.can[,3:39], MARGIN = 2, FUN = sum.na)
+bau.biom.t <- apply(bau.biom[,3:39], MARGIN = 2, FUN = sum.na)
+bau.npp.rel <- bau.npp.t-bau.npp.t[2]
+bau.can.rel <- ((bau.can.t-bau.can.t[2])/bau.can.t[2])*100
+bau.biom.rel <- (bau.biom.t-bau.biom.t[2])
+
+
+old.npp <- read.csv("processed/results/oldies.V3.npp.trendmap.csv")
+old.can <- read.csv("processed/results/oldies.V3.can.trendmap.csv")
+old.biom <- read.csv("processed/results/oldies.V3.biom.trendmap.csv")
+old.npp.t <- apply(old.npp[,3:39], MARGIN = 2, FUN = sum.na)
+old.can.t <- apply(old.can[,3:39], MARGIN = 2, FUN = sum.na)
+old.biom.t <- apply(old.biom[,3:39], MARGIN = 2, FUN = sum.na)
+old.npp.rel <- old.npp.t-old.npp.t[2]
+old.can.rel <- ((old.can.t-old.can.t[2])/old.can.t[2])*100
+old.biom.rel <- (old.biom.t-old.biom.t[2])
+
+
+exp.npp <- read.csv("processed/results/expand.V3.npp.trendmap.csv")
+exp.can <- read.csv("processed/results/expand.V3.can.trendmap.csv")
+exp.biom <- read.csv("processed/results/expand.V3.biom.trendmap.csv")
+exp.npp.t <- apply(exp.npp[,3:39], MARGIN = 2, FUN = sum.na)
+exp.can.t <- apply(exp.can[,3:39], MARGIN = 2, FUN = sum.na)
+exp.biom.t <- apply(exp.biom[,3:39], MARGIN = 2, FUN = sum.na)
+exp.npp.rel <- exp.npp.t-exp.npp.t[2]
+exp.can.rel <- ((exp.can.t-exp.can.t[2])/exp.can.t[2])*100
+exp.biom.rel <- (exp.biom.t-exp.biom.t[2])
+
+plot(old.npp.rel[2:36]/2000/1000, ylim=c(0,2), col="blue")
+points(exp.npp.rel[2:36]/2000/1000, col="red")
+points(bau.npp.rel[2:36]/2000/1000, col="purple")
+
+plot(old.can.rel[2:36], col="blue", ylim=c(-0.06, 0.3))
+points(exp.can.rel[2:36], col="red")
+points(bau.can.rel[2:36], col="purple")
+
+plot(old.biom.rel[2:36]/2000/1000, col="blue")
+points(bau.biom.rel[2:36]/2000/1000, col="purple")
+points(exp.biom.rel[2:36]/2000/1000, col="red")
+
+npp.rel <- as.data.frame(cbind(c(2007:2043), bau.npp.rel/2000/1000, old.npp.rel/2000/1000, exp.npp.rel/2000/1000))
+npp.rel <- npp.rel[2:34,]
+names(npp.rel) <- c("Year", "BAU.npp", "old.npp", "exp.npp")
+
+biom.rel <- as.data.frame(cbind(bau.biom.rel/2000/1000, old.biom.rel/2000/1000, exp.biom.rel/2000/1000))
+rownames(biom.rel) <- NULL
+biom.rel$Year <- seq(2007, by=1, length.out=dim(biom.rel)[1])
+biom.rel <- biom.rel[2:34,]
+names(biom.rel) <- c("BAU.biom", "old.biom", "exp.biom", "Year")
+
+can.rel <- as.data.frame(cbind(bau.can.rel, old.can.rel, exp.can.rel))
+rownames(can.rel) <- NULL
+can.rel$Year <- seq(2007, by=1, length.out=dim(can.rel)[1])
+can.rel <- can.rel[2:34,]
+names(can.rel) <- c("BAU.can", "old.can", "exp.can", "Year")
+
+library(ggplot2)
+## set up common visual parameters
+xlim.all <- c(4, 100)
+ylim.all <- c(-1, 2.5)
+title.size <- 12
+axis.marks <- 9
+axis.titles <- 10
+pt.size <- 0.7
+theme.master <-   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                        panel.background = element_blank(), axis.line = element_line(colour = "black"),
+                        axis.title.x = element_text(face="bold", size=axis.titles),
+                        axis.title.y = element_text(face="bold", size=axis.titles),
+                        axis.text.x = element_text(face="plain", size=axis.marks),
+                        axis.text.y = element_text(face="plain", size=axis.marks),
+                        plot.title = element_text(face="bold", size=title.size))
+med.lines.col <- "gray75"
+med.lines.width <- 0.4
+fit.col <- "gray65"
+fit.width <- 0.8
+fit.type <- "4121"
+legend.title.size=11
+legend.text.size=10
+alpha.master <- 0.2
+line.w <- 1.6
+proj.col <- plasma(3)
+
+proj.npp=ggplot(npp.rel, aes(Year))+
+  geom_line(aes(y=BAU.npp, colour="BAU"), size=line.w)+
+  geom_line(aes(y=old.npp, colour="Preserve >40cm"), size=line.w)+
+  geom_line(aes(y=exp.npp, colour="Expand planting"), size=line.w)+
+  labs(x = "Year", y="Growth vs. 2008 (MgC/yr x 1000)", title="Annual Growth")+
+  theme.master+
+  scale_colour_manual(guide="none", values=proj.col)
+  
+
+proj.biom=ggplot(biom.rel, aes(Year))+
+  geom_line(aes(y=BAU.biom, colour="BAU"), size=line.w)+
+  geom_line(aes(y=old.biom, colour="Preserve >40cm"), size=line.w)+
+  geom_line(aes(y=exp.biom, colour="Expand planting"), size=line.w)+
+  labs(x = "Year", y="Biomass vs. 2008 (MgC x 1000)", title="Tree Biomass")+
+  scale_colour_manual(name="Scenario", labels=c("BAU", "Street tree planting", "Preserve >40cm"), values=proj.col)+
+  theme(legend.position = c(0.2, 0.7),
+        legend.title = element_text(size=legend.title.size, face="bold"),
+        legend.background = element_rect(fill = "white"),
+        legend.key =  element_blank(),
+        legend.key.size = unit(0.8, "lines"),
+        legend.text = element_text(size=legend.title.size-1, face="plain"),
+        legend.justification = "center")+
+  theme.master
+
+proj.can=ggplot(can.rel, aes(Year))+
+  geom_line(aes(y=BAU.can, colour="BAU"), size=line.w)+
+  geom_line(aes(y=old.can, colour="Preserve >40cm"), size=line.w)+
+  geom_line(aes(y=exp.can, colour="Expand planting"), size=line.w)+
+  scale_colour_manual(guide="none", values=proj.col)+
+  labs(x = "Year", y="Canopy change vs. 2008 (%)", title="Canopy Area")+
+  theme.master
+
+## collate and export
+library(gridExtra)
+png(width=4.6, height=9, units="in", res=600, bg="white", filename="images/Fig5_projections.png")
+grid.arrange(grobs=list(proj.npp, proj.biom, proj.can), nrow=3)
+dev.off()
+
+
+#####
+
+
 
 ### SUPPLEMENTAL FIGURES
 ## FIGURE S2: Biomass Density by LULC, different area calculation methods
@@ -1661,8 +1798,10 @@ grid.arrange(grobs=list(live.plot.mono.log, andy.plot.mono.log),
 dev.off()
 #####
 
-## BOXPLOTS OF PER-PIXEL MEDIAN C UPTAKE
+## FIGURE 3B: BOXPLOTS OF PER-PIXEL MEDIAN C UPTAKE
 #####
+library(data.table)
+library(ggplot2)
 hyb <- as.data.table(read.csv("processed/results/hybrid.results.V6.csv"))
 fia <- as.data.table(as.data.frame(raster("processed/results/FIA.empirV5.npp.median.tif")))
 names(hyb)[108] <- "hyb.pix.median"
@@ -1672,27 +1811,59 @@ bdat <- melt(hyb, measure.vars = c("hyb.pix.median", "fia.pix.median"), id.vars 
 bdat$lulc <- as.factor(bdat$bos.lulc30m.lumped)
 bdat.fin <- bdat[lulc!=6 & !(is.na(lulc)) & bos.aoi30m>800,]
 bdat.fin[,MgC.ha.yr:=((value/2000)/bos.aoi30m)*1E4]
+bdat.fin[,lulc:=factor(lulc, levels=c(2,5,3,4,1), ordered=T)]
+bdat.fin[variable=="hyb.pix.median", alpha:=1]
+bdat.fin[variable=="fia.pix.median", alpha:=0.8]
 facet.names <- c('hyb.pix.median'="Urban Hybrid", 'fia.pix.median'="Rural Forest")
 library(reshape2)
 library(viridis)
 library(ggplot2)
 lulc.pal <- viridis(6)
-lulc.pal <- c(lulc.pal[5],lulc.pal[2],lulc.pal[3],lulc.pal[4],lulc.pal[6],lulc.pal[1])
-bplots.pixmed <- ggplot(bdat.fin,aes(x=lulc, y=MgC.ha.yr, fill=lulc))+
-  geom_boxplot(outlier.shape=NA, coef=0)+
-  facet_wrap(~variable, labeller=as_labeller(facet.names))+
-  scale_fill_manual(values = lulc.pal,
-                    name="Land Cover",
-                    breaks=c(1,2,3,4,5),
-                    labels=c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg."))+
+bork <- plasma(5)
+plot(c(2,5,3,4,1,6), pch=15, col=lulc.pal)
+lulc.pal <- c(lulc.pal[2],lulc.pal[6], lulc.pal[3],lulc.pal[4],lulc.pal[5])
+# bplots.pixmed <- ggplot(bdat.fin,aes(x=lulc, y=MgC.ha.yr, fill=lulc))+
+#   geom_boxplot(outlier.shape=NA, coef=0, varwidth = TRUE)+
+#   facet_wrap(~variable, labeller=as_labeller(facet.names))+
+#   scale_fill_manual(values = lulc.pal,
+#                     name="Land Cover",
+#                     breaks=c(2,5,3,4,1),
+#                     labels=c("Developed", "Other Veg.", "HD Resid.", "LD Resid.", "Forest"))+
+#   ylab("Pixel median C uptake (MgC/ha/yr)")+
+#   ylim(c(0,2.6))+
+#   theme(axis.line = element_line(colour = "black"),
+#         panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         panel.border = element_blank(),
+#         panel.background = element_blank(),
+#         legend.position = c(0.8, 0.7),
+#         axis.text=element_text(size=8),
+#         axis.title=element_text(size=10, face="bold"),
+#         legend.text=element_text(size=6.5),
+#         legend.title=element_text(size=8, face="bold"),
+#         axis.title.x=element_blank(),
+#         axis.text.x=element_blank(),
+#         axis.ticks.x=element_blank(),
+#         strip.text.x = element_text(size = 10, face="bold"),
+#         legend.key = element_rect(fill = "white"))
+
+
+bplots.pixmed <- ggplot(bdat.fin, aes(lulc, MgC.ha.yr, color=variable, alpha=variable))+
+  geom_boxplot(aes(fill=lulc), outlier.shape = NA, 
+               coef=0, varwidth=TRUE, position=position_dodge2(preserve="single",padding=0))+
+  scale_fill_manual(values = c(lulc.pal),
+                  name="Land Cover",
+                  breaks=c(2,5,3,4,1),
+                  labels=c("Developed", "Other Veg.", "HD Resid.", "LD Resid.", "Forest"))+
+  scale_color_manual(values=c("black", "black"), guide="none")+
   ylab("Pixel median C uptake (MgC/ha/yr)")+
-  ylim(c(0,2.6))+
+  ylim(c(0,2.4))+
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
         panel.background = element_blank(),
-        legend.position = c(0.8, 0.7),
+        legend.position = c(0.2, 0.70),
         axis.text=element_text(size=8),
         axis.title=element_text(size=10, face="bold"),
         legend.text=element_text(size=6.5),
@@ -1701,9 +1872,10 @@ bplots.pixmed <- ggplot(bdat.fin,aes(x=lulc, y=MgC.ha.yr, fill=lulc))+
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank(),
         strip.text.x = element_text(size = 10, face="bold"),
-        legend.key = element_rect(fill = "white"))
+        legend.key = element_rect(fill = "white"))+
+  scale_alpha_manual(values=c(1,0.3), guide="none")
 
-png(width=4, height=3, units="in", res=600, bg="white", filename="images/Fig3B_pixelNPP.png")
+png(width=5, height=4, units="in", res=600, bg="white", filename="images/Fig3B_pixelNPP.png")
 bplots.pixmed
 dev.off()
 
