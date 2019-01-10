@@ -237,19 +237,6 @@ ps.dbh.contain <- ps.dbh.contain[dbh.start!=999 & !is.na(dbh.start),]
 
 ### dump the pseudo-replicated file to disk
 write.csv(ps.dbh.contain, "processed/andy.bai.ps.dbhincr.csv")
-
-## how's it look?
-par(mfrow=c(1,1))
-# ps.contain[is.finite(biom.rel.ann) & dbh.start>5,] ## 903 reasonably big trees
-# plot(ps.contain$dbh.start, ps.contain$biom.rel.ann, col=ps.contain$interval, ylim=c(0,1))
-# plot(ps.contain[is.finite(biom.rel.ann) & dbh.start>5, dbh.start],
-#      ps.contain[is.finite(biom.rel.ann) & dbh.start>5, biom.rel.ann],
-#      col=ps.contain[is.finite(biom.rel.ann) & dbh.start>5, seg.Edge])
-# boxplot(biom.rel.ann~interval, data=ps.contain, ylim=c(0, 0.5)) ## forest seems to grow faster in its younger years back in the heady early 90's
-
-plot(ps.final$dbh.start.incr, ps.final$dbh.incr.ann)
-plot(ps.final[dbh.start.incr>5, dbh.start.incr], ps.final[dbh.start.incr>5, dbh.incr.ann],
-     col=ps.final[dbh.start.incr>5, seg.Edge])
 #####
 
 ### STEM GROWTH~DBH ANALYSIS
@@ -292,51 +279,51 @@ ps.contain <- as.data.table(read.csv("processed/andy.bai.ps.dbhincr.csv")) ## th
 ### VER2, linear mixed effects on **DBH growth increment**
 library(lme4)
 par(mfrow=c(1,1))
-plot(ps.contain[dbh.start.incr>=5, dbh.start.incr], ps.contain[dbh.start.incr>=5, dbh.incr.ann],
-     col=ps.contain[dbh.start.incr>=5, seg.Edge])
-a <- lm(dbh.incr.ann~poly(dbh.start.incr, degree=5), data=ps.contain[dbh.start.incr>=5,])
+plot(ps.contain[dbh.start>=5, dbh.start], ps.contain[dbh.start>=5, dbh.incr.ann],
+     col=ps.contain[dbh.start>=5, seg.Edge])
+a <- lm(dbh.incr.ann~poly(dbh.start, degree=5), data=ps.contain[dbh.start>=5,])
 summary(a) ### significant effect for dbh but v low predictive power
-b <- lm(dbh.incr.ann~poly(dbh.start.incr, degree=2)*seg.Edge, data=ps.contain[dbh.start.incr>=5,])
+b <- lm(dbh.incr.ann~poly(dbh.start, degree=2)*seg.Edge, data=ps.contain[dbh.start>=5,])
 summary(b) ### significant effect for dbh, dbh*edge, but low predictive power
-c <- lm(dbh.incr.ann~poly(dbh.start.incr, degree=1)+seg.Edge, data=ps.contain[dbh.start.incr>=5,])
+c <- lm(dbh.incr.ann~poly(dbh.start, degree=1)+seg.Edge, data=ps.contain[dbh.start>=5,])
 summary(c) ### significant ???POSITIVE?? effect for dbh, low predictive power
-points(ps.contain[dbh.start.incr>=5, dbh.start.incr], predict(c), cex=0.5, col="purple", pch=16)
-c <- lm(dbh.incr.ann~dbh.start.incr+seg.Edge, data=ps.contain[dbh.start.incr>=5, ])
+points(ps.contain[dbh.start>=5, dbh.start], predict(c), cex=0.5, col="purple", pch=16)
+c <- lm(dbh.incr.ann~dbh.start+seg.Edge, data=ps.contain[dbh.start>=5, ])
 summary(c) ## simple linear effect of dbh is significant but almost nill
-c.null <- lm(dbh.incr.ann~seg.Edge, data=ps.contain[dbh.start.incr>=5,])
+c.null <- lm(dbh.incr.ann~seg.Edge, data=ps.contain[dbh.start>=5,])
 summary(c.null) ### linear effect on size appears to add some predictive power
 
 ## edge slope, random slopes on plot increment interval
 library(lme4)
-d <- lmer(dbh.incr.ann~dbh.start.incr*seg.Edge + 
-            (1+dbh.start.incr|Plot.ID) + 
-            (1+dbh.start.incr|incr.ID) + 
-            (1+dbh.start.incr|interval), 
-          data=ps.contain[dbh.start.incr>=5,],
+d <- lmer(dbh.incr.ann~dbh.start*seg.Edge + 
+            (1+dbh.start|Plot.ID) + 
+            (1+dbh.start|incr.ID) + 
+            (1+dbh.start|interval), 
+          data=ps.contain[dbh.start>=5,],
           REML=F)  ## interesting. No effect of DBH, trees increment as they wish, but lower increment in edge
 summary(d) 
 ## specifying random effects as 1+slope|random vs slope|random appears to have no effect
-d.alt <- lmer(dbh.incr.ann~dbh.start.incr*seg.Edge + 
-            (dbh.start.incr|Plot.ID) + 
-            (dbh.start.incr|incr.ID) + 
-            (dbh.start.incr|interval), 
-          data=ps.contain[dbh.start.incr>=5,],
+d.alt <- lmer(dbh.incr.ann~dbh.start*seg.Edge + 
+            (dbh.start|Plot.ID) + 
+            (dbh.start|incr.ID) + 
+            (dbh.start|interval), 
+          data=ps.contain[dbh.start>=5,],
           REML=F)  ## interesting. No effect of DBH, trees increment as they wish, but lower increment in edge
 summary(d.alt) 
 coef(summary(d.alt))
 coef(summary(d))
 
 ## same random slopes/intercepts, simple effect for edge
-e <- lmer(dbh.incr.ann~dbh.start.incr+seg.Edge + 
-            (dbh.start.incr|Plot.ID) + 
-            (dbh.start.incr|incr.ID) + 
-            (dbh.start.incr|interval), 
-          data=ps.contain[dbh.start.incr>=5,],
+e <- lmer(dbh.incr.ann~dbh.start+seg.Edge + 
+            (dbh.start|Plot.ID) + 
+            (dbh.start|incr.ID) + 
+            (dbh.start|interval), 
+          data=ps.contain[dbh.start>=5,],
           REML=F)  ## interesting. No effect of DBH, trees increment as they wish, but lower increment in edge
 summary(e) ## definitely no DBH effect
-plot(ps.contain[dbh.start.incr>=5, dbh.start.incr], ps.contain[dbh.start.incr>=5, dbh.incr.ann],
-     col=ps.contain[dbh.start.incr>=5, seg.Edge])
-points(ps.contain[dbh.start.incr>=5, dbh.start.incr], predict(e),
+plot(ps.contain[dbh.start>=5, dbh.start], ps.contain[dbh.start>=5, dbh.incr.ann],
+     col=ps.contain[dbh.start>=5, seg.Edge])
+points(ps.contain[dbh.start>=5, dbh.start], predict(e),
        col="blue", pch=16)
 plot(e)
 hist(resid(e)) ## looks pretty fine
@@ -345,20 +332,20 @@ qqline(resid(e))
 
 ### remove dbh.start as a factor for dbh.incr
 e.null <- lmer(dbh.incr.ann~seg.Edge + 
-            (dbh.start.incr|Plot.ID) + 
-            (dbh.start.incr|incr.ID) + 
-            (dbh.start.incr|interval), 
-          data=ps.contain[dbh.start.incr>=5,],
+            (dbh.start|Plot.ID) + 
+            (dbh.start|incr.ID) + 
+            (dbh.start|interval), 
+          data=ps.contain[dbh.start>=5,],
           REML=F)  ## interesting. No effect of DBH, trees increment as they wish, but lower increment in edge
 
 summary(e.null) 
 anova(e.null, e, test="Chisq") ## no dbh effect
 sigma(e.null); sigma(e) ## pretty much the same
 e.null.null <- lmer(dbh.incr.ann~1+ 
-                                (1+dbh.start.incr|Plot.ID) + 
-                                (1+dbh.start.incr|incr.ID) + 
-                                (1+dbh.start.incr|interval), 
-                              data=ps.contain[dbh.start.incr>=5,],
+                                (1+dbh.start|Plot.ID) + 
+                                (1+dbh.start|incr.ID) + 
+                                (1+dbh.start|interval), 
+                              data=ps.contain[dbh.start>=5,],
                               REML=F)  ## interesting. No effect of DBH, trees increment as they wish, but lower increment in edge
 summary(e.null.null) 
 anova(e.null.null, e.null, test="Chisq") ## definitely an edge effect
@@ -376,17 +363,17 @@ anova(e.null.null, e.null, test="Chisq") ## definitely an edge effect
 # plot(dbh0, (biom1-biom0)/biom0) ## Fan fookin tastic, here's our good ol hyperbola and based on a static dbh change
 
 ### what if we are taking too much out of the dbh effect by modeling it separately for everyone?
-f <- lmer(dbh.incr.ann~dbh.start.incr+seg.Edge +
+f <- lmer(dbh.incr.ann~dbh.start+seg.Edge +
             (1|Plot.ID) +
             (1|incr.ID) +
             (1|interval),
-          data=ps.contain[dbh.start.incr>=5,],
+          data=ps.contain[dbh.start>=5,],
           REML=F)  ## even here, not a lot going on with dbh, probably not significant
 summary(f)
-plot(ps.contain[dbh.start.incr>=5, dbh.start.incr], ps.contain[dbh.start.incr>=5, dbh.incr.ann],
-     col=ps.contain[dbh.start.incr>=5, seg.Edge])
-points(ps.contain[dbh.start.incr>=5, dbh.start.incr], predict(f),
-       col=ps.contain[dbh.start.incr>=5, seg.Edge], pch=16)
+plot(ps.contain[dbh.start>=5, dbh.start], ps.contain[dbh.start>=5, dbh.incr.ann],
+     col=ps.contain[dbh.start>=5, seg.Edge])
+points(ps.contain[dbh.start>=5, dbh.start], predict(f),
+       col=ps.contain[dbh.start>=5, seg.Edge], pch=16)
 
 plot(f)
 hist(resid(f)) ## looks pretty fine
@@ -397,7 +384,7 @@ f.null <- lmer(dbh.incr.ann~seg.Edge +
                  (1|Plot.ID) +
                  (1|incr.ID) +
                  (1|interval),
-               data=ps.contain[dbh.start.incr>=5,],
+               data=ps.contain[dbh.start>=5,],
                REML=F)
 summary(f.null)
 anova(f, f.null, test="Chisq") ## nope, p>0.26
@@ -405,7 +392,7 @@ f.null.null <- lmer(dbh.incr.ann~1 +
                  (1|Plot.ID) +
                  (1|incr.ID) +
                  (1|interval),
-               data=ps.contain[dbh.start.incr>=5,],
+               data=ps.contain[dbh.start>=5,],
                REML=F)
 summary(f.null.null)
 anova(f.null, f.null.null, test="Chisq") ## yessir, p<0.001
@@ -414,39 +401,42 @@ coef(summary(f.null)) ## random intercepts only
 ## both models are v. similar in fixed effects
 
 ### consider a model without random effect for year interval (same across all observations)
-g <- lmer(dbh.incr.ann~seg.Edge+dbh.start.incr + 
-                 (dbh.start.incr|Plot.ID) + 
-                 (dbh.start.incr|incr.ID), 
-               data=ps.contain[dbh.start.incr>=5,],
+g <- lmer(dbh.incr.ann~seg.Edge+dbh.start + 
+                 (dbh.start|Plot.ID) + 
+                 (dbh.start|incr.ID), 
+               data=ps.contain[dbh.start>=5,],
                REML=F) 
-g.full <- lmer(dbh.incr.ann~seg.Edge*dbh.start.incr + 
-                 (dbh.start.incr|Plot.ID) + 
-                 (dbh.start.incr|incr.ID), 
-               data=ps.contain[dbh.start.incr>=5,],
+g.full <- lmer(dbh.incr.ann~seg.Edge*dbh.start + 
+                 (dbh.start|Plot.ID) + 
+                 (dbh.start|incr.ID), 
+               data=ps.contain[dbh.start>=5,],
                REML=F) 
 summary(g.full)
 summary(g) ## now looks like we have a dbh effect (negative slope, not huge)
 anova(g, g.full, test="Chisq") ## the interactive term matters!
-plot(ps.contain[dbh.start.incr>=5, dbh.start.incr], ps.contain[dbh.start.incr>=5, dbh.incr.ann],
-     col=ps.contain[dbh.start.incr>=5, seg.Edge])
-points(ps.contain[dbh.start.incr>=5, dbh.start.incr], predict(g),
-       col=ps.contain[dbh.start.incr>=5, seg.Edge], pch=16)
+plot(ps.contain[dbh.start>=5, dbh.start], ps.contain[dbh.start>=5, dbh.incr.ann],
+     col=ps.contain[dbh.start>=5, seg.Edge])
+points(ps.contain[dbh.start>=5, dbh.start], predict(g),
+       col=ps.contain[dbh.start>=5, seg.Edge], pch=16)
 
 g.null <- lmer(dbh.incr.ann~seg.Edge+ 
-                 (dbh.start.incr|Plot.ID) + 
-                 (dbh.start.incr|incr.ID), 
-               data=ps.contain[dbh.start.incr>=5,],
+                 (dbh.start|Plot.ID) + 
+                 (dbh.start|incr.ID), 
+               data=ps.contain[dbh.start>=5,],
                REML=F) 
 anova(g.null, g, test="Chisq") ## sig dbh effect
 
 g.null.null <- lmer(dbh.incr.ann~1+
-                                (dbh.start.incr|Plot.ID) + 
-                                (dbh.start.incr|incr.ID), 
-                              data=ps.contain[dbh.start.incr>=5,],
+                                (dbh.start|Plot.ID) + 
+                                (dbh.start|incr.ID), 
+                              data=ps.contain[dbh.start>=5,],
                               REML=F) 
 anova(g.null.null, g.null, test="Chisq") ### sig edge effect
 
-## OK g is now your operative andy model
+### save out the model for stem growth for use in results
+save(g.full, file = "processed/mod.andy.final.sav")
+
+## OK g.full is now your operative andy model
 
 ### Now push the mixed effects model of dbh increment into the areal-basis model(s) for growth
 andy.dbh <- as.data.table(read.csv("docs/ian/Reinmann_Hutyra_2016_DBH.csv"))
@@ -482,10 +472,10 @@ b2.rand <- rnorm(100, mean=coef(summary(g.full))[3,1], sd=coef(summary(g.full))[
 b3.rand <- rnorm(100, mean=coef(summary(g.full))[4,1], sd=coef(summary(g.full))[4,2]) ## dbh slope, Interior
 
 ### constrain the predictions of dbh increment to the observed increment range
-dbh.incr.min.edge <- ps.contain[seg.Edge=="E" & dbh.start.incr>5, min(dbh.incr.ann, na.rm=T)]
-dbh.incr.max.edge <- ps.contain[seg.Edge=="E" & dbh.start.incr>5, max(dbh.incr.ann, na.rm=T)]
-dbh.incr.min.int <- ps.contain[seg.Edge=="I" & dbh.start.incr>5, min(dbh.incr.ann, na.rm=T)]
-dbh.incr.max.int <- ps.contain[seg.Edge=="I" & dbh.start.incr>5, max(dbh.incr.ann, na.rm=T)]
+dbh.incr.min.edge <- ps.contain[seg.Edge=="E" & dbh.start>5, min(dbh.incr.ann, na.rm=T)]
+dbh.incr.max.edge <- ps.contain[seg.Edge=="E" & dbh.start>5, max(dbh.incr.ann, na.rm=T)]
+dbh.incr.min.int <- ps.contain[seg.Edge=="I" & dbh.start>5, min(dbh.incr.ann, na.rm=T)]
+dbh.incr.max.int <- ps.contain[seg.Edge=="I" & dbh.start>5, max(dbh.incr.ann, na.rm=T)]
 
 ## hunting for why the recent runs of the andy forests are so different from the ones I got prior to CO2USA
 # b0.rand <- rnorm(100, mean=coef(summary(f.null))[1,1], sd=coef(summary(f.null))[1,2])

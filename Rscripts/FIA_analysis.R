@@ -128,7 +128,7 @@ live <- live[!(compID%in%kill.me),] ## 13005 records, 7743 second or more measur
 write.csv(live, "processed/fia.live.stem.dbh.growth.csv")
 
 
-### Modeling growth~dbh (individual stem level) ## this is purely out of curiosity
+### Modeling growth~dbh (individual stem level) ## this is purely out of curiosity & need for a comparable figure panel
 #####
 live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv"))  ##  too-sparse subplots removed
 live$taxa <- live[,paste(GENUS, SPECIES)]
@@ -158,69 +158,74 @@ yyy.null <- lmer(diam.rate~1 +
               (1|YEAR), data=live[lag>0 & STATUS ==1,], REML=F)
 
 anova(yyy.null, yyy)
-## log model of BIOMASS growth rate, growth>0, no hard/soft designation
-summary(live$growth.ann.rel) ## 0.9-3.4%, (-13-53%) -- so looks lower generally than Andy or Street trees
-mod.fia.stem.log <- lm(log(growth.ann.rel)~log(DIAM_T0), data=live[growth.ann.rel>0])
-m1 <- summary(mod.fia.stem.log) #R2 0.03, signficant
-mod.fia.stem.type.log <- lm(log(growth.ann.rel)~log(DIAM_T0)*type, data=live[growth.ann.rel>0])
-m2 <- summary(mod.fia.stem.type.log) # R2 0.04, type H/S not significant
-m3 <- lm(log(growth.ann.rel)~log(DIAM_T0)+type, data=live[growth.ann.rel>0]) ## it IS significant as a categorical factor!
-summary(m3)
-plot(log(live$DIAM_T0), log(live$growth.ann.rel), col=as.numeric(live$type)+1) #S=2, H=1
-abline(a=m2$coefficients[1], b=m2$coefficients[2], lty=2, col="gray55")
-abline(a=m1$coefficients[1], b=m1$coefficients[2], lty=1, col="black")
-## work in untransformed space (exponential model)
-mod1.nls <- nls(growth.ann.rel ~ exp(a + b * log(DIAM_T0)), data=live, start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
-mm <- summary(mod1.nls) ## all factors significant
-mod2.nls <- nls(growth.ann.rel~exp(a+b*log(DIAM_T0)+as.numeric(type=="S")*c), data=live, start=list(a=0, b=0, c=0)) ## tiny upward correction for softwoods
-summary(mod2.nls)
 
-col.type <- c("green", "forestgreen")
-plot(live$DIAM_T0, live$growth.ann.rel, col=col.type[as.numeric(live$type)], pch=15, cex=0.3,
-     xlab="Stem diameter (cm)", ylab="Growth rate (kg/kg)", main="FIA stems")
-test <- seq(live[,min(DIAM_T0)], live[,max(DIAM_T0)], length.out=100)
-lines(test, exp(mm$coefficients[1]+(mm$coefficients[2]*log(test))), col="black", lwd=3)
-legend(x=60, y=0.4, bty="n", legend = c("Hardwood", "Softwood"), fill=c("green", "forestgreen"))
+save(yyy, file="processed/mod.fia.final.sav")
 
-## OK there you have it: a common model for growth~dbh, exponential, but low predictive power (lots of spread)
-
-### what is mean growth rate at different intervals?
-live[biom.delt.spp>0 & DIAM_T0<20, .(length(DIAM_T0), 
-                                             median(growth.ann.rel, na.rm=T),
-                                             mean(growth.ann.rel, na.rm=T),
-                                             sd(growth.ann.rel, na.rm=T)*1.96)]
-live[biom.delt.spp>0 & DIAM_T0>20 & DIAM_T0<30, .(length(DIAM_T0), 
-                                             median(growth.ann.rel, na.rm=T),
-                                             mean(growth.ann.rel, na.rm=T),
-                                             sd(growth.ann.rel, na.rm=T)*1.96)]
-live[biom.delt.spp>0 & DIAM_T0>30 & DIAM_T0<40, .(length(DIAM_T0), 
-                                             median(growth.ann.rel, na.rm=T),
-                                             mean(growth.ann.rel, na.rm=T),
-                                             sd(growth.ann.rel, na.rm=T)*1.96)]
-live[biom.delt.spp>0 & DIAM_T0>40 & DIAM_T0<50, .(length(DIAM_T0), 
-                                             median(growth.ann.rel, na.rm=T),
-                                             mean(growth.ann.rel, na.rm=T),
-                                             sd(growth.ann.rel, na.rm=T)*1.96)]
-live[biom.delt.spp>0 & DIAM_T0>50 , .(length(DIAM_T0), 
-                                             median(growth.ann.rel, na.rm=T),
-                                             mean(growth.ann.rel, na.rm=T),
-                                             sd(growth.ann.rel, na.rm=T)*1.96)]
-
-### so in general there is a lot of variability but a growth rate of about 2ish percent is fine for any diameter -- the model adds litle predictive power to this
-ggplot(live[growth.ann.rel>0,], aes((DIAM_T0), (growth.ann.rel))) + geom_bin2d(bins=80) ## most values are low growth across the diameter range
-ggplot(live[growth.ann.rel>0,], aes(log(DIAM_T0), log(growth.ann.rel))) + geom_bin2d(bins=80)
-
-## Any obvious taxonomic split?
-plot(log(live$DIAM_T0), log(live$growth.ann.rel), col=live$GENUS.num) ## no
-plot(log(live$DIAM_T0), log(live$growth.ann.rel), col=live$type) ## no
-table(live[growth.ann.rel>0, GENUS]) ## mostly acer pinus quercus tsuga betula
-live[GENUS%in%c("Quercus", "Pinus", "Betula", "Tsuga", "Acer"), length(DIAM_T0)]/dim(live)[1] #91% in five genera
-## this is my motivation for applying spp specific allometrics: Large # of Tsuga and Pinus predicted with default hardwood equation
-
-## what is stem denstiy in each plot?
-fack <- live[lag>0,.(length(DIAM_T0), sum(biom0.spp, na.rm=T)), by=.(PlotID, YEAR)]
-hist(fack$V1); summary(fack$V1) ## down to the min 5 per subplot, up to 61
-plot(fack$V2, fack$V1) ## generally higher biomass == higher stem count
+# 
+# ## log model of BIOMASS growth rate, growth>0, no hard/soft designation
+# summary(live$growth.ann.rel) ## 0.9-3.4%, (-13-53%) -- so looks lower generally than Andy or Street trees
+# mod.fia.stem.log <- lm(log(growth.ann.rel)~log(DIAM_T0), data=live[growth.ann.rel>0])
+# m1 <- summary(mod.fia.stem.log) #R2 0.03, signficant
+# mod.fia.stem.type.log <- lm(log(growth.ann.rel)~log(DIAM_T0)*type, data=live[growth.ann.rel>0])
+# m2 <- summary(mod.fia.stem.type.log) # R2 0.04, type H/S not significant
+# m3 <- lm(log(growth.ann.rel)~log(DIAM_T0)+type, data=live[growth.ann.rel>0]) ## it IS significant as a categorical factor!
+# summary(m3)
+# plot(log(live$DIAM_T0), log(live$growth.ann.rel), col=as.numeric(live$type)+1) #S=2, H=1
+# abline(a=m2$coefficients[1], b=m2$coefficients[2], lty=2, col="gray55")
+# abline(a=m1$coefficients[1], b=m1$coefficients[2], lty=1, col="black")
+# ## work in untransformed space (exponential model)
+# mod1.nls <- nls(growth.ann.rel ~ exp(a + b * log(DIAM_T0)), data=live, start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
+# mm <- summary(mod1.nls) ## all factors significant
+# mod2.nls <- nls(growth.ann.rel~exp(a+b*log(DIAM_T0)+as.numeric(type=="S")*c), data=live, start=list(a=0, b=0, c=0)) ## tiny upward correction for softwoods
+# summary(mod2.nls)
+# 
+# ## an early draft figure for stem diameter growth
+# col.type <- c("green", "forestgreen")
+# plot(live$DIAM_T0, live$growth.ann.rel, col=col.type[as.numeric(live$type)], pch=15, cex=0.3,
+#      xlab="Stem diameter (cm)", ylab="Growth rate (kg/kg)", main="FIA stems")
+# test <- seq(live[,min(DIAM_T0)], live[,max(DIAM_T0)], length.out=100)
+# lines(test, exp(mm$coefficients[1]+(mm$coefficients[2]*log(test))), col="black", lwd=3)
+# legend(x=60, y=0.4, bty="n", legend = c("Hardwood", "Softwood"), fill=c("green", "forestgreen"))
+# 
+# ## OK there you have it: a common model for growth~dbh, exponential, but low predictive power (lots of spread)
+# 
+# ### what is mean growth rate at different intervals?
+# live[biom.delt.spp>0 & DIAM_T0<20, .(length(DIAM_T0), 
+#                                              median(growth.ann.rel, na.rm=T),
+#                                              mean(growth.ann.rel, na.rm=T),
+#                                              sd(growth.ann.rel, na.rm=T)*1.96)]
+# live[biom.delt.spp>0 & DIAM_T0>20 & DIAM_T0<30, .(length(DIAM_T0), 
+#                                              median(growth.ann.rel, na.rm=T),
+#                                              mean(growth.ann.rel, na.rm=T),
+#                                              sd(growth.ann.rel, na.rm=T)*1.96)]
+# live[biom.delt.spp>0 & DIAM_T0>30 & DIAM_T0<40, .(length(DIAM_T0), 
+#                                              median(growth.ann.rel, na.rm=T),
+#                                              mean(growth.ann.rel, na.rm=T),
+#                                              sd(growth.ann.rel, na.rm=T)*1.96)]
+# live[biom.delt.spp>0 & DIAM_T0>40 & DIAM_T0<50, .(length(DIAM_T0), 
+#                                              median(growth.ann.rel, na.rm=T),
+#                                              mean(growth.ann.rel, na.rm=T),
+#                                              sd(growth.ann.rel, na.rm=T)*1.96)]
+# live[biom.delt.spp>0 & DIAM_T0>50 , .(length(DIAM_T0), 
+#                                              median(growth.ann.rel, na.rm=T),
+#                                              mean(growth.ann.rel, na.rm=T),
+#                                              sd(growth.ann.rel, na.rm=T)*1.96)]
+# 
+# ### so in general there is a lot of variability but a growth rate of about 2ish percent is fine for any diameter -- the model adds litle predictive power to this
+# ggplot(live[growth.ann.rel>0,], aes((DIAM_T0), (growth.ann.rel))) + geom_bin2d(bins=80) ## most values are low growth across the diameter range
+# ggplot(live[growth.ann.rel>0,], aes(log(DIAM_T0), log(growth.ann.rel))) + geom_bin2d(bins=80)
+# 
+# ## Any obvious taxonomic split?
+# plot(log(live$DIAM_T0), log(live$growth.ann.rel), col=live$GENUS.num) ## no
+# plot(log(live$DIAM_T0), log(live$growth.ann.rel), col=live$type) ## no
+# table(live[growth.ann.rel>0, GENUS]) ## mostly acer pinus quercus tsuga betula
+# live[GENUS%in%c("Quercus", "Pinus", "Betula", "Tsuga", "Acer"), length(DIAM_T0)]/dim(live)[1] #91% in five genera
+# ## this is my motivation for applying spp specific allometrics: Large # of Tsuga and Pinus predicted with default hardwood equation
+# 
+# ## what is stem denstiy in each plot?
+# fack <- live[lag>0,.(length(DIAM_T0), sum(biom0.spp, na.rm=T)), by=.(PlotID, YEAR)]
+# hist(fack$V1); summary(fack$V1) ## down to the min 5 per subplot, up to 61
+# plot(fack$V2, fack$V1) ## generally higher biomass == higher stem count
 
 # ### why not make a nice plot?
 # par(mfrow=c(1,1), mar=c(4,4,3,1))

@@ -1,6 +1,6 @@
 library(raster)
 library(data.table)
-# library(tidyverse)
+library(tidyverse)
 library(lme4)
 library(nlme)
 
@@ -150,13 +150,14 @@ write.csv(rbind(stem.table, plot.table), "processed/stem.plot.model.summstats.cs
 ########### Canopy configuration across study area
 #####
 ## canopy and biomass configurations in this beast -- 1m data
+library(raster)
 a <- Sys.time()
 aoi <- raster("processed/boston/bos.aoi.tif") 
 lulc <- raster("processed/boston/bos.lulc.lumped.tif") %>% crop(aoi) %>% as.vector()
 can <- raster("data/dataverse_files/bostoncanopy_1m.tif") %>% crop(aoi) %>% as.vector()
 biom <- raster("data/dataverse_files/bostonbiomass_1m.tif") %>% crop(aoi) %>% as.vector()
 ed10 <- raster("processed/boston/bos.ed10.tif") %>% crop(aoi) %>% as.vector()
-isa <- raster("processed/boston/bos.isa.tif") %>% crop(aoi) %>% as.vector()
+isa <- raster("processed/boston/bos.isa.RR2.tif") %>% crop(aoi) %>% as.vector()
 # aoi <-  as.vector(aoi)
 Sys.time()-a ## this chunk takes 7 min to load
 
@@ -167,7 +168,7 @@ can.area.tot/aoi.tot ## 31.8% canopy area
 ed.area.tot <- sum(ed10[!is.na(lulc)], na.rm=T)/1E4 ## 3.2k ha
 ed.area.tot/can.area.tot ## 80.9% edge canopy in total area
 biom.tot <- sum(biom[!is.na(lulc)], na.rm=T)/(2*1E6) ### 357 MgCx1000
-isa.tot <- sum(isa[!is.na(lulc)], na.rm=T)/1E4
+isa.tot <- sum(isa[!is.na(lulc)], na.rm=T)/1E4 ## 7127 ha
 
 ### land cover by lulc
 lulc.area.tot <- numeric()

@@ -28,7 +28,7 @@ names(cover) <- c("lulc", "area", "can", "ed", "biom", "isa")
 ```
 ## Results and Discussion
 ### Urban forest structure in Boston
-Tree canopy covered `r round(sum(cover$can)/sum(cover$area),2)*100`% of the study area of which `r round(sum(cover$ed)/sum(cover$can), 2)*100`% was within 10 m of an edge, but canopy, biomass, and fragmentation degree were distributed differently between LULC types (*Figure 1*). Developed and High-density Residential areas covering, respectively, `r round(cover[lulc==2, sum(area)]/sum(cover$area), 2)*100`% and `r round(cover[lulc==3, sum(area)]/sum(cover$area), 2)*100`% of the total urban area contained `r round(cover[lulc==2, sum(can)]/sum(cover$can), 2)*100`% and `r round(cover[lulc==3,sum(can)]/sum(cover$can), 2)*100`% of total canopy area of which `r round(cover[lulc==2, sum(ed)]/cover[lulc==2, sum(can)], 2)*100`% and `r round(cover[lulc==3, sum(ed)]/cover[lulc==3, sum(can)], 2)*100`% was within 10 m of an edge (*Table S1 -- canopy and biomass configuration summary*). In contrast, while Forest areas covered only `r round(cover[lulc==1, sum(area)]/sum(cover$area), 2)*100`% of the study area they contained `r round(cover[lulc==1, sum(can)]/sum(cover$can), 2)*100`% of the total urban canopy and `r round(cover[lulc==1, sum(biom)]/sum(cover$biom), 2)*100`% of total biomass, of which only `r round(cover[lulc==1, sum(ed)]/cover[lulc==1, sum(can)], 2)*100`% was within 10 m of an edge. The extensive area of HD Residential land, containing a significant fraction of the total city biomass under highly fragmented conditions, implies a potentially large contribution of these types of canopy configurations to overall urban "forest" productivity, but which also requires specific accounting for urban- and canopy-specific influence on growth rates. In contrast, Forest-type land cover covered a small fraction of total land surface but contained a significant fraction of overall biomass and at much lower canopy fragmentation than other developed cover types. These relatively small areas of forest might as a result be expected to perform a significant proportion of total C uptake for the city, but under different growing conditions and uptake rates than in surrounding urban trees.
+Tree canopy covered `r round(sum(cover$can)/sum(cover$area),2)*100`% of the study area of which `r round(sum(cover$ed)/sum(cover$can), 2)*100`% was within 10 m of an edge, but canopy, biomass, and fragmentation degree were distributed differently between LULC types (*Figure 1*). Developed and High-density Residential areas covering, respectively, `r round(cover[lulc==2, sum(area)]/sum(cover$area), 2)*100`% and `r round(cover[lulc==3, sum(area)]/sum(cover$area), 2)*100`% of the total urban area contained `r round(cover[lulc==2, sum(can)]/sum(cover$can), 2)*100`% and `r round(cover[lulc==3,sum(can)]/sum(cover$can), 2)*100`% of total canopy area, of which `r round(cover[lulc==2, sum(ed)]/cover[lulc==2, sum(can)], 2)*100`% and `r round(cover[lulc==3, sum(ed)]/cover[lulc==3, sum(can)], 2)*100`% was within 10 m of an edge (*Table S1 -- canopy and biomass configuration summary*). In contrast, while Forest areas covered only `r round(cover[lulc==1, sum(area)]/sum(cover$area), 2)*100`% of the study area they contained `r round(cover[lulc==1, sum(can)]/sum(cover$can), 2)*100`% of the total urban canopy and `r round(cover[lulc==1, sum(biom)]/sum(cover$biom), 2)*100`% of total biomass, of which only `r round(cover[lulc==1, sum(ed)]/cover[lulc==1, sum(can)], 2)*100`% was within 10 m of an edge. The extensive area of HD Residential land, containing a significant fraction of the total city biomass under highly fragmented conditions, implies a potentially large contribution of these types of canopy configurations to overall urban forest productivity, but which also requires specific accounting for urban- and canopy-specific influence on growth rates. In contrast, Forest-type land cover covered a small fraction of total land surface but contained a significant fraction of overall biomass and at the lower range of canopy fragmentation than other developed cover types. These relatively small areas of forest might as a result be expected to perform a significant proportion of total C uptake for the city, but under different growing conditions and C uptake rates than in surrounding urban trees.
 
 ```{r fig_1, echo=FALSE, out.width='100%'}
 knitr::include_graphics('E:/FragEVI/images/Fig1_overview_v1_cr.png')
@@ -38,16 +38,18 @@ knitr::include_graphics('E:/FragEVI/images/Fig1_overview_v1_cr.png')
 ## stem data
 library(tidyverse)
 library(lme4)
+## stem data
 live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv"))
-andy <- as.data.table(read.csv("processed/andy.bai.dbh.pseudo.csv"))
+andy <- as.data.table(read.csv("processed/andy.bai.ps.dbhincr.csv"))
 street <- as.data.table(read.csv("processed/boston/street.trees.dbh.csv"))
 
 ## models ## just slot in whatever is the best model when you decide on it
-load("processed/mod.fia.final.sav")
-load("processed/mod.andy.final.sav")
-load("processed/mod.street.final.sav")
-mfia <- summary(mod.fia.final)
-p.andy <- drop1(mod.andy.final, test="Chisq")
+load("processed/mod.fia.final.sav") ## called yyy
+load("processed/mod.andy.final.sav") ## called g.full
+load("processed/mod.street.final.sav") ## called mod.street.dbhdelta.me
+
+p.fia <- drop1(yyy, test="Chisq")
+p.andy <- drop1(g.full, test="Chisq")
 # p.andy[3,4]
 s.andy <- summary(mod.andy.final)
 mstreet <- summary(mod.street.final)
@@ -91,7 +93,7 @@ Stem growth rate was fastest in street trees, with median annual growth rate of 
 npp.dat <- as.data.table(read.csv("E:/FragEVI/processed/npp.estimates.V4.csv"))
 
 ```
-### Estimates of annual urban tree biomass change
+### Estimates of net annual biomass C uptake
 Estimated biomass gain (MgC/yr) in the combined urban forest + street tree (Hybrid) model was `r as.character(round(npp.dat[aoi>800 & !is.na(lulc), sum(hyb.npp.mod.lin, na.rm=T)/2000],0))` MgC, with the largest annual biomass gains accruing in the Forest and HD Residential land use types (*Table 1*). In contrast, estimates of biomass gain made only on the basis of urban forest growth rates (including edge effects) predicted somewhat lower total biomass gain of `r as.character(round(npp.dat[aoi>800 & !is.na(lulc), sum(andy.npp.tot.mod.lin, na.rm=T)/2000], 0))` MgC. The Hybrid model showed greater biomass accural primarily to non-forested land use types such as High-Density Residential, partly a result of accounting for biomass growth in these open-canopy areas by simulating collections of stems growing at higher street tree-like rates. By comparison, an estimation approach that applied rural forest growth factors to per-ha-canopy biomass density showed lower biomass gain in all land use categories (total gain of `r round(npp.dat[aoi>800 & !is.na(lulc), sum(fia.empir.npp.kg.hw.forest, na.rm=T)/2000], 0)`) MgC, with a greater relative fraction of total biomass gain accruing to forest stands. This reduced estimate, particuarly in non-forested cover types, is partly the result of lower per-stem and per-area biomass gain in rural forest context than seen in urban forest or street trees. The Hybrid estimate apportioned biomass gains similarly to the distribution of total biomass across the study area, with most biomass gains occuring in the more common moderate-density pixels dominated by the open-canopy High-Density Residential type (*Figure 3*). The rural forest model, in contrast, applied lower rural forest-like growth factors overall and apportioned relatively more total biomass gain into the less common high-density pixels dominated by Forest land cover type. In the Hybrid model, median per-pixel annual biomass gain was `r round(npp.dat[aoi>800 & !is.na(lulc), median(((hyb.npp.mod.lin/2000)/aoi)*1E4, na.rm=T)], 2)` MgC/ha compared with `r round(npp.dat[aoi>800 & !is.na(lulc), median(((fia.empir.npp.kg.hw.forest/2000)/aoi)*1E4, na.rm=T)], 2)` MgC/ha in the rural forest model, with the largest comparative increases in Forest, HD Residential and LD Residential areas. 
 
 ```{r fig_3, echo=FALSE, out.width='100%'}

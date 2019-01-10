@@ -286,6 +286,7 @@ anova(hm2.me3, hm3.me3) ## NS 3rd order
 
 mod.street.dbhdelta.me <- hm2.me3
 save(mod.street.dbhdelta.me, file="processed/mod.street.dbhdelta.me.sav")
+save(mod.street.dbhdelta.me, file="processed/mod.street.final.sav") ## for use in results writeup
 load("processed/mod.street.dbhdelta.me.sav")
 plot(mod.street.dbhdelta.me)
 hist(residuals(mod.street.dbhdelta.me)) ## looks good enough to me
