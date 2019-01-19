@@ -1,7 +1,7 @@
 ---
-title: "Boston NPP estimates -- Results"
+title: "Boston C uptake -- Results"
 author: "Drew Trlica"
-date: "November 15, 2018"
+date: "January 16, 2018"
 output:
   word_document: default
   html_document: default
@@ -39,28 +39,39 @@ knitr::include_graphics('E:/FragEVI/images/Fig1_overview_v1_cr.png')
 library(tidyverse)
 library(lme4)
 ## stem data
-live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv"))
-andy <- as.data.table(read.csv("processed/andy.bai.ps.dbhincr.csv"))
-street <- as.data.table(read.csv("processed/boston/street.trees.dbh.csv"))
+live <- as.data.table(read.csv("E:/FragEVI/processed/fia.live.stem.dbh.growth.csv"))
+andy <- as.data.table(read.csv("E:/FragEVI/processed/andy.bai.ps.dbhincr.csv"))
+street <- as.data.table(read.csv("E:/FragEVI/processed/boston/street.trees.dbh.csv"))
 
-## models ## just slot in whatever is the best model when you decide on it
-load("processed/mod.fia.final.sav") ## called yyy
-load("processed/mod.andy.final.sav") ## called g.full
-load("processed/mod.street.final.sav") ## called mod.street.dbhdelta.me
+## models for stem growth 
+load("E:/FragEVI/processed/mod.fia.final.sav") ## called yyy
+load("E:/FragEVI/processed/mod.andy.final.sav") ## called g.full
+load("E:/FragEVI/processed/mod.street.final.sav") ## called mod.street.dbhdelta.me
 
-p.fia <- drop1(yyy, test="Chisq")
-p.andy <- drop1(g.full, test="Chisq")
-# p.andy[3,4]
-s.andy <- summary(mod.andy.final)
-mstreet <- summary(mod.street.final)
+mfia <- summary(yyy)
+mandy <- summary(g.full)
+mstreet <- summary(mod.street.dbhdelta.me)
+
+# p.fia <- drop1(yyy, test="Chisq")
+# p.andy <- drop1(g.full, test="Chisq")
 
 ### plot level data/models
-live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomed.csv"))
-load("processed/mod.live.plot.final.sav")
+live.plot <- as.data.table(read.csv("E:/FragEVI/processed/fia.live.plot.groomedV2.csv"))
+load("E:/FragEVI/processed/mod.live.plot.final.sav")
 mfia.plot <- summary(mod.live.plot.final)
-andy.plot <- as.data.table(read.csv("processed/andy.plot.groomed.csv"))
-load("processed/mod.andy.plot.final.sav")
-mandy.plot <- summary(mod.andy.plot.final)
+
+# andy.plot <- read.csv("E:/FragEVI/processed/andy.dbh.growth.iter.csv")
+andy.plot.sum <- (read.csv("E:/FragEVI/processed/andy.plot.growth.iter.csv"))
+
+andy.plot.edge <- andy.plot.sum[andy.plot.sum$seg==10,]
+andy.plot.edge[,5:104] <- andy.plot.edge[,5:101]/andy.plot.edge$Init.biomass.kg
+andy.plot.edge$pred.med <- apply(andy.plot.edge[,5:101], FUN=median, MARGIN=1) ## median growth predicted
+andy.plot.edge$Init.biomass.kg <- (andy.plot.edge$Init.biomass.kg/2000)/(10*30)*1E4
+andy.plot.int <- andy.plot.sum[andy.plot.sum$seg!=10,]
+andy.plot.int[,5:104] <- andy.plot.int[,5:101]/andy.plot.int$Init.biomass.kg
+andy.plot.int$pred.med <- apply(andy.plot.int[,5:101], FUN=median, MARGIN=1) ## median growth predicted
+andy.plot.int$Init.biomass.kg <- (andy.plot.int$Init.biomass.kg/2000)/(10*30)*1E4
+
 ### to get the formatting of p values printed out right
 p.fixer <- function(x){
   if(x<0.001){
@@ -72,40 +83,59 @@ p.fixer <- function(x){
       return(round(x, 3))
     }
 }
+
+make.quantile <- function(x, d){ ## vector, decimal to round
+  rg <- quantile(x, probs=c(0.05, 0.5, 0.95))
+  med <- round(rg[2], d)
+  lo <- round(rg[1], d)
+  hi <- round(rg[3], d)
+  return(paste0(med, " (", lo, "-", hi, ")"))
+}
 ```
 
-### Tree growth rates in urban context
-On an individual stem basis, urban trees grew more quickly and showed increased growth nearer to canopy edges (*Figure 2*). Rural forest trees grew more slowly than urban forest trees, with median DBH `r paste(round(live[,median(DIAM_T0, na.rm=T)], digits=1), " (", round(live[,quantile(DIAM_T0, probs=c(0.05))], 1), "-", round(live[,quantile(DIAM_T0, probs=c(0.95))], 1), ")", sep="")` cm corresponding to median annual growth of `r paste(round(live[,median(growth.ann.rel, na.rm=T)], digits=3), " (", round(live[,quantile(growth.ann.rel, probs=c(0.05))], 3), "-", round(live[,quantile(growth.ann.rel, probs=c(0.95))], 3), ")", sep="")` kg/kg. The best fit model for rural stem growth rate (*Table S2 -- model coefficients and p values*) (residual std. error `r round(mfia$sigma, 3)`) showed a significant negative relationship with log-DBH (p<`r p.fixer(mfia$coefficients[2,4])`) and a significantly higher per-stem rate of growth in softwood species compared to hardwoods (p<`r p.fixer(mfia$coefficients[3,4])`). On an areal basis, complete DBH measurements over 4.8 years in all rural forest trees >12.7 cm DBH showed a comparble significant negative exponential relationship (residual standard error (RSE) `r round(mfia.plot$sigma, 3)`) between annual hardwood biomass gain (MgC per MgC/ha) and total biomass density (MgC/ha) (p<`r p.fixer(mfia.plot$coefficients[2,4])`), excluding plots with <25% hardwoods by total biomass (*Figure S1 -- plot level growth*). Median areal growth rate in hardwood species in rural forest plots was `r paste(round(live.plot[,median(biom.growth.ann.hw, na.rm=T)], digits=3), " (", round(live.plot[,quantile(biom.growth.ann.hw, probs=c(0.05))], 3), "-", round(live.plot[,quantile(biom.growth.ann.hw, probs=c(0.95))], 3), ")", sep="")` MgC per MgC/ha, corresponding to median biomass denstiy of `r paste(round(live.plot[,median(total.biom0.MgC.ha, na.rm=T)], digits=1), " (", round(live.plot[,quantile(total.biom0.MgC.ha, probs=c(0.05))], 1), "-", round(live.plot[,quantile(total.biom0.MgC.ha, probs=c(0.95))], 1), ")", sep="")` MgC/ha.
+### Tree and forest growth rates in varying urban contexts
+Stem growth rate was fastest in street trees, with median annual growth rate of `r make.quantile(street[record.good==1 & dbh.2006>5, diam.rate], 2)` cm yr-1 corresponding to median DBH of `r make.quantile(street[record.good==1 & dbh.2006>5, dbh.2006], 1)` cm. The best fit mixed model for street tree stem growth (RSE `r round(mstreet$sigma, 2)`) (*Figure 2*) showed significant fixed effect decline in annual DBH increment with increasing DBH (*Table S2*). Trees in urban forest grew faster than in rural forest, and grew more quickly within 10 m of a canopy edge than in canopy interior (20-30 m). Median DBH increment of edge (<10 m) and interior stems was `r make.quantile(andy[seg.Edge=="E", dbh.incr.ann], 2)` cm yr-1 and `r make.quantile(andy[seg.Edge=="I", dbh.incr.ann], 2)` cm yr-1, corresponding to median DBH of `r make.quantile(andy[seg.Edge=="E", dbh.start], 1)` cm and `r make.quantile(andy[seg.Edge=="I", dbh.start], 1)` cm, respectively. The best fit mixed model for urban forest stem growth (RSE `r round(mandy$sigma, 2)`) showed a significant fixed effect decline in DBH increment with DBH with significantly lower slope and intercept in interior-grown stems (*Table S2*). Rural forest trees grew more slowly than urban forest or street trees, with median growth rate of `r make.quantile(live[lag!=0 & STATUS==1, diam.rate], 2)` cm yr-1 corresponding to median DBH `r make.quantile(live[lag!=0 & STATUS==1,DIAM_T0], 1)` cm. The best fit model for rural stem growth rate (RSE `r round(mfia$sigma, 2)`) showed a significant fixed effect increase in DBH increment with stem DBH. The range and median of stem DBH in each growth context were similar, except for a lack of trees 5-12 cm DBH range in the rural forest sample. However the street tree sample included very few conifers and a relatively large fraction of non-local taxa, including members of *Ginkgo*, *Gleditsia*, *Pyrus*, *Tilia* and *Zelkova* (*Table S4*). Variability in stem growth rate across the range of sizes was greater for street trees than urban or rural forest-grown trees, but all three contexts showed a significant fixed effect of stem size on growth increment.
+
+Projecting modeled stem growth rates for stems >5 cm DBH by edge distance class, median predicted areal-basis biomass growth rate in urban forest plots was `r make.quantile(andy.plot.edge$pred.med, 3)` Mg-gain Mg-biomass-1 in edge plots (>10 m) and `r make.quantile(andy.plot.int$pred.med, 3)` Mg-gain Mg-biomass-1 in interior plots (20-30 m). These growth rates corresponded to plot biomass density of `r make.quantile(andy.plot.edge$Init.biomass.kg, 0)` and `r make.quantile(andy.plot.int$Init.biomass.kg, 0)` MgC ha-1 in edge and interior plots, respectively. Both edge and interior plots showed a significant negative effect of biomass density on areal-basis biomass growth rate, with a significantly lower intercept for interior plots (*Table S2*). In rural forest plots, areal-basis biomass growth rate in all stems >12.7 cm DBH (MgC-gain MgC-biomass-1) was `r make.quantile(live.plot[HWfrac>0.25,biom.delt.ann.rel.HW], 3)` with plot biomass density of `r make.quantile(live.plot[HWfrac>0.25,biom0.MgC.ha], 0)` MgC ha-1. Rural forest plots showed a significant negative fixed effects trend in log-biomass growth rate with increasing plot biomass density (*Table S2*). The design of the street tree survey did not allow for modeled stem growth rates to be projected to areal-basis biomass growth, necessitating the simulation of individual stem assemblages across the study area. 
 
 ```{r fig_2, echo=FALSE, out.width='100%'}
-knitr::include_graphics('E:/FragEVI/images/Fig2A_stem-dbh-growth_mono_logxform.png')
+knitr::include_graphics('E:/FragEVI/images/Fig2A_stem-dbh-incr_mono.png')
 ```
 
 
-Trees in urban forest grew faster than in rural forest, and grew more quickly within 10 m of a canopy edge than in canopy interior (20-30 m). Median DBH of edge (<10 m) and interior stems was `r round(andy[seg.Edge=="E", median(dbh.start, na.rm=T)], digits=1)` cm and `r round(andy[seg.Edge=="I", median(dbh.start, na.rm=T)], digits=1)` cm, respectively, corresponding to median annual growth of `r round(andy[seg.Edge=="E", median(biom.rel.ann, na.rm=T)], digits=3)` kg/kg and `r round(andy[seg.Edge=="I", median(biom.rel.ann, na.rm=T)], digits=3)` kg/kg. The best fit model for urban forest stem growth rate (estimating random slopes and intercepts for sample plot, year interval, and stem ID) showed a significant negative relationship with log-DBH (p<`r p.fixer(p.andy[2,4])`) and a significantly lower growth rate in interior-grown stems (p<`r p.fixer(p.andy[3,4])`). Projecting these stem growth rates to the record of all stems >5 cm DBH by edge distance class in the urban forest plots, there was a corresponding significant linear relationship (RSE `r round(mandy.plot$sigma, 3)`) an an areal basis between annual biomass gain and biomass density (p<`r p.fixer(mandy.plot$coefficients[2,4])`), with significant lower biomass gain overall in interior plots (p< `r p.fixer(mandy.plot$coefficients[3,4])`). In the urban forest plots median areal growth rate in edge biomass was `r paste(round(andy.plot[seg.F=="E",median(rel.gain.ps, na.rm=T)], digits=3), " (", round(andy.plot[seg.F=="E",quantile(rel.gain.ps, probs=c(0.05))], 3), "-", round(andy.plot[seg.F=="E",quantile(rel.gain.ps, probs=c(0.95))], 3), ")", sep="")` MgC per MgC/ha, corresponding to median edge biomass density of `r paste(round(andy.plot[seg.F=="E",median(biom.MgC.ha, na.rm=T)], digits=1), " (", round(andy.plot[seg.F=="E",quantile(biom.MgC.ha, probs=c(0.05))], 1), "-", round(andy.plot[seg.F=="E",quantile(biom.MgC.ha, probs=c(0.95))], 1), ")", sep="")` MgC/ha. In contrast, in interior biomass median areal growth rate was `r paste(round(andy.plot[seg.F=="I",median(rel.gain.ps, na.rm=T)], digits=3), " (", round(andy.plot[seg.F=="I",quantile(rel.gain.ps, probs=c(0.05))], 3), "-", round(andy.plot[seg.F=="I",quantile(rel.gain.ps, probs=c(0.95))], 3), ")", sep="")` MgC per MgC/ha, corresponding to median interior biomass density of `r paste(round(andy.plot[seg.F=="I",median(biom.MgC.ha, na.rm=T)], digits=1), " (", round(andy.plot[seg.F=="I",quantile(biom.MgC.ha, probs=c(0.05))], 1), "-", round(andy.plot[seg.F=="I",quantile(biom.MgC.ha, probs=c(0.95))], 1), ")", sep="")` MgC/ha.
-
-Stem growth rate was fastest in street trees, with median annual growth rate of `r round(street[record.good==1 & dbh.2006>5, median(npp.ann.rel, na.rm=T)], digits=3)` kg/kg corresponding to median DBH of `r round(street[record.good==1 & dbh.2006>5, median(dbh.2006, na.rm=T)], digits=1)` cm. As in the other tree stem samples, the best fit model for street tree stem growth (RSE `r round(mstreet$sigma, 3)`) showed a significant negative relationship with log-DBH (p<`r p.fixer(mstreet$coefficients[2,4])`). The sampling design of the street tree survey did not allow for these growth rates to be estimated on an areal basis as in the rural- and urban-forest samples, necessitating the simulation of individual stem assemblages to approximate biomass and productivity by cell across the study area. *Is it worth presenting some aggregate stats on the simulated street tree results here?*
-
-**Context** How things compare to other measured rates in literature etc. The range and median stem DBH in each sample context were similar, but the street tree sample included very few conifers and a relatively large fraction of non-native taxa, primarily deciduous hardwoods including members of *Gleditsia*, *Zelkova* and *Pyrus*.
+**Context** How things compare to other measured rates in literature etc.
 
 
 ```{r npp_summary, echo=FALSE}
-npp.dat <- as.data.table(read.csv("E:/FragEVI/processed/npp.estimates.V4.csv"))
+npp.dat <- as.data.table(read.csv("E:/FragEVI/processed/results/hybrid.results.V6.csv"))
+npp.tot <- as.data.table(read.csv("E:/FragEVI/processed/results/npp.tot.summary.v6.csv"))
+fia.tot <- as.data.table(read.csv("E:/FragEVI/processed/results/npp.FIA.tot.summary.empriV5.csv"))
+pix.sum <- as.data.table(read.csv("E:/FragEVI/processed/results/npp.pix.summary.v6.csv"))
 
+make.quantile <- function(x, d){ ## vector, decimal to round
+  rg <- quantile(x, probs=c(0.05, 0.5, 0.95))
+  med <- round(rg[2], d)
+  lo <- round(rg[1], d)
+  hi <- round(rg[3], d)
+  return(paste0(med, " (", lo, "-", hi, ")"))
+}
 ```
 ### Estimates of net annual biomass C uptake
-Estimated biomass gain (MgC/yr) in the combined urban forest + street tree (Hybrid) model was `r as.character(round(npp.dat[aoi>800 & !is.na(lulc), sum(hyb.npp.mod.lin, na.rm=T)/2000],0))` MgC, with the largest annual biomass gains accruing in the Forest and HD Residential land use types (*Table 1*). In contrast, estimates of biomass gain made only on the basis of urban forest growth rates (including edge effects) predicted somewhat lower total biomass gain of `r as.character(round(npp.dat[aoi>800 & !is.na(lulc), sum(andy.npp.tot.mod.lin, na.rm=T)/2000], 0))` MgC. The Hybrid model showed greater biomass accural primarily to non-forested land use types such as High-Density Residential, partly a result of accounting for biomass growth in these open-canopy areas by simulating collections of stems growing at higher street tree-like rates. By comparison, an estimation approach that applied rural forest growth factors to per-ha-canopy biomass density showed lower biomass gain in all land use categories (total gain of `r round(npp.dat[aoi>800 & !is.na(lulc), sum(fia.empir.npp.kg.hw.forest, na.rm=T)/2000], 0)`) MgC, with a greater relative fraction of total biomass gain accruing to forest stands. This reduced estimate, particuarly in non-forested cover types, is partly the result of lower per-stem and per-area biomass gain in rural forest context than seen in urban forest or street trees. The Hybrid estimate apportioned biomass gains similarly to the distribution of total biomass across the study area, with most biomass gains occuring in the more common moderate-density pixels dominated by the open-canopy High-Density Residential type (*Figure 3*). The rural forest model, in contrast, applied lower rural forest-like growth factors overall and apportioned relatively more total biomass gain into the less common high-density pixels dominated by Forest land cover type. In the Hybrid model, median per-pixel annual biomass gain was `r round(npp.dat[aoi>800 & !is.na(lulc), median(((hyb.npp.mod.lin/2000)/aoi)*1E4, na.rm=T)], 2)` MgC/ha compared with `r round(npp.dat[aoi>800 & !is.na(lulc), median(((fia.empir.npp.kg.hw.forest/2000)/aoi)*1E4, na.rm=T)], 2)` MgC/ha in the rural forest model, with the largest comparative increases in Forest, HD Residential and LD Residential areas. 
+Estimated net annual biomass C uptake (GgC/yr) in the Hybrid Urban model was `r npp.tot[7,3]` GgC, with the largest annual biomass gains in the Forest and HD Residential land use types (*Table 1*). By comparison, applying rural forest growth factors to per-ha-canopy biomass density showed lower biomass gain in all land use categories, with a total of `r fia.tot[7,4]`) GgC/yr, with a greater relative fraction of total biomass gain accruing to forest stands. This reduced estimate, particuarly in non-forested cover types, is partly the result of lower per-stem and per-area biomass gain in rural forest context than seen in urban edge forest or individual street trees. The Hybrid estimate apportioned biomass gains similarly to the distribution of total biomass across the study area, with most biomass gains occuring in the more common moderate-density pixels dominated by the open-canopy High-Density Residential type. The rural forest model, in contrast, apportioned relatively more total biomass gain into the less common Forest land cover type. In the Hybrid Urban model, median per-pixel annual biomass gain was `r pix.sum[7,5]` MgC/ha compared with `r pix.sum[7,3]` MgC/ha in the Rural Forest model, with the largest comparative increases in Forest, HD Residential and LD Residential areas. 
 
 ```{r fig_3, echo=FALSE, out.width='100%'}
 knitr::include_graphics('E:/FragEVI/images/Fig4_biom-dens_NPP_comb.png')
 ```
 
 ### Effect of biomass density area basis 
-The model results illustrate the sensitivity of estimating biomass productivity via its relationship to biomass density due to the ambiguity of the areal basis to be used in determning biomass density in heterogeneous scattered urban tree stands. An example of typical discontinous urban canopy in the study area shows that at moderate levels of both canopy and impervious cover, estimates of biomass density in a given area can vary from 25 MgC/ha-ground to 76 MgC/ha-canopy to 404 MgC/ha-pervious (*Figure 4*). In the same area, common remotely sensed measures of vegetation cover and function such as NDVI may indicate a relatively barren condition though the area contains appreciable canopy. Across the Boston study area, the method of determining the areal basis (ground, canopy, or pervious area) for biomass density across the study area had significant and differential effects on biomass density frequency distributions that varied with land use type (*Figure S2*). On a canopy basis, biomass density tended somewhat higher in Forest type pixels dominated by larger mature trees, while developed pixel types showed a wider lower range of densities, possibly reflecting a wider mix of generally younger street and backyard trees. In contrast, biomass density distributions on a ground-area basis were skewed lower due to the high frequency of discontinuous canopy pixels. Density distributions on a pervious-area basis showed a higher portion of both extremely high and extremely low values. As this study used the empirical relationship between stand biomass density and productivity on an areal basis measured in closed-canopy forest to estimate biomass gain, ambiguities in the driving biomass density will result in ambiguities in estimated productivity. For instance, in comparison to the results obtained via canopy-area biomass density estimates, applying rural forest growth factors to biomass density on a ground-area basis rendered an estimate of `r round(npp.dat[aoi>800, sum(andy.npp.tot.mod.lin, na.rm=T)/2000], 0)`, reasonably similar to the estimate obtained using edge-specific urban forest growth factors (*Table 1*). These coinciding results, rather than reflecting similar underlying ecosystem processes, are instead likely an artifact of the neagatively shifted distribution of pixel biomass density when judged on a ground-area basis due to the prevalence of discontinuous tree stands in the study area. 
+The model results also illustrate the sensitivity of estimating biomass productivity via its relationship to biomass density due to the ambiguity of the areal basis to be used in determning biomass density in heterogeneous scattered urban tree stands. An example of typical discontinous urban canopy in the study area shows that at moderate levels of both canopy and impervious cover, estimates of biomass density in a given area can vary from 25 MgC/ha-ground to 76 MgC/ha-canopy to 404 MgC/ha-pervious (*Figure 3*). In the same area, common remotely sensed measures of vegetation cover and function such as NDVI may indicate a relatively barren condition though the area contains appreciable canopy. Application of ground-basis biomass densitiy calculations resulted in somewhat higher overall C uptake estimates compared to canopy-basis calculations even under identical underlying growth rate models due to generally lower shift in calculated biomass density corresponding to generally higher predicted growth rates (Table 1). Rather than reflecting underlying ecosystem processes better captured by modeling tree growth based on urban conditions and measurements, these up-adjusted results instead likely an artifact of the neagatively shifted distribution of pixel biomass density on a ground-area basis in the discontinuous tree stands in the study area. 
 
 ```{r fig_4, echo=FALSE, out.width='100%'}
 knitr::include_graphics('E:/FragEVI/images/Fig2_VegCharacter_southend1_cr.png')
 ```
+
+### Policy projections to 2040
+TBD
 
 ## Conclusions
 Estimating forest productivity in urban areas has often required reliance on incomplete or infrequent field surveys of living trees, reliance on estimation models developed in other bioclimatic regions or non-urban systems, or application of coarse-resolution remote sensing measurements that obscure heterogeneity in urban vegetation cover that carry meaningful ecosystem functional consequences, such as the prevalence of canopy edges. Difficulties in accurately estimating forest productivity in urban context may also be due to two general types of ambiguity: The first ambiguity is that the fundamental relationship between tree size and productivity measured in rural forest stands may not be reflected in urban-grown trees that experience different canopy environments, nutrient inputs, and a host of other anthropogenic effects not present in rural forests. To address this ambituity, this work has attempted to apply size-to-growth-rate relationships that were measured in local urban-grown trees that may more accurately represent forest ecosystem processes at work in the local urban context. 
@@ -119,15 +149,3 @@ Thus even if accurate and reasonably spatially resolved inventories of forest ca
 Therefore you should be careful and do it the way we did it. Canopy is the better metric because...
 
 As growth and C uptake in forest stands is very often predicted on the basis of biomass density (also a proxy for stand age), these ambiguities in the call for caution in selecting an appropriate method for ascertiaining biomass density, particularly in scattered open-canopy urban stands.
-
-## Supplemental Information
-
-```{r fig_S1, echo=FALSE, out.width='66%'}
-knitr::include_graphics('E:/FragEVI/images/FigS1_plot_level_growth.png')
-```
-
-
-```{r fig_S2, echo=FALSE, out.width='100%'}
-knitr::include_graphics('E:/FragEVI/images/FigS2_biom_dens_methods_byLULC.png')
-```
-

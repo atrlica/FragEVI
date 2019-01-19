@@ -163,97 +163,98 @@ library(ggplot2)
 
 ### FIGURE 1: CANOPY AREA STACKED BY DISTANCE+LULC
 #####
-# ### canopy edge area cumulative, extract by LULC collapsed classes
-# library(data.table)
-# library(raster)
-# bos.forest <- raster("processed/boston/bos.forest_only.tif")
-# bos.dev <- raster("processed/boston/bos.dev_only.tif")
-# bos.hdres <- raster("processed/boston/bos.hdres_only.tif")
-# bos.ldres <- raster("processed/boston/bos.ldres_only.tif")
-# bos.lowveg <- raster("processed/boston/bos.lowveg_only.tif")
-# bos.water <- raster("processed/boston/bos.water_only.tif")
-# 
-# for.sum <- sum(getValues(bos.forest), na.rm=T)
-# dev.sum <- sum(getValues(bos.dev), na.rm=T)
-# hdres.sum <- sum(getValues(bos.hdres), na.rm=T)
-# ldres.sum <- sum(getValues(bos.ldres), na.rm=T)
-# lowveg.sum <- sum(getValues(bos.lowveg), na.rm=T)
-# water.sum <- sum(getValues(bos.water), na.rm=T)
-# bos.aoi <- raster("processed/boston/bos.aoi.tif")
-# aoi.sum <- sum(getValues(bos.aoi), na.rm=T)
-# for.sum/aoi.sum ## 8.2%
-# dev.sum/aoi.sum ## 38%
-# hdres.sum/aoi.sum ## 38.7%
-# ldres.sum/aoi.sum ## 2.0%
-# lowveg.sum/aoi.sum # 10.7%
-# water.sum/aoi.sum # 2.1%
-# 
-# ### processing script to get cumulative area by edge distance within LULC
-# ## sum of canopy area, masked by lulc
-# can.sum.ma <- function(x, m) { # x is canopy 0/1 1m raster object, m is mask (LULC 1/0 map)
-#   bs <- blockSize(x)
-#   y <- integer()
-#   for (i in 1:bs$n) {
-#     v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i])
-#     z <- getValues(m, row=bs$row[i], nrows=bs$nrows[i])
-#     v[v>1 | v<0] <- NA  # for some reason some of the NA's are getting labeled as 120
-#     v[z!=1] <- 0 ## cancel values outside mask area
-#     y <- c(y, sum(v, na.rm=T))
-#     print(paste("finished block", i, "of", bs$n))
-#   }
-#   return(y)
-# }
-# 
-# ### get the total area of canopy (excluding tiny canopy gaps that are filtered in buffer calculations)
-# can.buffs <- list.files("processed/boston/")
-# can.buffs <- can.buffs[grep(pattern = "bos.nocan_", x = can.buffs)]
-# can.buffs <- can.buffs[grep(pattern=".tif", x=can.buffs)]
-# can.buffs <- can.buffs[!grepl(pattern = ".vat", x=can.buffs)]
-# can.buffs <- can.buffs[!grepl(pattern = ".aux", x=can.buffs)]
-# can.buffs <- can.buffs[!grepl(pattern = ".ovr", x=can.buffs)]
-# # buff.dist <- as.integer(unlist(rm_between(can.buffs, "nocan_", "mbuff", extract=TRUE)))
-# buff.dist <- sub("bos.nocan_", "", can.buffs); buff.dist <- as.integer(sub("mbuff.tif", "", buff.dist))
-# can.master <- raster("processed/boston/bos_can01_filt.tif")
-# # can.tot <- sum(getValues(can.master), na.rm=T) ### 31.7% of boston raster is canopy
-# # aoi.master <- raster("processed/boston/bos.aoi.tif")
-# # aoi.tot <- sum(getValues(aoi.master), na.rm=T)
-# 
-# ## make a data table of edge pixels by lulc
-# can.master <- as.data.table(as.data.frame(raster("processed/boston/bos_can01_filt.tif")))
-# can.10mbuff <- as.data.table(as.data.frame(raster("processed/boston/bos.ed10.tif")))
-# lulc <- as.data.table(as.data.frame(raster("processed/boston/bos.lulc.lumped.tif")))
-# fat <- fwrite(cbind((can.master),
-#              (can.10mbuff),
-#              (lulc)), "processed/boston/bos.lulc_candist.csv")
-# write.csv(fat, "processed/boston/bos.lulc_candist.csv")
-# ## cumulative canopy area by edge distance, for each lulc class
-# lu.classes <- c("forest", "dev", "hdres", "ldres", "lowveg", "water")
-# for(l in 1:length(lu.classes)){
-#   print(paste("initializing", lu.classes[l]))
-#   if(exists("results")){rm(results)} ## clean up previous store file
-#   tot <- integer()
-#   dist <- 0
-#   ma <- raster(paste("processed/boston/bos.", lu.classes[l], "_only.tif", sep=""))
-#   area.tot <- sum(getValues(ma), na.rm=T) ## total size of the lulc target
-#   dog <- can.sum.ma(can.master, ma)
-#   tot <- c(tot, sum(dog, na.rm=T))
-# 
-#   for(g in 1:length(can.buffs)){
-#     print(paste("working on", can.buffs[g], "in", lu.classes[l]))
-#     r <- raster(paste("processed/boston/", can.buffs[g], sep=""))
-#     dog <- can.sum.ma(r, ma)
-#     tot <- c(tot, sum(dog, na.rm=T))
-#     dist <- c(dist, buff.dist[g])
-#   }
-#   results <- cbind(dist, tot)
-#   results <- results[order(dist),]
-#   results <- as.data.frame(results)
-#   colnames(results) <- c("dist", "pix.more.than")
-#   results$pix.less.than <- results$pix.more.than[1]-results$pix.more.than ## recall that this method completely leaves out any gap areas that are <50m2 -- neither counted as canopy nor as gap area
-#   results$less.rel <- results$pix.less.than/results$pix.more.than[1]
-#   results$frac.tot.area <- results$pix.less.than/area.tot
-#   write.csv(results, paste("processed/bos.can.cummdist.", lu.classes[l], ".csv", sep=""))
-# }
+### canopy edge area cumulative, extract by LULC collapsed classes
+library(data.table)
+library(raster)
+bos.forest <- raster("processed/boston/bos.forest_only.tif")
+bos.dev <- raster("processed/boston/bos.dev_only.tif")
+bos.hdres <- raster("processed/boston/bos.hdres_only.tif")
+bos.ldres <- raster("processed/boston/bos.ldres_only.tif")
+bos.lowveg <- raster("processed/boston/bos.lowveg_only.tif")
+bos.water <- raster("processed/boston/bos.water_only.tif")
+
+for.sum <- sum(getValues(bos.forest), na.rm=T)
+dev.sum <- sum(getValues(bos.dev), na.rm=T)
+hdres.sum <- sum(getValues(bos.hdres), na.rm=T)
+ldres.sum <- sum(getValues(bos.ldres), na.rm=T)
+lowveg.sum <- sum(getValues(bos.lowveg), na.rm=T)
+water.sum <- sum(getValues(bos.water), na.rm=T)
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+aoi.sum <- sum(getValues(bos.aoi), na.rm=T)
+for.sum/aoi.sum ## 8.2%
+dev.sum/aoi.sum ## 38%
+hdres.sum/aoi.sum ## 38.7%
+ldres.sum/aoi.sum ## 2.0%
+lowveg.sum/aoi.sum # 10.7%
+water.sum/aoi.sum # 2.1%
+
+### processing script to get cumulative area by edge distance within LULC
+## sum of canopy area, masked by lulc
+can.sum.ma <- function(x, m) { # x is canopy 0/1 1m raster object, m is mask (LULC 1/0 map)
+  bs <- blockSize(x)
+  y <- integer()
+  for (i in 1:bs$n) {
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i])
+    z <- getValues(m, row=bs$row[i], nrows=bs$nrows[i])
+    v[v>1 | v<0] <- NA  # for some reason some of the NA's are getting labeled as 120
+    v[z!=1] <- 0 ## cancel values outside mask area
+    y <- c(y, sum(v, na.rm=T))
+    print(paste("finished block", i, "of", bs$n))
+  }
+  return(y)
+}
+
+### get the total area of canopy (excluding tiny canopy gaps that are filtered in buffer calculations)
+can.buffs <- list.files("processed/boston/")
+can.buffs <- can.buffs[grep(pattern = "bos.nocan_", x = can.buffs)]
+can.buffs <- can.buffs[grep(pattern=".tif", x=can.buffs)]
+can.buffs <- can.buffs[!grepl(pattern = ".vat", x=can.buffs)]
+can.buffs <- can.buffs[!grepl(pattern = ".aux", x=can.buffs)]
+can.buffs <- can.buffs[!grepl(pattern = ".ovr", x=can.buffs)]
+# buff.dist <- as.integer(unlist(rm_between(can.buffs, "nocan_", "mbuff", extract=TRUE)))
+buff.dist <- sub("bos.nocan_", "", can.buffs); buff.dist <- as.integer(sub("mbuff.tif", "", buff.dist))
+can.master <- raster("processed/boston/bos_can01_filt.tif")
+# can.tot <- sum(getValues(can.master), na.rm=T) ### 31.7% of boston raster is canopy
+# aoi.master <- raster("processed/boston/bos.aoi.tif")
+# aoi.tot <- sum(getValues(aoi.master), na.rm=T)
+
+## make a data table of edge pixels by lulc
+can.r <- raster("processed/boston/bos_can01_filt.tif")
+can.master <- as.data.table(as.data.frame(raster("processed/boston/bos_can01_filt.tif")))
+can.10mbuff <- as.data.table(as.data.frame(raster("processed/boston/bos.ed10.tif")))
+lulc <- as.data.table(as.data.frame(raster("processed/boston/bos.lulc.lumped.tif")))
+fat <- fwrite(cbind((can.master),
+             (can.10mbuff),
+             (lulc)), "processed/boston/bos.lulc_candist.csv")
+write.csv(fat, "processed/boston/bos.lulc_candist.csv")
+## cumulative canopy area by edge distance, for each lulc class
+lu.classes <- c("forest", "dev", "hdres", "ldres", "lowveg", "water")
+for(l in 1:length(lu.classes)){
+  print(paste("initializing", lu.classes[l]))
+  if(exists("results")){rm(results)} ## clean up previous store file
+  tot <- integer()
+  dist <- 0
+  ma <- raster(paste("processed/boston/bos.", lu.classes[l], "_only.tif", sep=""))
+  area.tot <- sum(getValues(ma), na.rm=T) ## total size of the lulc target
+  dog <- can.sum.ma(can.master, ma)
+  tot <- c(tot, sum(dog, na.rm=T))
+
+  for(g in 1:length(can.buffs)){
+    print(paste("working on", can.buffs[g], "in", lu.classes[l]))
+    r <- raster(paste("processed/boston/", can.buffs[g], sep=""))
+    dog <- can.sum.ma(r, ma)
+    tot <- c(tot, sum(dog, na.rm=T))
+    dist <- c(dist, buff.dist[g])
+  }
+  results <- cbind(dist, tot)
+  results <- results[order(dist),]
+  results <- as.data.frame(results)
+  colnames(results) <- c("dist", "pix.more.than")
+  results$pix.less.than <- results$pix.more.than[1]-results$pix.more.than ## recall that this method completely leaves out any gap areas that are <50m2 -- neither counted as canopy nor as gap area
+  results$less.rel <- results$pix.less.than/results$pix.more.than[1]
+  results$frac.tot.area <- results$pix.less.than/area.tot
+  write.csv(results, paste("processed/bos.can.cummdist.", lu.classes[l], ".csv", sep=""))
+}
 
 ###
 library(ggplot2)
@@ -349,7 +350,49 @@ ggplot(contain, aes(x=distance, y=ha, fill=LULC)) +
         legend.text=element_text(size=8),
         legend.title=element_text(size=10, face="bold"))
 dev.off()
+
+# ### Jan 2019 -- investigation: why do my summary stats come out with 32% canopy cover overall, contrast Raciti 25.5%?
+# can.r <- raster("processed/boston/bos_can01_filt.tif")
+# can.master <- as.data.table(as.data.frame(raster("processed/boston/bos_can01_filt.tif")))
+# can.10mbuff <- as.data.table(as.data.frame(raster("processed/boston/bos.ed10.tif")))
+# lulc <- as.data.table(as.data.frame(raster("processed/boston/bos.lulc.lumped.tif")))
+# bos.aoi <- raster("processed/boston/bos.aoi.tif")
+# aoi.master <- as.data.table(as.data.frame(bos.aoi))
+# plot(can.r); plot(bos.aoi) ## these are identical extent, res
+# ## straight away: there is a large area of boston harbor that is included in canopy map (is 0 instead of NA); this area is not labeled 1 in bos.aoi
+# 
+# mmm <- cbind(can.master, aoi.master)
+# can.raw.area.tot <- dim(mmm[!is.na(bos_can01_filt),])[1] #152M pix
+# can.raw.area.tot/1E4
+# can.raw.area.can <- dim(mmm[bos_can01_filt==1,])[1]
+# can.raw.area.can/can.raw.area.tot ## 25.865% ## if you don't mask to AOI -- but Raciti's numbers imply that they did mask to about our AOI boundaries
+# 
+# aoi.area.tot <- dim(mmm[bos.aoi==1,])[1]
+# aoi.area.tot/1E4 ## aoi is 12455 ha
+# can.area.tot <- dim(mmm[!is.na(bos_can01_filt),])[1]
+# can.area.tot/1E4 ## can is 15247 ha
+# can.aoi.area.tot <- dim(mmm[bos.aoi==1 & bos_can01_filt==1,])[1] ## 39M pix in aoi can
+# can.aoi.area.tot/1E4 ## 3942 ha of can
+# dim(mmm[bos_can01_filt==1,])[1]/1E4 ## contrast 3944 ha of can in the raw canopy map (additional 2ha outside of aoi)
+# ### contrast: Raciti et al. 2014 report total canopy-classed area as 31.8 +/- 1.8 km2 (we are at 39.4 km2, he gets up to 33.6)
+# ### implying that we simply have more canopy-classed pixels on our map
+# ### implying that Raciti's total AOI area is ~12471 ha total
+# ## i.e We see 760 ha more canopy than Raciti but Raciti sees 16 ha more total AOI 
+# nocan.aoi.area.tot <- dim(mmm[bos.aoi==1 & bos_can01_filt==0,])[1] ## 85M pix in aoi and no can
+# nocan.aoi.area.tot/1E4 # 8386 ha of no can
+# (can.aoi.area.tot/1E4)+(nocan.aoi.area.tot/1E4) ## 12427 ha of can/nocan in aoi
+# can.aoi.area.tot/aoi.area.tot ## 31.646% can
+# nocan.aoi.area.tot/aoi.area.tot ## 68.131% no can
+# (nocan.aoi.area.tot/aoi.area.tot)+(can.aoi.area.tot/aoi.area.tot) ## 99.777% is can/nocan in aoi
+# nacan.aoi.area.tot <- dim(mmm[bos.aoi==1 & is.na(bos_can01_filt),])[1] ## 278k pix are in aoi but have no can data
+# nacan.aoi.area.tot/1E4 ## 28 ha of NA can
+# nacan.aoi.area.tot/aoi.area.tot ## 0.223% NA can
+# (nocan.aoi.area.tot/aoi.area.tot)+(can.aoi.area.tot/aoi.area.tot)+(nacan.aoi.area.tot/aoi.area.tot) ## this is 100% of area
+# 
+# ## conclusion: there are 760 more ha of canopy in my map than apparently were there in Raciti's map, but Raciti's map AOI was only 16 ha larger than mine
 #####
+
+
 
 ### tables for example "pixel" summary cover
 #####
@@ -632,13 +675,17 @@ theme.master <-   theme(panel.grid.major = element_blank(), panel.grid.minor = e
                         plot.title = element_text(face="bold", size=title.size))
 med.lines.col <- "gray75"
 med.lines.width <- 0.4
-fit.col <- "gray65"
+fit.col <- "gray40"
+rg.col <- "gray65"
 # fit.col <- "royalblue2"
 fit.width <- 0.8
 fit.type <- "4121"
+rg.type <- "2222"
+rg.width=0.6
 legend.title.size=9
 legend.text.size=8
 alpha.master <- 0.2
+plotcols <- plasma(20)[c(6,15,8,17)] ## listed as: FIA, Andy-int, Andy-edge, Street
 #####
 
 ### FIA rural trees
@@ -654,7 +701,7 @@ live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv"))
 # live <- merge(x=live, y=spp.allo[,c("spp", "b0", "b1")], by="spp", all.x=T)
 # live[is.na(b0), b0:=(-2.48)]
 # live[is.na(b1), b1:=2.4835]
-biom.pred2 <- function(b0, b1, x){exp(b0+(b1*log(x)))}
+# biom.pred2 <- function(b0, b1, x){exp(b0+(b1*log(x)))}
 ## class as hard or soft wood
 # live[,type:="H"]
 # live[spp%in%c("P.strobus", "P.resinosa", "T.canadensis", "A.balsamea"), type:="S"]
@@ -686,62 +733,73 @@ pred_live <- data.frame(diam.rate.pred=coef(summary(yyy))[1]+
                                     live[lag>0 & STATUS==1,max(DIAM_T0, na.rm=T)], by=0.2))
 ## function for confidence intervals
 #####
-## x and y are data, y.pred & x.pred are predictions in pred_live, mod is model object
-y <- live[lag>0 & STATUS ==1, diam.rate]
-x <- live[lag>0 & STATUS ==1, DIAM_T0]
-mod <- yyy
-b0 <- coef(summary(mod))[1]
-b1 <- coef(summary(mod))[2]
-y.pred <- b0+(b1*x)
-x.pred <- x
-reg.conf.intervals <- function(x, y, mod, y.pred, x.pred) {
-  n <- length(y) # Find length of y to use as sample size
-  
-  # Extract fitted coefficients from model object
-  b0 <- coef(summary(mod))[1]
-  b1 <- coef(summary(mod))[2]
-  
-  # Find SSE and MSE
-  sse <- sum((y - y.pred)^2)
-  mse <- sse / (n - 2)
-  
-  t.val <- qt(0.975, n - 2) # Calculate critical t-value
-  
-  # Fit linear model with extracted coefficients
-  x_new <- sort(live[lag>0 & STATUS==1, DIAM_T0])
-  y.fit <- b1 * x_new + b0
-  
-  # Find the standard error of the regression line
-  se <- sqrt(sum((y - y.fit)^2)/(n - 2)) * sqrt((1/n) + (((x - mean(x))^2)/sum((x - mean(x))^2)))
-  
-  slope.upper <- y.fit+t.val*se
-  slope.lower <- y.fit-t.val*se
-  
-  # Collect the computed confidence bands into a data.frame and name the colums
-  bands <- data.frame(cbind(slope.lower, slope.upper))
-  colnames(bands) <- c('Lower Confidence Band', 'Upper Confidence Band')
-  
-  # Plot the fitted linear regression line and the computed confidence bands
-  plot(x, y, cex = .6, pch = 21, bg = 'gray', ylim=c(0, 1))
-  lines(y.fit, col = 'black', lwd = 2)
-  lines(bands[1], col = 'blue', lty = 2, lwd = 2)
-  lines(bands[2], col = 'blue', lty = 2, lwd = 2)
-  
-  return(bands)
-}
+# rg <- seq(live[lag>0 & STATUS==1,min(DIAM_T0, na.rm=T)],
+#           live[lag>0 & STATUS==1,max(DIAM_T0, na.rm=T)], by=0.2)
+# b0.rand <- rnorm(mean=coef(summary(yyy))[1,1], sd=coef(summary(yyy))[1,2], n = 1000)
+# b1.rand <- rnorm(mean=coef(summary(yyy))[1,1], sd=coef(summary(yyy))[1,2], n = 1000)
+# rg.hi <- numeric()
+# rg.lo <- numeric()
+# for(d in 1:length(rg)){ ## at every level of rg, randomly test the range of the estimator and then find max and min
+#   ## randomly grab a set of coefficients
+#   tmp <- numeric()
+#   for(r in 1:1000){ ## try a thousand times
+#     b0.sel <- sample(b0.rand, size=1)
+#     b1.sel <- sample(b1.rand, size=1)
+#     tmp <- c(tmp, b0.sel+(rg[d]*b1.sel))
+#   }
+#   rg.hi <- c(rg.hi, mean(tmp)+(1.96*sd(tmp)))
+#   rg.lo <- c(rg.lo, mean(tmp)-(1.96*sd(tmp)))
+# }
+# 
+# plot(rg, rg.hi)
+# points(rg, rg.lo)
+# points(rg, mean(b0.rand)+(rg*mean(b1.rand)))     
 
-conf.intervals <- reg.conf.intervals(cars$speed, cars$dist)
+### OR...
+rg <- seq(live[lag>0 & STATUS==1,min(DIAM_T0, na.rm=T)],
+          live[lag>0 & STATUS==1,max(DIAM_T0, na.rm=T)], by=0.2)
+b0.rand <- rnorm(mean=coef(summary(yyy))[1,1], sd=coef(summary(yyy))[1,2], n = 1000)
+b1.rand <- rnorm(mean=coef(summary(yyy))[2,1], sd=coef(summary(yyy))[2,2], n = 1000)
+rg.dump <- data.frame()
+for(d in 1:1000){ ## get 1000 estimator equations set up and estimate across rg
+  eq.tmp <- c(sample(b0.rand, size=1), sample(b1.rand, size=1))
+  rg.dump <- rbind(rg.dump, eq.tmp[1]+(rg*eq.tmp[2]))
+}
+rg.hi <- apply(rg.dump, MARGIN=2, FUN=mean)+apply(rg.dump, MARGIN=2, FUN=sd)*1.96
+rg.lo <- apply(rg.dump, MARGIN=2, FUN=mean)-apply(rg.dump, MARGIN=2, FUN=sd)*1.96
+rg.mn <- apply(rg.dump, MARGIN=2, FUN=mean)
+
+plot(rg, rg.mn, col="red", ylim=c(-1, 10))
+points(rg, pred_live$diam.rate.pred)
+# rg.max <- apply(rg.dump, MARGIN=2, FUN=max)
+# rg.min <- apply(rg.dump, MARGIN=2, FUN=min)
+# plot(rg, rg.hi, ylim=c(-2, 15), col="red")
+# points(rg, rg.lo, col="red")
+# points(rg, mean(b0.rand)+(rg*mean(b1.rand)))   
+# points(rg, rg.min, col="blue")
+# points(rg, rg.max, col="blue")
+
+live_lo <- data.frame(diam.rate.pred=rg.lo,
+                        DIAM_T0=seq(live[lag>0 & STATUS==1,min(DIAM_T0, na.rm=T)],
+                                    live[lag>0 & STATUS==1,max(DIAM_T0, na.rm=T)], by=0.2))
+
+live_hi <- data.frame(diam.rate.pred=rg.hi,
+                      DIAM_T0=seq(live[lag>0 & STATUS==1,min(DIAM_T0, na.rm=T)],
+                                  live[lag>0 & STATUS==1,max(DIAM_T0, na.rm=T)], by=0.2))
+
 #####
 
 ## dbh increment
 #####
 fia.mono.incr <- ggplot(live, aes(DIAM_T0, diam.rate))+
-  geom_point(alpha=alpha.master, color=plasma(6)[1], size=pt.size)+
+  geom_point(alpha=alpha.master, color=plotcols[1], size=pt.size)+
   scale_y_continuous(breaks=c(-1, 0, 1, 2), limits=ylim.all)+
   scale_x_continuous(limits=xlim.all, breaks=c(0, 20, 40, 60, 80, 100))+
   # geom_vline(xintercept=live[,median(DIAM_T0, na.rm=T)], color=med.lines.col, size=med.lines.width)+
   # geom_hline(yintercept=live[,median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
   geom_line(data = pred_live, aes(x=DIAM_T0, y=diam.rate.pred), color=fit.col, linetype=fit.type, size=fit.width)+
+  geom_line(data = live_hi, aes(x=DIAM_T0, y=diam.rate.pred), color=rg.col, linetype=rg.type, size=rg.width)+
+  geom_line(data = live_lo, aes(x=DIAM_T0, y=diam.rate.pred), color=rg.col, linetype=rg.type, size=rg.width)+
   labs(x = "Stem DBH (cm)", y="Stem Growth (cm/yr)", title="Rural Forest '03-'15")+
   theme.master
 
@@ -800,13 +858,15 @@ fia.mono.incr <- ggplot(live, aes(DIAM_T0, diam.rate))+
 ### Andy Trees
 #####
 # andy.bai <- as.data.table(read.csv("processed/andy.bai.dbh.pseudo.csv"))
+library(ggplot2)
+library(data.table)
 andy.bai <- as.data.table(read.csv("processed/andy.bai.ps.dbhincr.csv"))
 ### specify model (either for biomass growth rate or dimater growth rate)
 
-g.full <- lmer(dbh.incr.ann~seg.Edge*dbh.start.incr + 
-            (dbh.start.incr|Plot.ID) + 
-            (dbh.start.incr|incr.ID), 
-          data=andy.bai[dbh.start.incr>=5,],
+g.full <- lmer(dbh.incr.ann~seg.Edge*dbh.start + 
+            (dbh.start|Plot.ID) + 
+            (dbh.start|incr.ID), 
+          data=andy.bai[dbh.start>=5,],
           REML=F)  
 
 ### these are constrained to not exceed the observed range of dbh incr for edge or interior
@@ -815,16 +875,16 @@ max.edge <- andy.bai[seg.Edge=="E",max(dbh.incr.ann)]
 min.int <- andy.bai[seg.Edge=="I",min(dbh.incr.ann)]
 max.int <- andy.bai[seg.Edge=="I",max(dbh.incr.ann)]
 pred_andy.edge <- data.frame(diam.incr.ann=(coef(summary(g.full))[1]+
-                                              seq(andy.bai[seg.Edge=="E", min(dbh.start.incr, na.rm=T)],
-                                                  andy.bai[seg.Edge=="E", max(dbh.start.incr, na.rm=T)], by=0.2)*coef(summary(g.full))[3]),
-                        dbh.start.incr=seq(andy.bai[seg.Edge=="E", min(dbh.start.incr, na.rm=T)],
-                                           andy.bai[seg.Edge=="E", max(dbh.start.incr, na.rm=T)], by=0.2))
+                                              seq(andy.bai[seg.Edge=="E", min(dbh.start, na.rm=T)],
+                                                  andy.bai[seg.Edge=="E", max(dbh.start, na.rm=T)], by=0.2)*coef(summary(g.full))[3]),
+                        dbh.start=seq(andy.bai[seg.Edge=="E", min(dbh.start, na.rm=T)],
+                                           andy.bai[seg.Edge=="E", max(dbh.start, na.rm=T)], by=0.2))
 pred_andy.edge <- pred_andy.edge[pred_andy.edge$diam.incr.ann>=min.edge & pred_andy.edge$diam.incr.ann<=max.edge,]
 pred_andy.int <- data.frame(diam.incr.ann=((coef(summary(g.full))[1]+coef(summary(g.full))[2])+
-                                             seq(andy.bai[seg.Edge=="I", min(dbh.start.incr, na.rm=T)],
-                                                 andy.bai[seg.Edge=="I", max(dbh.start.incr, na.rm=T)], by=0.2)*(coef(summary(g.full))[3]+coef(summary(g.full))[4])),
-                            dbh.start.incr=seq(andy.bai[seg.Edge=="I", min(dbh.start.incr, na.rm=T)],
-                                               andy.bai[seg.Edge=="I", max(dbh.start.incr, na.rm=T)], by=0.2))
+                                             seq(andy.bai[seg.Edge=="I", min(dbh.start, na.rm=T)],
+                                                 andy.bai[seg.Edge=="I", max(dbh.start, na.rm=T)], by=0.2)*(coef(summary(g.full))[3]+coef(summary(g.full))[4])),
+                            dbh.start=seq(andy.bai[seg.Edge=="I", min(dbh.start, na.rm=T)],
+                                               andy.bai[seg.Edge=="I", max(dbh.start, na.rm=T)], by=0.2))
 pred_andy.int <- pred_andy.int[pred_andy.int$diam.incr.ann>=min.int & pred_andy.int$diam.incr.ann<=max.int,]
 
 
@@ -841,14 +901,64 @@ pred_andy.int <- pred_andy.int[pred_andy.int$diam.incr.ann>=min.int & pred_andy.
 # andy.bai[dbh.start>=5, density:=get_density(andy.bai[dbh.start>=5, dbh.start], andy.bai[dbh.start>=5, biom.rel.ann])]
 # andy.bai[is.na(density), density:=0.01]
 
+### prediction intervals
+rg.e <- pred_andy.edge$dbh.start
+rg.i <- pred_andy.int$dbh.start
+b0.rand <- rnorm(1000, mean=coef(summary(g.full))[1,1], sd=coef(summary(g.full))[1,2]) ## intercept
+b1.rand <- rnorm(1000, mean=coef(summary(g.full))[2,1], sd=coef(summary(g.full))[2,2]) ## Interior
+b2.rand <- rnorm(1000, mean=coef(summary(g.full))[3,1], sd=coef(summary(g.full))[3,2]) ## dbh slope
+b3.rand <- rnorm(1000, mean=coef(summary(g.full))[4,1], sd=coef(summary(g.full))[4,2]) ## dbh:Interior
+rg.dump.e <- data.frame()
+rg.dump.i <- data.frame()
+for(d in 1:1000){ ## get 1000 estimator equations set up and estimate across rg
+  eq.tmp <- c(sample(b0.rand, size=1), sample(b1.rand, size=1), sample(b2.rand, size=1), sample(b3.rand, size=1))
+  rg.dump.e <- rbind(rg.dump.e, eq.tmp[1]+(rg.e*eq.tmp[3]))
+  rg.dump.i <- rbind(rg.dump.i, eq.tmp[1]+eq.tmp[2]+(rg.i*(eq.tmp[3]+eq.tmp[4])))
+}
+rg.e.hi <- apply(rg.dump.e, MARGIN=2, FUN=mean)+apply(rg.dump.e, MARGIN=2, FUN=sd)*1.96
+rg.e.lo <- apply(rg.dump.e, MARGIN=2, FUN=mean)-apply(rg.dump.e, MARGIN=2, FUN=sd)*1.96
+rg.e.mn <- apply(rg.dump.e, MARGIN=2, FUN=mean)
+
+rg.i.hi <- apply(rg.dump.i, MARGIN=2, FUN=mean)+apply(rg.dump.i, MARGIN=2, FUN=sd)*1.96
+rg.i.lo <- apply(rg.dump.i, MARGIN=2, FUN=mean)-apply(rg.dump.i, MARGIN=2, FUN=sd)*1.96
+rg.i.mn <- apply(rg.dump.i, MARGIN=2, FUN=mean)
+
+## constrain the prediction envelope as is done in the recursive modeling part of this
+ps.contain <- as.data.table(read.csv("processed/andy.bai.ps.dbhincr.csv")) ## this is the nicely formatted BAI data from the psueoreplicated tree cores
+dbh.incr.min.edge <- ps.contain[seg.Edge=="E" & dbh.start>5, min(dbh.incr.ann, na.rm=T)]
+dbh.incr.max.edge <- ps.contain[seg.Edge=="E" & dbh.start>5, max(dbh.incr.ann, na.rm=T)]
+dbh.incr.min.int <- ps.contain[seg.Edge=="I" & dbh.start>5, min(dbh.incr.ann, na.rm=T)]
+dbh.incr.max.int <- ps.contain[seg.Edge=="I" & dbh.start>5, max(dbh.incr.ann, na.rm=T)]
+
+# rg.e.hi[rg.e.hi>dbh.incr.max.edge] <- dbh.incr.max.edge
+# rg.e.lo[rg.e.lo<dbh.incr.min.edge] <- dbh.incr.min.edge
+# rg.i.hi[rg.i.hi>dbh.incr.max.int] <- dbh.incr.max.int
+# rg.i.lo[rg.i.lo<dbh.incr.min.int] <- dbh.incr.min.int
+rg.e.hi[rg.e.hi>dbh.incr.max.edge] <- NA
+rg.e.lo[rg.e.lo<dbh.incr.min.edge] <- NA
+rg.i.hi[rg.i.hi>dbh.incr.max.int] <- NA
+rg.i.lo[rg.i.lo<dbh.incr.min.int] <- NA
+
+edge_lo <- data.frame(diam.rate.pred=rg.e.lo,
+                        dbh.start=pred_andy.edge$dbh.start)
+edge_hi <- data.frame(diam.rate.pred=rg.e.hi,
+                        dbh.start=pred_andy.edge$dbh.start)
+
+int_lo <- data.frame(diam.rate.pred=rg.i.lo,
+                      dbh.start=pred_andy.int$dbh.start)
+int_hi <- data.frame(diam.rate.pred=rg.i.hi,
+                      dbh.start=pred_andy.int$dbh.start)
+
+
+
 ## split colors (seg.Edge), density via alpha
-andy.col <- plasma(6)[c(3,5)]
+andy.col <- plotcols[c(2,3)]
 names(andy.col) <- levels(andy.bai$seg.Edge)
 col.map <- scale_color_manual(name="Tree position", values=andy.col, labels=c("Edge <10m", "Interior"))
 shape.map <- scale_shape_manual(name="Tree position", values=c(16,17), labels=c("Edge <10m", "Interior"))
 
 ### dbh increment 
-andy.mono.incr <- ggplot(andy.bai[dbh.start.incr>=5], aes(dbh.start.incr, dbh.incr.ann, colour=seg.Edge))+
+andy.mono.incr <- ggplot(andy.bai[dbh.start>=5,], aes(dbh.start, dbh.incr.ann, colour=seg.Edge))+
   geom_point(aes(shape=seg.Edge), alpha=alpha.master*1.9, size=pt.size)+
   col.map+
   shape.map+
@@ -858,8 +968,14 @@ andy.mono.incr <- ggplot(andy.bai[dbh.start.incr>=5], aes(dbh.start.incr, dbh.in
   # geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="E",median(biom.rel.ann, na.rm=T)], color="gray55", size=med.lines.width)+
   # geom_vline(xintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(dbh.start, na.rm=T)], color=med.lines.col, size=med.lines.width)+
   # geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(biom.rel.ann, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  geom_line(data = pred_andy.edge, aes(x=dbh.start.incr, y=diam.incr.ann), color="darkmagenta", linetype=fit.type, size=fit.width)+
-  geom_line(data = pred_andy.int, aes(x=dbh.start.incr, y=diam.incr.ann), color="chocolate3", linetype=fit.type, size=fit.width)+
+  # geom_line(data = pred_andy.edge, aes(x=dbh.start, y=diam.incr.ann), color="darkmagenta", linetype=fit.type, size=fit.width)+
+  # geom_line(data = pred_andy.int, aes(x=dbh.start, y=diam.incr.ann), color="chocolate3", linetype=fit.type, size=fit.width)+
+  geom_line(data = pred_andy.edge, aes(x=dbh.start, y=diam.incr.ann), color="chocolate3", linetype=fit.type, size=fit.width)+
+  geom_line(data = edge_lo, aes(x=dbh.start, y=diam.rate.pred), color="chocolate3", linetype=rg.type, size=rg.width)+
+  geom_line(data = edge_hi, aes(x=dbh.start, y=diam.rate.pred), color="chocolate3", linetype=rg.type, size=rg.width)+
+  geom_line(data = pred_andy.int, aes(x=dbh.start, y=diam.incr.ann), color="darkmagenta", linetype=fit.type, size=fit.width)+
+  geom_line(data = int_lo, aes(x=dbh.start, y=diam.rate.pred), color="darkmagenta", linetype=rg.type, size=rg.width)+
+  geom_line(data = int_hi, aes(x=dbh.start, y=diam.rate.pred), color="darkmagenta", linetype=rg.type, size=rg.width)+
   labs(x = "Stem DBH (cm)", y="Stem Growth (cm/yr)", title="Urban Forest '90-'16")+
   theme.master+
   theme(legend.position = c(0.8, 0.65),
@@ -871,8 +987,11 @@ andy.mono.incr <- ggplot(andy.bai[dbh.start.incr>=5], aes(dbh.start.incr, dbh.in
         legend.justification = "center")+
   guides(shape = guide_legend(override.aes = list(size=pt.size*1.7,
                                                   alpha=0.8,
-                                                  color=c("darkmagenta",
-                                                          "chocolate3"))))
+                                                  color=plotcols[c(2,3)])))
+  # guides(shape = guide_legend(override.aes = list(size=pt.size*1.7,
+  #                                                 alpha=0.8,
+  #                                                 color=c("darkmagenta",
+  #                                                         "chocolate3"))))
 
 ### test does this look a little ok?
 # par(mfrow=c(1,2))
@@ -1008,15 +1127,40 @@ pred_street <- data.frame(diam.rate.pred=coef(summary(hm2.me3))[1]+
 #                                        100, by=0.2))
 # street[record.good==1, density:=get_density(street[record.good==1, dbh.2006], street[record.good==1, growth.ann.rel])]
 
+## predition confidence intervals
+rg <- seq(street[record.good==1,min(dbh.2006, na.rm=T)],
+          street[record.good==1,max(dbh.2006, na.rm=T)], by=0.2)
+b0.rand <- rnorm(mean=coef(summary(hm2.me3))[1,1], sd=coef(summary(hm2.me3))[1,2], n = 1000)
+b1.rand <- rnorm(mean=coef(summary(hm2.me3))[2,1], sd=coef(summary(hm2.me3))[2,2], n = 1000)
+b2.rand <- rnorm(mean=coef(summary(hm2.me3))[3,1], sd=coef(summary(hm2.me3))[3,2], n = 1000)
+rg.dump <- data.frame()
+for(d in 1:1000){ ## get 1000 estimator equations set up and estimate across rg
+  eq.tmp <- c(sample(b0.rand, size=1), sample(b1.rand, size=1), sample(b2.rand, size=1))
+  rg.dump <- rbind(rg.dump, eq.tmp[1]+(rg*eq.tmp[2])+((rg^2)*eq.tmp[3]))
+}
+rg.hi <- apply(rg.dump, MARGIN=2, FUN=mean)+apply(rg.dump, MARGIN=2, FUN=sd)*1.96
+rg.lo <- apply(rg.dump, MARGIN=2, FUN=mean)-apply(rg.dump, MARGIN=2, FUN=sd)*1.96
+rg.mn <- apply(rg.dump, MARGIN=2, FUN=mean)
+
+street_lo <- data.frame(diam.rate.pred=rg.lo,
+                      dbh.2006=seq(street[record.good==1,min(dbh.2006, na.rm=T)],
+                                   street[record.good==1,max(dbh.2006, na.rm=T)], by=0.2))
+
+street_hi <- data.frame(diam.rate.pred=rg.hi,
+                      dbh.2006=seq(street[record.good==1,min(dbh.2006, na.rm=T)],
+                                  street[record.good==1,max(dbh.2006, na.rm=T)], by=0.2))
+
 
 # dbh increment
 street.mono.incr <- ggplot(street[record.good==1], aes(dbh.2006, diam.rate))+
-  geom_point(alpha=alpha.master, color=plasma(6)[4], size=pt.size)+
+  geom_point(alpha=alpha.master, color=plotcols[4], size=pt.size)+
   scale_y_continuous(breaks=c(-1,0,1,2), limits=ylim.all)+
   scale_x_continuous(limits=xlim.all, breaks=c(0,20,40,60,80,100))+
   # geom_vline(xintercept=street[record.good==1, median(dbh.2006, na.rm=T)], color=med.lines.col, size=med.lines.width)+
   # geom_hline(yintercept=street[record.good==1, median(growth.ann.rel, na.rm=T)], color=med.lines.col, size=med.lines.width)+
-  geom_line(data = pred_street, aes(x=dbh.2006, y=diam.rate.pred), color="gray40", linetype=fit.type, size=fit.width)+
+  geom_line(data = pred_street, aes(x=dbh.2006, y=diam.rate.pred), color=fit.col, linetype=fit.type, size=fit.width)+
+  geom_line(data = street_hi, aes(x=dbh.2006, y=diam.rate.pred), color=rg.col, linetype=rg.type, size=rg.width)+
+  geom_line(data = street_lo, aes(x=dbh.2006, y=diam.rate.pred), color=rg.col, linetype=rg.type, size=rg.width)+
   labs(x = "Stem DBH (cm)", y="Stem Growth (cm/yr)", title="Street Trees '06-'14")+
   theme.master
 

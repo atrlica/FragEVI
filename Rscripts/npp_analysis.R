@@ -518,42 +518,64 @@ write.csv(npp.dat, "processed/npp.estimates.V4.csv") ## mixed model (slope+inter
 ## HYBRID MAP WITH ERROR DISTRIBUTION
 #####
 street.res <- as.data.table(read.csv("processed/streettrees.npp.simulator.v5.results.random.csv"))
+# street.res[pix.ID %in% miss,] ## all NA, 0 biomass
+street.res[bos.biom30m<10 & aoi>800, 8:107:=0] ### set low biomass to 0 growth
+street.res[bos.can30m<0.001 & aoi>800, 8:107:=0] ## set anything with <1 pix of canopy to 0
+street.res[aoi>800 & is.na(bos.biom30m), 8:107:=0] ## set no record of biomass to 0
+flags <- as.data.table(read.csv("processed/streettrees.npp.simulator.v5.sim.status.csv")) ## simulator status per pixel
+bad.sim <- flags[num.sims<40, pix.ID] ## 5778 these are all pixels that failed simulation
+summary(street.res[aoi>800 & pix.ID %in% bad.sim, bos.biom30m]); hist(street.res[aoi>800 & pix.ID %in% bad.sim, bos.biom30m]) ## the bad pixels apparently are mostly in the >20000 range
+summary(street.res[aoi>800 & pix.ID %in% bad.sim, bos.can30m]); hist(street.res[aoi>800 & pix.ID %in% bad.sim, bos.can30m]) ## most are fully canopied
+table(street.res[aoi>800 & pix.ID %in% bad.sim, bos.lulc30m.lumped]) ## most are forest or HD res
 
-### figure out if there are any wayward pixels that didn't simulate properly and ID so we can fill with the andy results
-scan <- street.res[aoi>800 & bos.biom30m>0 & bos.lulc30m.lumped!=1,]
-orphans <- integer()
-for(a in 1:dim(scan)[1]){
-  tmp <- sum(is.na(scan[a, 8:107]))
-  if(tmp>40){orphans <- c(orphans, scan[a, pix.ID])}
-  print(paste("scanned pix", scan[a, pix.ID]))
-}
+# ### figure out if there are any wayward pixels that didn't simulate properly and ID so we can fill with the andy results
+# aa <- apply(street.res[aoi>800 & bos.biom30m>0 & bos.lulc30m.lumped!=1, 8:107], MARGIN=1, FUN = median) ## this will pick up ANY sim that failed even once
+# sum(is.na(aa)) ## here's our "orphans" -- 91 failed sims that still had good starting parameters
+# dim(street.res[aoi>800 & bos.biom30m>0 & bos.lulc30m.lumped!=1,])
+# orphans <- street.res[aoi>800 & bos.biom30m>0 & bos.lulc30m.lumped!=1, pix.ID][is.na(aa)] ## the rogues, all simulations fail
+# scan <- street.res[aoi>800 & bos.biom30m>0 & bos.lulc30m.lumped!=1 & is.na(aa),]
+# orphans <- integer()
+# for(a in 1:dim(scan)[1]){
+#   tmp <- sum(is.na(scan[a, 8:107]))
+#   if(tmp>40){orphans <- c(orphans, scan[a, pix.ID])}
+#   if(a%%1000==0){
+#     print(paste("scanned pix", 100*(a/dim(scan)[1]), "%"))
+#     }
+# }
 
-summary(street.res[pix.ID%in%orphans, bos.biom30m]) ## almost all real low biomass
-length(orphans) ## 496
+# ### OK: so the failed sims are all low biomass... but the high biomass nonforest look like they simmed just fine???
+# View(street.res[pix.ID%in%orphans,]) ## almost all low biomass
+# View(street.res[bos.biom30m>30000 & bos.lulc30m.lumped!=1, ]) ## conversely there's ~3k of non-forest high biomass that mostly simmed fine
+# # hist(street.res[bos.biom30m>20000 & bos.lulc30m.lumped!=1, npp.street.random.iter.1.kg]) ## seems like they worked out
+# street.res[bos.biom30m>20000 & bos.lulc30m.lumped!=1 & is.na(npp.street.random.iter.1.kg), ] ## it's possible they all worked
+# street.res[bos.biom30m>20000 & bos.lulc30m.lumped!=1, ]
+# summary(street.res[pix.ID%in%orphans, bos.biom30m]) ## mostly all things that are just above 9 kg now, failed sims
 
-### pull in andy forest results and pick out the pixel vectors we want
+
+### select andy results that are either forest or high biomass or are definitely failed sims
 andy.res <- as.data.table(read.csv("processed/andy.forest.results.V4.csv"))
 forest <- andy.res[lulc==1, pix.ID]
 big <- andy.res[biom>20000, pix.ID]
-gimme <- c(forest, big); length(gimme) #19424
-sum(duplicated(gimme)) ## 5331
-gimme <- gimme[!duplicated(gimme)]; length(gimme) ## 14093 
-sum(orphans%in%gimme) ## 0
-gimme <- c(gimme, orphans); length(gimme) ## 14589
-sum(duplicated(gimme)) #0
+gimme <- c(forest, big, bad.pix)
+gimme <- unique(gimme); length(gimme) ## 14737 pix we are going to swap out with andy results
+# sum(orphans%in%gimme) ## 0
+# gimme <- c(gimme, orphans); length(gimme) ## 14589
 pick <- andy.res[pix.ID%in%gimme,] 
 pick <- pick[,c(9,16:115)] ## pix.ID and then results
 names(pick)[2:101] <- paste0("npp.iter.", 1:100, ".hybrid"); dim(pick) ### 14589 pix
 
 ## finalize grooming the street pixels 
 street.pix <- copy(street.res); dim(street.pix) ## 354068
-street.pix <- street.pix[bos.lulc30m.lumped!=1,]; dim(street.pix) ## 126437
-street.pix <- street.pix[bos.biom30m<=20000,]; dim(street.pix) ## 122607
-street.pix <- street.pix[!(pix.ID%in%orphans),]; dim(street.pix) ### 122111
+# street.pix <- street.pix[bos.lulc30m.lumped!=1,]; dim(street.pix) ## 126437
+# street.pix <- street.pix[bos.biom30m<=20000,]; dim(street.pix) ## 122607
+# street.pix <- street.pix[!(pix.ID%in%orphans),]; dim(street.pix) ### 122111
+# street.pix <- street.pix[!(pix.ID%in%bad.pix),]; dim(street.pix) ### 122111
+street.pix <- street.pix[!(pix.ID%in%gimme),]
 street.pix <- street.pix[,c(2,8:107)]
 names(street.pix)[2:101] <- paste0("npp.iter.", 1:100, ".hybrid")
-hybrid <- rbind(pick, street.pix) ### 136700 pix; now need to merge these back into the complete map
+hybrid <- rbind(pick, street.pix); dim(hybrid) ### 136700 pix; now need to merge these back into the complete map
 
+library(raster)
 aoi <- raster("processed/boston/bos.aoi30m.tif")
 biom <- raster("processed/boston/bos.biom30m.tif")
 biom <- crop(biom, aoi)
@@ -568,6 +590,7 @@ biom.dat <- as.data.table(cbind(as.data.frame(aoi),
 biom.dat[, pix.ID:=seq(1:dim(biom.dat)[1])]
 biom.dat <- merge(biom.dat, hybrid, by="pix.ID", all.x=T) # here's our map
 biom.dat <- biom.dat[order(pix.ID),]; dim(biom.dat)
+med.na <- function(x){median(x, na.rm=T)}
 vals <- apply(biom.dat[,7:106], MARGIN=1, FUN=med.na)
 biom.dat[,pix.median:=vals]
 biom.dat[bos.aoi30m>800 & bos.biom30m==0, pix.median:=0]
@@ -578,6 +601,11 @@ hyb <- as.data.table(read.csv("processed/results/hybrid.results.V6.csv"))
 rr <- aoi
 rr <- setValues(rr, hyb[,pix.median])
 writeRaster(rr, filename="processed/results/hybrid.V6.median.tiff", format="GTiff", overwrite=T)
+
+hyb.med.test <- hyb[bos.aoi30m>800 & bos.lulc30m.lumped==1, ((pix.median/2000)/(bos.aoi30m*bos.can30m))*1E4]
+summary(hyb[bos.aoi30m>800 & bos.lulc30m.lumped==1, ((pix.median/2000)/(bos.aoi30m*bos.can30m))*1E4])
+hyb.med.test[10]
+hist(hyb.med.test)
 #####
 
 ## analysis of error distributed results
@@ -679,6 +707,21 @@ for(i in 1:6){
 }
 results.fia.forest <- c(results.fia.forest, paste0(tot[2], " (", tot[1], "-", tot[3], ")"))
 t <- cbind(t, results.fia.forest)
+
+
+## quantiles by lulc -- PERVIOUS
+tot <- round(rangey((fia.npp.tot.perv/2000)/1000), 1)
+lulc.tot <- round(apply(fia.perv.lulc[,2:7], FUN=rangey, MARGIN=2)/2000/1000,1)
+results.fia.perv <- character()
+for(i in 1:6){
+  results.fia.perv <- c(results.fia.perv,
+                          paste0(lulc.tot[2,i], " (", lulc.tot[1,i], "-", lulc.tot[3,i], ")"))
+}
+results.fia.perv <- c(results.fia.perv, paste0(tot[2], " (", tot[1], "-", tot[3], ")"))
+t <- cbind(t, results.fia.perv)
+
+write.csv(t, "processed/results/npp.FIA.tot.summary.empriV5.csv")
+
 #####
 
 ### Results for ANDY FOREST, error distributed
@@ -736,7 +779,7 @@ med.na <- function(x){median(x, na.rm=T)}
 hyb.npp.tot <- apply(hyb[bos.aoi30m>800,8:107], MARGIN=2, FUN=sum.na)
 # hist(hyb[bos.aoi30m>800 & bos.biom30m>0,8:107/bos.biom30m]) ## this is measure of the productivity of the shit in each cell
 hist((hyb.npp.tot/2000))
-median((hyb.npp.tot/2000)) ## about 11.3k (contrast -- Jenkin's allometrics give 11.6k)....
+median((hyb.npp.tot/2000)) ## about 11.1k (11.3k without zeroing out the no-sim low biomass/canopy pix) (contrast -- Jenkin's allometrics give 11.6k)....
 mean((hyb.npp.tot/2000))
 
 ### model realizations by lulc
@@ -747,10 +790,6 @@ for(l in 1:6){
 }
 names(hyb.lulc) <- c("iter", paste("hyb.lulc", 1:6, ".npp.tot", sep=""))
 rownames(hyb.lulc) <- NULL
-write.csv(hyb.lulc, "processed/hyb.v6.lulc.results.csv")
-
-hyb.lulc <- as.data.table(read.csv("processed/hyb.v6.lulc.results.csv"))
-hyb.lulc[,X:=NULL]
 
 ## quantiles by lulc 
 rangey <- function(x){quantile(x, probs=c(0.05, 0.5, 0.95))}
@@ -761,20 +800,27 @@ for(i in 1:6){
   results.hyb <- c(results.hyb,
                     paste0(lulc.tot[2,i], " (", lulc.tot[1,i], "-", lulc.tot[3,i], ")"))
 }
-t <- cbind(t, 
-           c(results.hyb, paste0(tot[2], " (", tot[1], "-", tot[3], ")")))
-colnames(t) <- c("LULC", "results.fia.ground", "results.fia.forest", "results.andy", "results.hybrid")
-write.csv(t, "processed/results/npp.tot.summary.v6.csv")
+l <- c(1:6, "Total")
+t <- c(results.hyb, paste0(tot[2], " (", tot[1], "-", tot[3], ")"))
+write.csv(cbind(l, t), "processed/results/npp.tot.summary.v6.csv")
+read.csv("processed/results/npp.tot.summary.v6.csv")
 #####
 
+###
 ### pixel median spreads -- just the median estimate for each pixel
 #####
+fia.ground.rand <- as.data.table(read.csv("npp.FIA.empirV5.ground.csv"))
+fia.forest.rand <- as.data.table(read.csv("npp.FIA.empirV5.forest.csv"))
+fia.perv.rand <- as.data.table(read.csv("npp.FIA.empirV5.perv.csv"))
+hyb <- as.data.table(read.csv("processed/results/hybrid.results.V6.csv"))
+andy <- as.data.table(read.csv("processed/andy.forest.results.V4.csv"))
+
 rangey <- function(x){quantile(x, probs=c(0.05, 0.5, 0.95), na.rm=T)}
 median.na <- function(x){round(median(x, na.rm=T),1)}
 low.na <- function(x){round(quantile(x, na.rm=T, probs=0.05),1)}
 hi.na <- function(x){round(quantile(x, na.rm=T, probs=0.95),1)}
 
-## FIA forest
+## FIA forest MgC/ha/yr
 fia.forest.pix <- ((apply(fia.forest.rand[,11:110], FUN=median.na, MARGIN=1)/2000)/fia.forest.rand[,aoi])*1E4 ## pix growth in MgC/ha
 fia.forest.pix <- cbind(fia.forest.rand[, 2:10], fia.forest.pix)
 tot <- round(rangey(fia.forest.pix[aoi>800, fia.forest.pix]),1)
@@ -811,11 +857,11 @@ tot <- round(rangey(andy.pix[aoi>800, andy.pix]),1)
 results.andy.pix <- character()
 for(i in 1:6){
   results.andy.pix <- c(results.andy.pix,
-                              paste0(andy.pix[lulc==i & aoi>800, median.na(andy.pix)], " (", 
-                                     andy.pix[lulc==i & aoi>800, low.na(andy.pix)], "-", 
+                              paste0(andy.pix[lulc==i & aoi>800, median.na(andy.pix)], " (",
+                                     andy.pix[lulc==i & aoi>800, low.na(andy.pix)], "-",
                                      andy.pix[lulc==i & aoi>800, hi.na(andy.pix)], ")"))
 }
-t <- cbind(t, 
+t <- cbind(t,
            c(results.andy.pix, paste0(tot[2], " (", tot[1], "-", tot[3], ")")))
 
 ## Hybrid
@@ -832,8 +878,82 @@ for(i in 1:6){
 t <- cbind(t, 
            c(results.hyb.pix, paste0(tot[2], " (", tot[1], "-", tot[3], ")")))
 colnames(t) <- c("LULC", "fia.forest.pix", "fia.ground.pix", "andy.pix", "hybrid.pix")
+# colnames(t) <- c("LULC", "fia.forest.pix", "fia.ground.pix", "hybrid.pix")
 write.csv(t, "processed/results/npp.pix.summary.v6.csv")
 
+## assessment of the three main model contenders viz the error-distributed results
+### wht the fck is up with these FIA and andy-forest results being so similar???
+rangey <- function(x){quantile(x, probs=c(0.05, 0.5, 0.95), na.rm=T)}
+median.na <- function(x){round(median(x, na.rm=T),1)}
+low.na <- function(x){round(quantile(x, na.rm=T, probs=0.05),1)}
+hi.na <- function(x){round(quantile(x, na.rm=T, probs=0.95),1)}
+sum.na <- function(x){sum(x, na.rm=T)}
+
+fia.forest.rand <- as.data.table(read.csv("npp.FIA.empirV5.forest.csv"))
+hyb <- as.data.table(read.csv("processed/results/hybrid.results.V6.csv"))
+andy <- as.data.table(read.csv("processed/andy.forest.results.V4.csv")) ## 100 model realizations in kg biomass
+
+andy.tot <- apply(andy[,16:115], FUN=median.na, MARGIN=1) ## median pixel values, up to 400 kg
+andy.tot <- cbind(andy[, 2:15], andy.tot)
+hist(andy.tot[aoi>800, andy.tot]) ## most are V low, heavy left skew, up to 400 kg
+andy.tot[aoi>800, sum(andy.tot, na.rm=T)]/2000 ### 7.8 MgC total for all-models median pixel sum pure andy forest
+dim(andy.tot[aoi>800 & !is.na(andy.tot),]) ## 135705
+dim(andy.tot[aoi>800 & is.na(andy.tot),]) ## 962 missing records
+
+hyb.tot <- apply(hyb[,8:107], FUN=median.na, MARGIN=1)
+hyb.tot <- cbind(hyb[, 2:7], hyb.tot)
+hist(hyb.tot[bos.aoi30m>800, hyb.tot]) ## up to 800 kg, left skewed but not as hard as andy
+hyb.tot[bos.aoi30m>800, sum(hyb.tot, na.rm=T)]/2000 ### 10.7 MgC total for all-models median pixel sum hybrid street+andy
+dim(hyb.tot[bos.aoi30m>800 & !is.na(hyb.tot),]) ## 136589!!!!
+dim(hyb.tot[bos.aoi30m>800 & is.na(hyb.tot),]) ## 0 missing records (was 29537 before killing 0 biomass), all of which are below 9 kg -- just up the threshold!
+View(hyb.tot[bos.aoi30m>800 & is.na(hyb.tot),]) ## all seem to be biom=0 or na can=0... should have been taken care of
+
+fia.tot <- apply(fia.forest.rand[,11:110], FUN=median.na, MARGIN=1) 
+fia.tot <- cbind(fia.forest.rand[, 2:10], fia.tot)
+hist(fia.tot[aoi>800, fia.tot]) ## heavy left skew, up to 300 kg
+fia.tot[aoi>800, sum(fia.tot, na.rm=T)]/2000 ### 5.5 MgC total for all-models median pixel sum hybrid street+andy
+dim(fia.tot[aoi>800 & !is.na(fia.tot),]) # 135705
+dim(fia.tot[aoi>800 & is.na(fia.tot),]) ## 962 missing records
+
+read.csv("processed/results/npp.pix.summary.v6.csv")
+
+### do this as a vector of whole-map sums
+andy.sum <- apply(andy[aoi>800 & biom>10,16:115], FUN=sum.na, MARGIN=2)
+hist(andy.sum/2000) ## central 90% 6-11k tons, peaks ~8k
+summary(andy.sum/2000)
+andy.sum.f <- apply(andy[aoi>800 & biom>10 & lulc==1,16:115], FUN=sum.na, MARGIN=2)
+hist(andy.sum.f/2000) ## median 1.4k tons, just as noted in summary table
+summary(andy.sum.f/2000)
+
+## should be ****IDENTICAL**** in the hybrid results
+hyb.sum <- apply(hyb[bos.aoi30m>800 & bos.biom30m>10, 8:107], FUN=sum.na, MARGIN=2)
+hist(hyb.sum/2000) ## just as summary table peaks 11k
+summary(hyb.sum/2000)
+hyb.sum.f <- apply(hyb[bos.aoi30m>800 & bos.biom30m>10 & bos.lulc30m.lumped==1,8:107], FUN=sum.na, MARGIN=2)
+hist(hyb.sum.f/2000) ## median 1.4k tons, just as noted in summary table
+summary(hyb.sum.f/2000) ## yes identical to pure andy results above
+
+## contrast to fia results
+fia.sum <- apply(fia.forest.rand[bos.aoi30m>800 & bos.biom30m>10, 8:107], FUN=sum.na, MARGIN=2)
+hist(fia.sum/2000) ## just as summary table peaks 11k
+summary(fia.sum/2000)
+fia.sum.f <- apply(fia[bos.aoi30m>800 & bos.biom30m>10 & bos.lulc30m.lumped==1,8:107], FUN=sum.na, MARGIN=2)
+hist(fia.sum.f/2000) ## median 1.4k tons, just as noted in summary table
+summary(hyb.sum.f/2000) ## yes identical to pure andy results above
+
+### where are the missing hybrid cells?
+recs <- andy.tot[aoi>800 & !is.na(andy.tot), pix.ID] ## exhaustive list
+'%ni%' <- Negate('%in%')
+miss <- (recs %ni% hyb.tot[bos.aoi30m>800 & !is.na(hyb.tot), pix.ID]) ## which are not in it
+miss <- recs[miss]
+hyb[pix.ID%in%miss,] ## a lot of 0 biomass/100% paved, will go fix now
+summary(hyb[pix.ID%in%miss, bos.biom30m])
+
+### which are the hybrid pix that aren't retrieiving but should?
+dim(hyb[bos.aoi30m>800 & is.na(pix.median),]) ## 994 of these
+View(hyb[bos.aoi30m>800 & is.na(pix.median),]) ## bulk are na in biomass or 0 canopy
+hyb[bos.aoi30m>800 & is.na(pix.median), unique(bos.lulc30m.lumped)] ## these are all NA 5 6 2
+hist(hyb[bos.aoi30m>800 & is.na(pix.median), bos.can30m]); summary(hyb[bos.aoi30m>800 & is.na(pix.median), bos.can30m]) # nearly all are 0 can
 
 #### STATIC NPP RESULTS LOOKED AT HERE
 #####
@@ -1165,6 +1285,8 @@ write.csv(tab1.f, "processed/boston/results/lulc_NPP_summary.csv")
 
 
 #########
+
+
 ### question: what is the magnitude of effect of npp on ppCO2 in local column of atmosphere?
 ## DOY range 135-258
 gseas <- 258-135 ## number of days in growing season

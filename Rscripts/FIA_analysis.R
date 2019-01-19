@@ -845,12 +845,18 @@ live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomedV2.csv")) ##
 #                             data=live.plot[HWfrac>0.25,])
 
 ## model using biomass gain MgC/MgC logxform
+## the below is model a.log above
 mod.live.plot.final <- lmer(log(biom.delt.ann.rel.HW)~biom0.MgC.ha+
                 (1|PlotID)+
                 (1|prev.sample),
-              data=live.plot, REML=F)
+              data=live.plot[HWfrac>0.25], REML=F)
+
+plot(live.plot[,biom0.MgC.ha], live.plot[,biom.delt.ann.rel.HW])
+points(live.plot[HWfrac<=0.25,biom0.MgC.ha], live.plot[HWfrac<=0.25,biom.delt.ann.rel.HW], pch=12, col="red")
+
 
 y <- summary(mod.live.plot.final)
+save(mod.live.plot.final, file="processed/mod.live.plot.final.sav")
 
 ## load the biomass data and reprocess
 biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel

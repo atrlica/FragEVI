@@ -10,10 +10,10 @@ library(rgeos)
 # setwd("/projectnb/buultra/atrlica/FragEVI/")
 
 # ### biomass equation biom~dbh
-# b0 <- -2.48
-# b1 <- 2.4835 ## these are eastern hardwood defaults, Jenkins et al., 2003 (following approach of Smith et al. 2018)
-# biom.pred <- function(x){exp(b0+(b1*log(x)))}
-# biom.inv <- function(x){exp((log(x)-b0)/b1)}
+b0 <- -2.48
+b1 <- 2.4835 ## these are eastern hardwood defaults, Jenkins et al., 2003 (following approach of Smith et al. 2018)
+biom.pred <- function(x){exp(b0+(b1*log(x)))}
+biom.inv <- function(x){exp((log(x)-b0)/b1)}
 
 
 #### PART 0: TESTING THE SENSE OF THINGS
@@ -592,6 +592,8 @@ ba <- function(x){(((x/2)^2)*pi)/1E4} ### to find JUST the BA of a tree based on
 # b1 <- 2.4835 ## these are eastern hardwood defaults
 # biom.pred <- function(x){exp(b0+(b1*log(x)))}
 
+#### THIS CODE CHUNK does the growth calculations using the saved object files and exports and R objects. 
+#### THE NEXT CODE CHUNK reloads the R objects and reconstructs a map file with all the different iterations of NPP
 ### for each pixel, get median estimated npp, median # trees
 container <- data.frame()
 med.dbh.rec <- numeric() ## keep a running tally of the dbh of every tree in the nearest-to-median-npp sample in each pixel
@@ -716,7 +718,12 @@ hist(container$med.dbh.sim); summary(container$med.dbh.sim) ## the median dbh of
 hist(container$max.wts) ## most get it done before 50 wt
 hist(container$num.sims) ## most get all 100 sims
 hist(container$med.npp.rand); summary(container$med.npp.rand) ## maxes out at 685 kg/pix
-
+gawlie <- data.frame(cbind(container$pix.ID, container$num.sims, container$sim.incomp, container$proc.status))
+colnames(gawlie) <- c("pix.ID", "num.sims", "sim.incomp", "proc.status")
+table(gawlie$proc.status) ## 5831 failed, 102055 worked
+table(gawlie$sim.incomp) ## inverse of above
+summary(gawlie[gawlie$sim.incomp==1, "num.sims"]) ## anything marked incomplete has less than 100 successful sims
+write.csv(gawlie, "processed/streettrees.npp.simulator.v5.sim.status.csv")
 ## could also look at these distributions in e.g. the 25h and 75th percentile retreivals of NPP for each pixel
 # container <- cbind(container, pixM.ba, pixM.dbh, pixM.tree.num)
 # sum(duplicated(container$pix.ID)) ## some duplicated pixels, remove
