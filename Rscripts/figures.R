@@ -1946,6 +1946,7 @@ dev.off()
 #####
 library(data.table)
 library(ggplot2)
+library(raster)
 hyb <- as.data.table(read.csv("processed/results/hybrid.results.V6.csv"))
 fia <- as.data.table(as.data.frame(raster("processed/results/FIA.empirV5.npp.median.tif")))
 names(hyb)[108] <- "hyb.pix.median"
@@ -2001,23 +2002,22 @@ bplots.pixmed <- ggplot(bdat.fin, aes(lulc, MgC.ha.yr, color=variable, alpha=var
                   labels=c("Developed", "Other Veg.", "HD Resid.", "LD Resid.", "Forest"))+
   scale_color_manual(values=c("black", "black"), guide="none")+
   ylab("Pixel median C uptake (MgC/ha/yr)")+
-  ylim(c(0,2.4))+
+  ylim(c(0,1.8))+
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
         panel.background = element_blank(),
-        legend.position = c(0.2, 0.70),
-        axis.text=element_text(size=8),
+        axis.text=element_text(size=10),
         axis.title=element_text(size=10, face="bold"),
         legend.text=element_text(size=6.5),
         legend.title=element_text(size=8, face="bold"),
         axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
         axis.ticks.x=element_blank(),
-        strip.text.x = element_text(size = 10, face="bold"),
-        legend.key = element_rect(fill = "white"))+
-  scale_alpha_manual(values=c(1,0.3), guide="none")
+        strip.text.x = element_text(size = 10, face="bold"))+
+  guides(fill=FALSE)+
+  scale_alpha_manual(values=c(1,0.3), guide="none")+
+  scale_x_discrete(labels=c("Developed", "Other Veg.", "HD Resid.", "LD Resid.", "Forest"))
 
 png(width=5, height=4, units="in", res=600, bg="white", filename="images/Fig3B_pixelNPP.png")
 bplots.pixmed

@@ -42,6 +42,26 @@ library(zoo)
 ### combine 2.4m NDVI and canopy map to produce 1m veg classification map
 ### use Arcmap to resample + snap to 1m grid (bilinear) for NDVI 2.4m -- get good alignment with original data and features in canopy map
 
+## Jan 2019: Raciti's reported canopy coverage was based on a map that translates biomass>0 to can==1
+## However, dataverse "canopy" layer has been altered via unknown smoothing process, apparently exceeds the biomass>0 coverage and creates discrepancy with Raciti et al. 2014 report
+## Step 0: Create 1m canopy presence/absence from 1m biomass map
+biom1m <- raster("data/dataverse_files/bostonbiomass_1m.tif")
+can.from.biom <- function(biom, filename) {
+  out <- raster(biom)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    r <- getValues(biom, row=bs$row[i], nrows=bs$nrows[i])
+    r[r>0] <- 1
+    out <- writeValues(out, r, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+cl <- can.from.biom(biom1m, "processed/boston/bos.can.redux.tif")
+plot(cl)
+
 # ### step 1: 1m Canopy presence/absence map
 # bos.can <- raster("data/dataverse_files/bostoncanopy_1m.tif")
 
