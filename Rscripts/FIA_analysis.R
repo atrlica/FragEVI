@@ -17,7 +17,8 @@ library(ggplot2)
 ## 5b) To be comparable to results based on the other data sets, the growth~dbh relationship should be estimated based on *the trees that lived* and not on a generalized resample of all trees (as the FIA measures everything, living or dead)
 
 
-#### Read in FIA data queried by Luca.
+#### Read in FIA data queried by Luca and process 
+#####
 spp.allo <- read.csv("data/FIA/spp_allometrics.csv")  ## lookup table of allometric equations for the most common representatives in the sample
 # live <- read.csv("data/FIA/MA_Tree_Data_ID_NOMORT_SUBID.csv")
 # live <- as.data.table(read.csv("data/FIA/MA_Tree_Data_ALLMEASURES.csv"))
@@ -126,10 +127,11 @@ live <- live[!(compID%in%kill.me),] ## 13005 records, 7743 second or more measur
 # View(live[PlotID==6,])
 # live[PlotID==6, length(unique(uniqueID)), by=YEAR] ## so we get 24 stems in this plot in 3 measurement events
 write.csv(live, "processed/fia.live.stem.dbh.growth.csv")
-
+#####
 
 ### Modeling growth~dbh (individual stem level) ## this is purely out of curiosity & need for a comparable figure panel
 #####
+library(lme4)
 live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv"))  ##  too-sparse subplots removed
 live$taxa <- live[,paste(GENUS, SPECIES)]
 ### new hotness: dbh increment modeling
@@ -147,21 +149,25 @@ yyy <- lmer(diam.rate~DIAM_T0 +
        (1|PlotID) +
        (1|GENUS)+
        (1|YEAR), data=live[lag>0 & STATUS ==1,], REML=F)
-
-zzz <- lmer(diam.rate~DIAM_T0 +
-              (1+DIAM_T0|PlotID) +
-              (1+DIAM_T0|GENUS)+
-              (1+DIAM_T0|YEAR), data=live[lag>0 & STATUS ==1,], REML=F)
 yyy.null <- lmer(diam.rate~1 +
-              (1|PlotID) +
-              (1|GENUS)+
-              (1|YEAR), data=live[lag>0 & STATUS ==1,], REML=F)
+                   (1|PlotID) +
+                   (1|GENUS)+
+                   (1|YEAR), data=live[lag>0 & STATUS ==1,], REML=F)
 
-anova(yyy.null, yyy)
+### this model fails to converge ... dodgy estimate quality?
+# zzz <- lmer(diam.rate~DIAM_T0 +
+#               (1+DIAM_T0|PlotID) +
+#               (1+DIAM_T0|GENUS)+
+#               (1+DIAM_T0|YEAR), data=live[lag>0 & STATUS ==1,], REML=F)
+
+
+anova(yyy.null, yyy) ## super significant
 
 save(yyy, file="processed/mod.fia.final.sav")
+#####
 
-# 
+### a lot of ancillary tests on how stem growth rate varies with time, taxon, etc.
+#####
 # ## log model of BIOMASS growth rate, growth>0, no hard/soft designation
 # summary(live$growth.ann.rel) ## 0.9-3.4%, (-13-53%) -- so looks lower generally than Andy or Street trees
 # mod.fia.stem.log <- lm(log(growth.ann.rel)~log(DIAM_T0), data=live[growth.ann.rel>0])
@@ -242,13 +248,15 @@ save(yyy, file="processed/mod.fia.final.sav")
 # legend(x=30, y=0.6, bty="n", legend = c("Hardwood", "Softwood"), fill=c("green", "forestgreen"))
 # abline(v=live[, median(DIAM_T0)])
 # abline(h=live[, median(growth.ann.rel)])
-
-
 #####
+
 #### Plot-level assessment of growth~biomass.density
+#####
 ### equivalent plot-level assessment in live-only data ## 331 plots have at least one subplot dense enough to bother with
 live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv")) ## this is data groomed to remove artifacts and subplots with <5 stems
 
+### attempting to track the fate of individual stems (didn't work that well)
+#####
 # ba.pred <- function(x){(x/2)^2*pi*0.0001} ## get BA per stump from dbh
 # ## 296 individual plots
 # live[YEAR<2007, unique(lag)] ## nothing has been measured prior to this window
@@ -266,7 +274,6 @@ live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv")) ## thi
 ## 4) Find the next sampling event, calculate total biomass and number of stems
 ### 4b) Track the frequency of death/removal since last measurement, and toss if too high
 
-
 # for(p in 1:vets){
 #   events <- live[PlotID==vets[p], unique(YEAR)]
 #   if(length(events)>1){ ## no sense processing this plot if it has only been visited once
@@ -282,13 +289,17 @@ live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv")) ## thi
 #   }
 # }
 ### there is evidently trees dropping out, and new trees that are growing into the qualifying range over the intervals 
+#####
+
 
 ### OK these records may not be solid enough to track tree populations down to individual over time
 ### INSTEAD: Bulk DBH (biomass) change from t0 (earliest instance) to t1 (next instance)
-## remove/account for sparse subplots
-## affix the records-based lag for annualizing change
+### remove/account for sparse subplots
+### affix the records-based lag for annualizing change
 ### this approach doesn't pay attention to the fate of individual stems -- these may come and go, but we know how much biomass is there at each sampling event and how many subplots we've included
 
+### groom data to get plot-basis biomass change over time
+#####
 ### get the total biomass at t0 and t1 + # of subplots in each sampling event past the first instance
 live[lag>0, prev.sample:=YEAR-lag] ## when was plot sampled prior to this sample?
 dim(live[lag>0 & STATUS==1,]) ## 7104 LIVE stem measurements (not dead/removed) that have a first-instance already
@@ -304,8 +315,9 @@ plot.sum <- merge(plot.sum, plot.HW[,.(yr.Plot, V1, V2)], by="yr.Plot")
 names(plot.sum) <- c("yr.Plot", "PlotID", "YEAR", "biom0.sum", "biom1.sum", "num.subplots", "prev.sample", "biom0.HW", "biom1.HW")
 plot.sum[,HWfrac:=biom0.HW/biom0.sum]
 subplot.area <- (7.3152^2)*pi
-# hist(plot.sum$HWfrac) ## most are high HW fraction
-# hist(plot.sum$num.subplots) ## about evenly split 1-4
+hist(plot.sum$HWfrac) ## most are high HW fraction
+hist(plot.sum$num.subplots) ## about evenly split 1-4
+dim(plot.sum) ## 319 plots
 
 ## biomass gain by AREA
 plot.sum[,biom.delt.ann:=((biom1.sum-biom0.sum)/(YEAR-prev.sample))] ## absolute annual bulk biomass change 
@@ -329,124 +341,7 @@ plot.sum[HWfrac>0.25, length(unique(PlotID))] ## 200 plots with 1) at least 1 su
 hist(plot.sum[HWfrac>0.25, biom.delt.ann.rel.HW])
 hist(plot.sum[HWfrac>0.25, biom.delt.ann.rel.HW.HW])
 write.csv(plot.sum, "processed/fia.live.plot.groomedV2.csv")
-
-
-### for some reason I thought this was the right way to look at the data but the above seems to show it doesn't have to be this complicated.# 
-# # subs <- live[, length(DIAM_T0), by=.(PlotID, SubID, YEAR)]
-# # hist(subs$V1)
-# # subs[V1<=5,] ## 823 subplot samples out of 2214 less than 5
-# # subs[,max(V1)]
-# plot.track <- integer()
-# subs.track <- integer()
-# events.track <- integer()
-# year0.track <- integer()
-# year1.track <- integer()
-# year2.track <- integer()
-# biom0HW.track <- numeric()
-# biom0SW.track <- numeric()
-# biom1HW.track <- numeric()
-# biom1SW.track <- numeric()
-# biom2HW.track <- numeric()
-# biom2SW.track <- numeric()
-# stems0.track <- integer()
-# stemsBAD1.track <- integer()
-# stemsBAD2.track <- integer()
-# 
-# ## do this intermediate processing step for every plot for up to two resampling events
-# vets <- live[YEAR<2007, unique(PlotID)] ## 201 plots started before 2007
-# ### OR: Run everything, culling for shit too young to be remeasured, and account for sampling window with starting year
-# vets <- live[, unique(PlotID)] ## ~300 plots
-# for(p in 1:length(vets)){
-#   events <- live[PlotID==vets[p], unique(YEAR)] ## when measured
-#   events <- events[order(events)] ## these have to be chronological
-#   if(length(events)>1){ ## do not process if visited only once
-#     plot.track <- c(plot.track, vets[p]) ## record this plot as having data
-#     events.track <- c(events.track, length(events)) ## flag how many measurement events there are for this plot
-#     subs <- live[PlotID==vets[p] & YEAR==min(events), length(DIAM_T1), by=SubID]
-#     keep <- subs[V1>=5, SubID] ## which subplots have at least 5 trees
-#     year0.track <- c(year0.track, min(events)) ## track year0 for this plot
-#     subs.track <- c(subs.track, length(keep)) ## track how many subs you're watching to start
-#     biom0HW.track <- c(biom0HW.track, live[PlotID==vets[p] & YEAR==min(events) & SubID%in%keep & type=="H", sum(biom1.spp)])
-#     biom0SW.track <- c(biom0SW.track, live[PlotID==vets[p] & YEAR==min(events) & SubID%in%keep & type=="S", sum(biom1.spp)])
-#     stems0.track <- c(stems0.track, live[PlotID==vets[p] & YEAR==min(events) & SubID%in%keep, length(DIAM_T0)]) ## how many stems initially present?
-#     for(i in 2:length(events)){
-#       assign(paste("year", (i-1), ".track", sep=""), c(get(paste("year", (i-1), ".track", sep="")), events[i])) ## track year0 for this plot
-#       assign(paste("biom", (i-1), "HW.track", sep=""), c(get(paste("biom", (i-1), "HW.track", sep="")), live[PlotID==vets[p] & YEAR==events[i] & SubID%in%keep & type=="H", sum(biom1.spp)])) 
-#       assign(paste("biom", (i-1), "SW.track", sep=""), c(get(paste("biom", (i-1), "SW.track", sep="")), live[PlotID==vets[p] & YEAR==events[i] & SubID%in%keep & type=="S", sum(biom1.spp)]))
-#       assign(paste("stemsBAD", (i-1), ".track", sep=""), c(get(paste("stemsBAD", (i-1), ".track", sep="")), live[PlotID==vets[p] & YEAR==events[i] & SubID%in%keep & STATUS%in%c(2,3), length(DIAM_T0)])) 
-#     }
-#     # live[PlotID==vets[p] & YEAR==events[i] & SubID%in%keep,]
-#   } 
-# }
-# ## find a plot that gets measured a lot and has morts/removals
-# lots <- arboles[num.measures==3, PlotID]
-# live[PlotID %in% lots & STATUS%in%c(2,3),]
-# View(live[PlotID==60 & STATUS%in%c(2,3),]) ## a bunch of small birches died
-# ### now constitute this into a long-form biomass difference tracker
-# subplot.area <- (7.3152^2)*pi
-# dat <- data.frame(Year=year0.track)
-# dat$PlotID <- plot.track
-# dat$HWfrac <- biom0HW.track/(biom0HW.track+biom0SW.track)
-# dat$stems0 <- stems0.track
-# dat$GONE1 <- stemsBAD1.track
-# dat$tot.biom0 <- (biom0HW.track+biom0SW.track)
-# dat$biom0.MgC.ha <- ((dat$tot.biom0/2000)/(subs.track*subplot.area))*1E4
-# dat$delta.biomHW <- (biom1HW.track-biom0HW.track)
-# ## recall that in andy forest we used a model for *annual* dbh gain applied to the stems to estimate biomass gain
-# ## but here, we just have biomass at two lagged times, separated by a variable lag -- we have to annualize by lag
-# dat$delta.biomHW.ann <- dat$delta.biomHW/(year1.track-year0.track)
-# dat$biomHW.gain.rel <- dat$delta.biomHW.ann/dat$tot.biom0
-# dat <- as.data.table(dat)
-# plot(dat$biom0.MgC.ha, dat$biomHW.gain.rel)
-# points(dat[HWfrac<0.25, biom0.MgC.ha], dat[HWfrac<0.25, biomHW.gain.rel], pch=16, col="green")
-# points(dat[GONE1/stems0>0.25, biom0.MgC.ha], dat[GONE1/stems0>0.25, biomHW.gain.rel], pch=16, col="red")
-# # dat[biomHW.gain.rel<(-0.10),] ### INCLUDING the morts etc. there is just one plot that loses >10% biomass
-# # View(live[PlotID==136,]) ### this plot gets logged!
-# # live[PlotID==136, length(DIAM_T1), by=YEAR] ## 34 trees in 2004 to just 10 in 2013, and we watch the same subplots and don't restrict the stems we allow in
-# hist(dat$HWfrac) ## only a fraction are low HWfrac
-# rocked.tab <- dat[GONE1/stems0>0.25, PlotID]
-# 
-# 
-# ### load up the second measurement round (119 additional plot measurements)
-# dat2 <- as.data.table(data.frame(Year=year1.track))
-# dat2[,PlotID:=plot.track]
-# dat2[,subs:=subs.track]
-# dat2[,events:=events.track]
-# dat2[,biom0HW:=biom1HW.track] ## treat time 1 as time 0 in the repeated measurement
-# dat2[,tot.biom0:=(biom1HW.track+biom1SW.track)]
-# dat2[,HWfrac:=biom0HW.track/(biom0HW.track+biom0SW.track)] ## original time0 HW fraction
-# dat2[,stems0:=stems0.track]
-# dat2[,biom0.MgC.ha:=((tot.biom0/2000)/(subs.track*subplot.area))*1E4]
-# dat2 <- dat2[events.track==3,] ## now we match length with year2.track
-# dat2[,GONE1:=stemsBAD2.track]
-# dat2[,delta.biomHW:=(biom2HW.track-biom0HW)]
-# dat2[,delta.biomHW.ann:=delta.biomHW/(year2.track-Year)]
-# dat2[,biomHW.gain.rel:=delta.biomHW.ann/tot.biom0]
-# ### stems marked removed in one year do not appear in next but morts do?
-# stems1 <- dat[PlotID%in%dat2[,unique(PlotID)], stems0-GONE1]
-# dat2[,stems0:=stems1] ## recalibrate your baseline of stem numbers
-# plot(dat2$biom0.MgC.ha, dat2$biomHW.gain.rel) ## same pattern, some serious losses
-# points(dat2[GONE1/stems0>0.25, biom0.MgC.ha], dat2[GONE1/stems0>0.25, biomHW.gain.rel], col="red", pch=16)
-# dat2$subs <- NULL
-# dat2$events <- NULL
-# dat2$biom0HW <- NULL
-# dat2 <- setcolorder(dat2, names(dat))
-# 
-# dat <- rbind(dat, dat2) ## rocking 375 records now
-# dat[,rocked:=0]
-# dat[PlotID%in%rocked.tab, rocked:=1] ## flag plots that showed high stem loss early on, 41 plots early on
-# plot(dat$biom0.MgC.ha, dat$biomHW.gain.rel) ## hyperbolic but mostly flat, say 20 serious biomass loss plots
-# points(dat[HWfrac<0.25, biom0.MgC.ha], dat[HWfrac<0.25, biomHW.gain.rel], pch=16, col="green")
-# points(dat[rocked==1, biom0.MgC.ha], dat[rocked==1, biomHW.gain.rel], pch=16, col="red")
-# points(dat[GONE1/stems0>0.25, biom0.MgC.ha], dat[GONE1/stems0>0.25, biomHW.gain.rel], pch=16, col="purple")
-# dat[,PlotID:=as.factor(PlotID)]
-# dat[,Year:=as.factor(Year)]
-# plot(dat[!PlotID %in% c(47,283,183,5), biom0.MgC.ha], dat[!PlotID %in% c(47,283,183,5), biomHW.gain.rel]) ## hyperbolic but mostly flat, say 20 serious biomass loss plots
-# points(dat[!PlotID %in% c(47,283,183,5) & rocked==1, biom0.MgC.ha], dat[!PlotID %in% c(47,283,183,5) & rocked==1, biomHW.gain.rel], col="red", pch=16) ## hyperbolic but mostly flat, say 20 serious biomass loss plots
-# dat[rocked==0 & biomHW.gain.rel<(-0.05),PlotID] ## these are the weird plots that get stupid in later sample events
-# 
-# runme <- unique(dat[rocked==0 & !PlotID%in%c(47,283,183,5) & HWfrac>=0.25, PlotID]) ## 184 unique plots
-
+#####
 
 ## OK, figure a model and coefficient error terms
 live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomedV2.csv"))

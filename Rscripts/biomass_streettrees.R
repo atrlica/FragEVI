@@ -9,12 +9,6 @@ library(rgeos)
 
 # setwd("/projectnb/buultra/atrlica/FragEVI/")
 
-# ### biomass equation biom~dbh
-b0 <- -2.48
-b1 <- 2.4835 ## these are eastern hardwood defaults, Jenkins et al., 2003 (following approach of Smith et al. 2018)
-biom.pred <- function(x){exp(b0+(b1*log(x)))}
-biom.inv <- function(x){exp((log(x)-b0)/b1)}
-
 
 #### PART 0: TESTING THE SENSE OF THINGS
 #####
@@ -290,58 +284,6 @@ save(mod.street.dbhdelta.me, file="processed/mod.street.final.sav") ## for use i
 load("processed/mod.street.dbhdelta.me.sav")
 plot(mod.street.dbhdelta.me)
 hist(residuals(mod.street.dbhdelta.me)) ## looks good enough to me
-
-# ### the models for FIA stem growth rate
-# bu1 <- lm(diam.rate~poly(DIAM_T0, degree=1), data=live[DIAM_T0>0,]);AIC(bu1)
-# bu2 <- lm(diam.rate~poly(DIAM_T0, degree=2), data=live[DIAM_T0>0,]);AIC(bu2)
-# bu3 <- lm(diam.rate~poly(DIAM_T0, degree=3), data=live[DIAM_T0>0,]);AIC(bu3)
-# bu4 <- lm(diam.rate~poly(DIAM_T0, degree=4), data=live[DIAM_T0>0,]);AIC(bu4)
-# bu5 <- lm(diam.rate~poly(DIAM_T0, degree=5), data=live[DIAM_T0>0,]);AIC(bu5)
-# bu6 <- lm(diam.rate~poly(DIAM_T0, degree=6), data=live[DIAM_T0>0,]);AIC(bu6)
-# hist(bu$residuals, xlim=c(-2,2))
-# plot(live$DIAM_T0, live$diam.rate, 
-#      col="skyblue", pch=16, cex=0.8, ylim=c(-1, 3), main="FIA trees", xlab="DBH (cm)", ylab="DBH change (cm/yr)")
-# points(live[DIAM_T0>0,DIAM_T0], predict(bu), col="black", cex=0.2)
-
-## 10% DBH change per year in 15 cm tree, in FIA data 
-# (0.1*15)+15 ## 16.5 cm next year
-# ## 40% DBH change per year in 15 cm tree, in street data
-# (0.4*15)+15 ## 21 cm next year -- street trees "grow" faster than FIA trees
-# biom.pred(15)
-# (biom.pred(16.5)-biom.pred(15))/biom.pred(15) ## 10% DBH change is a 27% biomass change
-# (biom.pred(21)-biom.pred(15))/biom.pred(15) ## 40% DBH change is a 130% biomass change
-
-
-# ### exponential space in biomass relative growth rate
-# par(mfrow=c(1,2))
-# main.xlim <- c(4, 100)
-# main.ylim <- c(-0.15, 1)
-# # plot(street[record.good==1, dbh.2006],street[record.good==1, npp.ann.rel])
-# mod.street.nls <- nls(npp.ann.rel ~ exp(a + b * log(dbh.2006)), data=street[record.good==1,], start=list(a=0, b=0)) ### OK THIS is the real exponential non-linear model that can handle the negatives
-# mm <- summary(mod.street.nls) ## RSE is pretty high 0.33
-# street[record.good==1, sd(npp.ann.rel)/sqrt(length(npp.ann.rel))] ### St.Err mean is 0.008!
-# 
-# plot(street[record.good==1, dbh.2006], street[record.good==1, npp.ann.rel],
-#      ylim=main.ylim, xlim=main.xlim, pch=15, col="salmon", cex=0.5, main="Street trees growth~DBH",
-#      ylab="Relative growth (kg/kg)", xlab="Stem DBH (cm)")
-# test <- seq(from=main.xlim[1], to=main.xlim[2], length.out=100)
-# lines(test, 
-#       exp(mm$coefficients[1]+(mm$coefficients[2]*log(test))),
-#       col="black", lty=2, lwd=3)
-# abline(v=street[record.good==1, median(dbh.2006)], lwd=1, col="black")
-# abline(h=street[record.good==1, median(npp.ann.rel)], lwd=1, col="black")
-# 
-# mod.street.dbh <- nls(diam.rate.rel~exp(a+(b*dbh.2006)), data=street[record.good==1,], start=list(a=0, b=0))
-# nn <- summary(mod.street.dbh) ## RSE is 0.04
-# plot(street[record.good==1, dbh.2006], street[record.good==1, diam.rate.rel],
-#      ylim=main.ylim, xlim=main.xlim, pch=15, col="salmon", cex=0.5, main="Street trees growth~DBH",
-#      ylab="% DBH change/yr (cm/cm)", xlab="Stem DBH (cm)")
-# test <- seq(from=main.xlim[1], to=main.xlim[2], length.out=100)
-# lines(test, 
-#       exp(nn$coefficients[1]+(nn$coefficients[2]*(test))),
-#       col="black", lty=2, lwd=3)
-# abline(v=street[record.good==1, median(dbh.2006)], lwd=1, col="black")
-# abline(h=street[record.good==1, median(diam.rate.rel)], lwd=1, col="black")
 #####
 
 
@@ -353,6 +295,14 @@ hist(residuals(mod.street.dbhdelta.me)) ## looks good enough to me
 ## V3: Sample weighting of dbh distribution was adjusted towards large end if simulations failed
 ## V4: tolerance on matching biomass distribution was adjusted to a static threshold (addresses consistent undershoot in large biomass cells)
 ## V5: urban-specific allometrics on the front end
+## V6: uses the correct canopy 1m map aggregated to 30m, based on Raciti's biomass>0 coverage at 1m (NOT dataverse boston canopy tif)
+
+# can <- raster("processed/boston/bos.can.redux30m.tif")
+# can.dat <- as.data.table(as.data.frame(can))
+# badcan <- raster("processed/boston/bos.can30m.tif")
+# badcan.dat <- as.data.table(as.data.frame(badcan))
+# plot(badcan.dat$bos.can30m, can.dat$bos.can.redux30m, pch=15, cex=0.6)
+# abline(a=0, b=1, col="red") ## almost always the biomass>0 canopy is less than the badcan coverage at 30m pixel scale
 
 ###### Approach 5: Reconfigure street tree analysis for more effective search
 ## Look at cell biomass sample smartly from dbh data, bounded to stop excessive density or BA to reach the biomass total
@@ -362,25 +312,24 @@ aoi <- raster("processed/boston/bos.aoi30m.tif")
 biom <- crop(biom, aoi) ## biomass was slightly buffered, need to clip to match canopy fraction raster
 biom.dat <- as.data.table(as.data.frame(biom))
 biom.dat[,aoi:=as.vector(getValues(aoi))]
-can <- raster("processed/boston/bos.can30m.tif")
+can <- raster("processed/boston/bos.can.redux30m.tif")
 can.dat <- as.data.table(as.data.frame(can))
 biom.dat <- cbind(biom.dat, can.dat)
 biom.dat[,index:=1:dim(biom.dat)[1]] ## master pixel index for stack of biom/aoi/can, 354068 pix
-# p <- ecdf(biom.dat[!is.na(bos.biom30m) & bos.biom30m>10,bos.biom30m]) ## cdf of cell biomass
+names(biom.dat)[3] <- "bos.can30m"
+# p <- ecdf(biom.dat[!is.na(bos.biom30m) & bos.biom30m>10,bos.biom30m]) ## cdf of cell biomass, vast bulk of # is below 20k
+# j <- ecdf(biom.dat[!is.na(bos.biom30m) & bos.biom30m>10,bos.can30m])
 
 ## prep street tree data and biomass data for processing
 street <- as.data.table(read.csv("processed/boston/street.trees.dbh.csv"))
 street.allo <- read.csv("docs/street.biometrics.csv")
 street[, biom.2006.urb:=street.allo[match(street[,genus], street.allo$genus, nomatch=8), "b0"]*(street[,dbh.2006]^street.allo[match(street[,genus], street.allo$genus, nomatch=8), "b1"])*street.allo[match(street[,genus], street.allo$genus, nomatch=8), "dens"]]
-# plot(street[,biom.2006], street[,biom.2006.urb], col=as.numeric(street[,genus]))
-# abline(a=0, b=1)
-# mod.biom.rel <- summary(lm(log(at.npp.ann.rel)~log(dbh.2006), data=street[record.good==1 & ann.npp!=0])) #r2=0.54! so relative %change biomass per year is the most predictive so far
 
 ba.pred <- function(x){(x/2)^2*pi*0.0001} ## get BA per stump from dbh
 clean <- street[record.good==1,] # get a good street tree set ready
 clean[, ba:=ba.pred(dbh.2006)]
-setkey(clean, biom.2006.urb) # 2390 records in final selection, dbh range 5-112 cm
-clean <- clean[order(clean$dbh.2006),]
+setkey(clean, biom.2006.urb) # 2592 records in final selection, dbh range 5-112 cm
+clean <- clean[order(clean$dbh.2006, decreasing = F),]
 clean[,rank:=seq(from=1, to=dim(clean)[1])] ## all the trees have a fixed size rank now (used in adjusting sampling weights)
 
 ### set up data
@@ -394,7 +343,7 @@ runme <- biom.dat[!is.na(bos.biom30m) & bos.biom30m>10 & !is.na(aoi) & !is.na(bo
 chunk.size=2000 ## how many pixel to handle per job ## 10000 is probably too big, if you do this again go for smaller chunks
 file.num=ceiling(dim(runme)[1]/chunk.size)
 pieces.list <- seq(chunk.size, by=chunk.size, length.out=file.num) ## how the subfiles will be processed
-vers <- 5 ## set version for different model runs here
+vers <- 6 ## set version for different model runs here
 
 ## check existing npp files, find next file to write
 check <- list.files("processed/boston/biom_street")
@@ -444,11 +393,11 @@ proc.track <- rep(999999, dim(runme.x)[1]) ## the exit status of each cell (1=su
 cage.spp <- list() ## keep track of species of each selected tree
 
 ## for dynamic weighting of sampling of dbh records
-incr=300 ## incrememnt to change weighting, how many failures before reaching  max weighting shift
+incr=300 ## incrememnt to change weighting, how many failures before reaching max weighting shift
 k=200 ## constant, arbitrary top of prob weights, higher-->steeper change in sampling weight
 D=k/incr ## drop increment, sensitive to number of tries to make while adjusting the sampling weights
 
-## loop each row
+## loop each row = pixel
 for(t in 1:dim(runme.x)[1]){
   ann.npp <- numeric()
   num.trees <- integer()
