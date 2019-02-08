@@ -8,13 +8,14 @@ library(qdapRegex)
 library(zoo)
 
 
-
-##### Boston high-res data -- where are the "forests"?
+###
+### Boston high-res data -- where are the high-biomass "forests"?
+#####
 ## have used a rough threshold of 20k kg per pixel (equiv) as a cutoff for where it not longer
 ## makes sense to treat things as a mixed urban/tree pixel and more like a forest (about 100 MgC/ha)
 ((20000/2000)/900)*1E4 ### 111 MgC/ha
 
-## would like to know what sort of pixels are ovetr 20k kg
+## would like to know what sort of pixels are over 20k kg
 # bos.biom <- raster("processed/boston/bos.biom30m.tif")
 # #### this function reclasses everything along 20k kg threshold
 # big.biom <- function(biom, filename) {
@@ -34,13 +35,205 @@ library(zoo)
 # big.biom(bos.biom, "processed/boston/bos.biom20k.tif")
 # big <- raster("processed/boston/bos.biom20k.tif")
 # plot(big)
+#####
 
+###
+### create a 1m AOI raster
+#####
+### get Boston limits, raterize to 1m canopy and EVI 30m grid
+bos.can <- raster("processed/boston/bos.can.redux.tif")
+towns <- readOGR(dsn = "F:/BosAlbedo/data/towns/town_AOI.shp", layer = "town_AOI" )
+bos.AOI <- towns[towns@data$TOWN=="BOSTON",]
+bos.AOI <- bos.AOI[bos.AOI@data$SHAPE_AREA>1E07,] ## remove Harbor Islands
+bos.AOI <- spTransform(bos.AOI, crs(bos.can))
+bos.AOI@data$include <- 1
+bos.AOI.r <- rasterize(bos.AOI[bos.AOI@data$include], bos.can)
+aoi.fix <- function(x, filename) { # x is lulc, lu.defs is the list of collapsed classes, filename=output
+  out <- raster(x)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## AOI
+    v[!is.na(v)] <- 1
+    out <- writeValues(out, v, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+bos.AOI.r <- aoi.fix(bos.AOI.r, filename="processed/boston/tmp.tif")
+bos.AOI.r <- crop(bos.AOI.r, bos.AOI)
+writeRaster(bos.AOI.r, filename="processed/boston/bos.aoi.tif", format="GTiff", overwrite=T)
+#####
 
+###
+### process 1m ISA 
+#####
+isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
+towns <- readOGR(dsn = "/projectnb/buultra/atrlica/BosAlbedo/data/towns/town_AOI.shp", layer = "town_AOI" )
+bos.bord <- towns[towns@data$TOWN=="BOSTON",]
+bos.bord <- spTransform(bos.bord, crs(isa))
+bos.isa <- crop(isa, bos.bord)
+writeRaster(bos.isa, filename="processed/bos_isa_1m.tif", format="GTiff", overwrite=T)
+# python.load("Rscripts/bosISA_resamp.py") ### test this
+bos.isa <- raster("processed/isa_cangrid.tif")
 
-#########
+### handling ISA registration difficulties
+### 1m ISA shows misalignment to canopy/biomass features in places, particularly Allston
+### first attempt was to manually reregister to the cov==barren layer 
+### some improvement was made in reregistration, but not perfect in W part of Boston
+### this layer lives as processed/boston/bos.isa.rereg.tif
+### this layer was manually resampled to 30m landsat EVI grid as bos.isa.rereg30m.tif
+### Second attempt (much better) was to manually reregister ISA according to road features on MassGIS road centerlines
+### this version is bos.isa.RR2.tif --> the 30m aggregate updated bos.isa30m.tif
+#####
+
+###
+### Create lumped LULC map
+#####
+### call python script for rasterize LULC in Boston to 1m canopy grid
+# pyth.path = './Rscripts/LULC_bos_rast.py'
+# output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
+# print(output)
+
+### get a clean copy of the LULC 1m raster
+# bos.lulc <- raster("processed/boston/LU_bos_r1m.tif")
+# bos.aoi <- raster("processed/boston/bos.aoi.tif")
+# # bos.lulc <- crop(bos.lulc, bos.aoi)
+# # bos.lulc <- mask(bos.lulc, bos.aoi)
+# # writeRaster(bos.lulc, filename="processed/boston/bos.lulc_only.tif", format="GTiff", overwrite=T)
+# bos.lulc <- raster("processed/boston/bos.lulc_only.tif")
+
+## decide on a collapsed LULC scheme to flag for area fraction
+lu.classnames <- c("forest", "dev", "hdres", "ldres", "lowveg", "water")
+lu.forest <- c(3,37) # Forest, FWet
+lu.dev <- c(5,8,15,16,17,18,19,29,31,36,39) #Mining, Spect-rec, Comm, Ind, Transitional, Transp, Waste Disp, Marina, Urb Pub/Inst., Nursery, Junkyard
+lu.hdres <- c(10,11) # HDResid., MFResid.,
+lu.ldres <- c(12,13,38) # MDResid., LDResid, VLDResid
+lu.lowveg <- c(1,2,4,6,7,9,14,25,26,34,40) # Crop, pasture, open, part-rec, water-rec, SWwet, SWbeach, Golf, Cemetery, Brushland
+lu.water <- c(20)
+lulc.tot <- list(lu.forest, lu.dev, lu.hdres, lu.ldres, lu.lowveg, lu.water)
+
+lulc.lump <- function(x, lu.defs, filename) { # x is lulc, lu.defs is the list of collapsed classes, filename=output
+  out <- raster(x)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ##  LULC raster raw LUCODES
+    o <- v
+    o[v%in%lu.defs[[1]]] <- 1 ## forest
+    o[v%in%lu.defs[[2]]] <- 2 ## dev
+    o[v%in%lu.defs[[3]]] <- 3 ## hdres
+    o[v%in%lu.defs[[4]]] <- 4 ## ldres
+    o[v%in%lu.defs[[5]]] <- 5 ## lowveg
+    o[v%in%lu.defs[[6]]] <- 6 ## water
+    out <- writeValues(out, o, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+## 1m lumped LULC raster
+bos.lulc <- raster("processed/boston/bos.lulc_only.tif")
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+lulc.lump(bos.lulc, lulc.tot, "processed/boston/bos.lulc.lumped.tif")
+
+bos.lulc <- raster("processed/boston/bos.lulc.lumped.tif")
+plot(bos.lulc)
+
+## create comparable single 30m raster with collapsed LULC classes
+## quick and dirty arc process on polygons poly-->raster at 30m EVI grid
+bos.lulc30m <- raster("processed/boston/bos_lulc30m.tif") ## this is full 40 class LULC scheme
+bos.aoi <- raster("processed/boston/bos.aoi30m.tif")
+bos.lulc30m <- extend(bos.lulc30m, bos.aoi)
+bos.lulc30m <- crop(bos.lulc30m, bos.aoi)
+bos.lulc30m <- mask(bos.lulc30m, bos.aoi)
+lulc.lump(bos.lulc30m, lulc.tot, "processed/boston/bos.lulc30m.lumped.tif")
+
+bos.lulc30m <- raster("processed/boston/bos.lulc30m.lumped.tif")
+plot(bos.lulc30m)
+
+## flexible blockwise function for flagging different class groups of LULC
+lulc.flag <- function(x, lu.spot, aoi, filename) { # x is 1m lulc, lu.spot is list of LULC targeted, aoi is aoi 1m raster
+  out <- raster(x)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## 1m LULC raster
+    a <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) # AOI mask
+    o <- rep(0, length(v))
+    o[v%in%lu.spot] <- 1 ## flag the in-category with 1
+    o[is.na(a)] <- NA ## cancel values outside of AOI
+    out <- writeValues(out, o, bs$row[i])
+    print(paste("finished block", i, "of", bs$n, "in", lu.classnames[l]))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+
+### loop through LULC class groups and create separately flagged LULC rasters
+for(l in 1:length(lulc.tot)){
+  tmp <- do.call(lulc.flag,
+                 args = list(bos.lulc,
+                             lulc.tot[[l]],
+                             bos.aoi,
+                             paste("processed/boston/bos.", lu.classnames[l], "_only.tif", sep="")))
+  # print(paste("masking to Boston AOI"))
+  # tmp <- mask(tmp, bos.aoi)
+  # writeRaster(tmp, filename=paste("processed/boston/bos.", lu.classnames[l], "_only.tif", sep=""), format="GTiff", overwrite=T)
+}
+# bos.lulc <- raster("processed/boston/bos.lulc_only.tif")
+# bos.aoi <- raster("processed/boston/bos.aoi.tif")
+# lulc.flag(bos.lulc, lulc.tot[[1]], bos.aoi, "processed/boston/bos.forest.tif")
+
+bos.forest <- raster("processed/boston/bos.forest_only.tif")
+bos.dev <- raster("processed/boston/bos.dev_only.tif")
+bos.hdres <- raster("processed/boston/bos.hdres_only.tif")
+bos.ldres <- raster("processed/boston/bos.ldres_only.tif")
+bos.lowveg <- raster("processed/boston/bos.lowveg_only.tif")
+bos.water <- raster("processed/boston/bos.water_only.tif")
+plot(bos.forest, main="forest")
+plot(bos.dev, main="Developed")
+plot(bos.hdres, main="HDres")
+plot(bos.ldres, main="LDRes")
+plot(bos.lowveg, main="LowVeg")
+plot(bos.water, main="water")
+#####
+
+###
+### Create correct 1m canopy map from biomass map
+#####
+can.fix <- function(can, aoi, filename) { # x is biomass, a is AOI, filename=output
+  out <- raster(can)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    v <- getValues(can, row=bs$row[i], nrows=bs$nrows[i]) ##  biomass
+    a <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) ##  biomass
+    v[v>0] <- 1
+    v[is.na(a)] <- NA
+    out <- writeValues(out, v, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+bos.can <- raster("data/dataverse_files/bostonbiomass_1m.tif")
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+bos.can <- crop(bos.can, bos.aoi)
+s <- can.fix(bos.can, bos.aoi, filename="processed/boston/bos.can.redux.tif")
+plot(s)
+
+### fuck it do the biomass file while you'r here
+bos.biom <- raster("data/dataverse_files/bostonbiomass_1m.tif")
+bos.biom <- crop(bos.biom, bos.aoi)
+writeRaster(bos.biom, filename="processed/boston/bos.biom.tif", format="GTiff", overwrite=T)
+#####
+
 ### Boston high-res data -- vegetation character map
 ### combine 2.4m NDVI and canopy map to produce 1m veg classification map
 ### use Arcmap to resample + snap to 1m grid (bilinear) for NDVI 2.4m -- get good alignment with original data and features in canopy map
+#####
 
 ## Jan 2019: Raciti's reported canopy coverage was based on a map that translates biomass>0 to can==1
 ## However, dataverse "canopy" layer has been altered via unknown smoothing process, apparently exceeds the biomass>0 coverage and creates discrepancy with Raciti et al. 2014 report
@@ -62,44 +255,11 @@ can.from.biom <- function(biom, filename) {
 cl <- can.from.biom(biom1m, "processed/boston/bos.can.redux.tif")
 plot(cl)
 
-# ### step 1: 1m Canopy presence/absence map
-# bos.can <- raster("data/dataverse_files/bostoncanopy_1m.tif")
-
-# ### set no canopy (0) values to NA
-# bos.can.dat <- as.data.table(as.data.frame(bos.can))
-# bos.can.dat[bostoncanopy_1m==0,] <- NA
-# bos.can.na <- raster(bos.can)
-# bos.can.na <- setValues(bos.can.na, bos.can.dat$bostoncanopy_1m)
-# writeRaster(bos.can.na, "E:/FragEVI/data/dataverse_files/bostoncanopy_1m_na.tif", format="GTiff", overwrite=T, datatype="INT1U")
-# bos.can.na <- raster("E:/FragEVI/data/dataverse_files/bostoncanopy_1m_na.tif")
-
-# ### step 3 (must be performed on desktop): put NDVI.img through Arc and resample+snap to grid for 1m canopy map - be sure the end product is NAD83 UTM19N
+### (must be performed on desktop): put NDVI.img through Arc and resample+snap to grid for 1m canopy map - be sure the end product is NAD83 UTM19N
 # pyth.path = './Rscripts/NDVI_resamp.py'
 # output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
 # print(paste("ArcPy working on NDVI resample: ", output))
 
-# ### step 4: land cover classification for Boston using the 1m resampled NDVI (0 = barren, 1 = grass, 2 = canopy)
-# bos.ndvi <- raster("data/NDVI/NDVI_1m_res_cangrid.tif")
-# bos.can.na <- raster("data/dataverse_files/bostoncanopy_1m_na.tif")
-# bos.ndvi <- crop(bos.ndvi, bos.can.na)
-# cover.bl <- function(x, y, filename) { # x is canopy, y is ndvi
-#   if(file.exists("processed/bos.cov.tif")){file.remove("processed/bos.cov.tif")}
-#   out <- raster(x)
-#   bs <- blockSize(out)
-#   out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
-#   for (i in 1:bs$n) {
-#     v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## canopy map
-#     g <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## ndvi map
-#     cov <- v
-#     cov[g>=0.2 & v==0] <- 1
-#     cov[v==1] <- 2
-#     out <- writeValues(out, cov, bs$row[i])
-#     print(paste("finished 1m cover block", i, "of", bs$n))
-#   }
-#   out <- writeStop(out)
-#   return(out)
-# }
-# bos.cov <- cover.bl(bos.can, bos.ndvi, filename="processed/bos.cov.tif")
 
 ### V3 cover mapping: Uses re-registered ISA layer
 # bos.isa <- raster("processed/boston/isa.reg-res2.tif")
@@ -113,7 +273,7 @@ bos.ed <- raster("processed/boston/bos.ed10.tif")
 bos.isa <- raster("processed/boston/bos.isa.RR2.tif")
 
 
-#### ### THIS VERSION spit out a 6 class raster, splits canopy by edge position
+#### THIS VERSION spit out a 6 class raster, splits canopy by edge position
 veg.class <- function(can, isa, ed, ndvi, lulc, aoi, filename) {
   out <- raster(can)
   bs <- blockSize(out)
@@ -149,9 +309,16 @@ plot(cl)
 # bos.isa <- raster("processed/boston/isa.reg-res2.tif")
 bos.isa <- raster("processed/boston/bos.isa.RR2.tif")
 bos.ndvi <- raster("processed/boston/bos.ndvi.tif")
-bos.can <- raster("processed/boston/bos.can.tif")
+bos.can <- raster("processed/boston/bos.can.redux.tif")
 bos.lulc <- raster("processed/boston/bos.lulc.lumped.tif")
 bos.aoi <- raster("processed/boston/bos.aoi.tif")
+crs(bos.isa); extent(bos.isa)
+crs(bos.ndvi); extent(bos.ndvi)
+crs(bos.can); extent(bos.can)
+crs(bos.lulc); extent(bos.lulc)
+crs(bos.aoi); extent(bos.aoi)
+bos.can <- crop(bos.can, bos.aoi)
+
 
 #### this function spits out a single 6 class raster
 veg.class <- function(can, isa, ndvi, lulc, aoi, filename) {
@@ -165,21 +332,21 @@ veg.class <- function(can, isa, ndvi, lulc, aoi, filename) {
     w <- getValues(can, row=bs$row[i], nrows=bs$nrows[i]) ## canopy
     x <- getValues(isa, row=bs$row[i], nrows=bs$nrows[i]) ## isa
     y <- getValues(ndvi, row=bs$row[i], nrows=bs$nrows[i]) ## ndvi
-    z <- getValues(lulc, row=bs$row[i], nrows=bs$nrows[i]) ## canopy
+    z <- getValues(lulc, row=bs$row[i], nrows=bs$nrows[i]) ## lulc
     target[w==1 & x==0] <- 6 # canopy over pervious
     target[w==1 & x==1] <- 5 # canopy over impervious
     target[w==0 & x==1] <- 4 # non-veg impervious
     target[w==0 & x==0 & y>=0.25] <- 2 # grass
     target[w==0 & x==0 & y<0.25 & z!=6] <- 3 # non-veg pervious
     target[w==0 & x==0 & y<0.25 & z==6] <- 1 # water
-    target[is.na(check) | is.na(w) | is.na(x) | is.na(y) | is.na(z)] <- NA ## cancel missing values
+    target[is.na(check) | is.na(w) | is.na(x) | is.na(y) | is.na(z)] <- NA ## cancel missing values or anything out of aoi
     out <- writeValues(out, target, bs$row[i])
     print(paste("finished block", i, "of", bs$n))
   }
   out <- writeStop(out)
   return(out)
 }
-cl <- veg.class(bos.can, bos.isa, bos.ndvi, bos.lulc, bos.aoi, "processed/boston/bos.cov.V3-canisa.tif")
+cl <- veg.class(bos.can, bos.isa, bos.ndvi, bos.lulc, bos.aoi, "processed/boston/bos.cov.V4-canisa.tif")
 plot(cl)
 
 library(viridis)
@@ -193,8 +360,12 @@ cov.pal <- cividis(6)
 cov.pal <- c(cov.pal[1],cov.pal[6],cov.pal[3],cov.pal[2],cov.pal[4],cov.pal[5]) ## this seems like an intuitive structuring
 image(cl, col=cov.pal)
 col2rgb(cov.pal) ## how to enter these assholes into arc RGB
+#####
 
-##### Now use cover map to locate near-road pervious pixels without canopy cover
+##
+#### This is part of process to ID plantable road buffer space
+#####
+### Now use cover map to locate near-road pervious pixels without canopy cover
 rdbuff <- raster("E:/FragEVI/processed/boston/ROAD10m_rast.tif")
 cov <- raster("E:/FragEVI/processed/boston/bos.cov.V3-canisa.tif")
 rdbuff <- crop(extend(rdbuff, cov), cov)
@@ -286,19 +457,25 @@ plantP.canReject <- plantP.filt.buff[ditch,]
 
 writeOGR(plantP.canfilt, "processed/boston/plant10m_simp_4mbuff_canOK.shp", "plant10m_simp_4mbuff_canOK", driver="ESRI Shapefile")
 writeOGR(plantP.canReject, "processed/boston/plant10m_simp_4mbuff_canBAD.shp", "plant10m_simp_4mbuff_canBAD", driver="ESRI Shapefile")
+#####
 
-###########
-# ### Processing 1m canopy map for edge class
+###
+### Processing 1m canopy map for edge class
+#####
 # ### call python scripbt for identifying canopy edge distance (desktop only)
 # pyth.path = './Rscripts/canopy_process.py'
 # output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
 # print(output)
+### notes: Feb 6 2019 -- have reprocessed this with the un-smoothed canopy cover 1m raster (had to simplify polygons)
 
 ### Canopy area by cumulative distance from edge
-bos.canF <- raster("processed/boston/bos_can01_filt.tif")
+# bos.canF <- raster("processed/boston/bos_can01_filt.tif")
 # bos.can <- raster("data/dataverse_files/bostoncanopy_1m.tif")
+bos.can <- raster("processed/boston/bos.can.redux.tif")
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+bos.can <- crop(bos.can, bos.aoi)
 
-can.sum <- function(x) { # x is canopy 0/1 1m raster object
+can.sum <- function(x) { 
   bs <- blockSize(x)
   y <- integer()
   for (i in 1:bs$n) {
@@ -319,25 +496,9 @@ can.buffs <- can.buffs[!grepl(pattern = ".aux", x=can.buffs)]
 can.buffs <- can.buffs[!grepl(pattern = ".ovr", x=can.buffs)]
 buff.dist <- as.integer(unlist(rm_between(can.buffs, "nocan_", "mbuff", extract=TRUE)))
 
-### prep masking rasters
-## all of Boston
-# towns <- readOGR(dsn = "F:/BosAlbedo/data/towns/town_AOI.shp", layer = "town_AOI" )
-# bos.AOI <- towns[towns@data$TOWN=="BOSTON",]
-# bos.AOI <- bos.AOI[bos.AOI@data$SHAPE_AREA>1E07,] ## remove Harbor Islands
-# bos.AOI <- spTransform(bos.AOI, crs(bos.canF))
-# bos.AOI@data$include <- 1
-# bos.AOI.r <- rasterize(bos.AOI[bos.AOI@data$include], bos.canF)
-# ba.dat <- as.data.table(as.data.frame(bos.AOI.r))
-# ba.dat[!is.na(OBJECTID) | !is.na(OBJECTID.1), dogshit:=1] ## set all areas to same value
-# bos.AOI.r <- setValues(bos.AOI.r, ba.dat$dogshit)
-# writeRaster(bos.AOI.r, filename="processed/boston/bos.AOI.1m.tif", format="GTiff", overwrite=T)
-
-### whole area of canopy first
-print("getting total canopy and area for all Boston")
-ma <- raster("processed/boston/bos.AOI.1m.tif")
-# bos.canF<- mask(bos.canF, ma) ## masking takes awhile and isn't necessary for whole-city -- use mask for full area calc
+ma <- raster("processed/boston/bos.aoi.tif")
 tot <- integer()
-dog <- can.sum(bos.canF)
+dog <- can.sum(bos.can)
 tot <- c(tot, sum(dog, na.rm=T))
 dist <- 0 ## keep track of the buffer distances as you process the rasters in whatever random order they come in
 area.tot <- can.sum(ma)
@@ -361,310 +522,52 @@ results$frac.tot.area <- results$pix.less.than/area.tot
 plot(results$dist, results$less.rel) ## cumulative distribution of canopy edge
 write.csv(results, "processed/bos.can.cummdist.csv")
 
+###
+### Create canopy edge class ring rasters (>10, 10-20, 20-30, >30)
+### note: With simplified polygon step during the edge buffering process, the resulting
+### canopy edge rasters are a half-pixel off the canopy grid; had to be manually resampled in Arc
+ed1 <- raster("processed/boston/nocan_10mbuff_res.tif")
+ed2 <- raster("processed/boston/nocan_20mbuff_res.tif")
+ed3 <- raster("processed/boston/nocan_30mbuff_res.tif")
+bos.can <- raster("processed/boston/bos.can.redux.tif")
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+## slice and dice every-fucking-thing
+bos.can <- crop(bos.can, bos.aoi)
+ed1 <- extend(ed1, bos.aoi) # edge and cover on same grid already
+ed2 <- extend(ed2, bos.aoi)
+ed3 <- extend(ed3, bos.aoi)
+ed1 <- crop(ed1, bos.aoi)
+ed2 <- crop(ed2, bos.aoi)
+ed3 <- crop(ed3, bos.aoi)
+# edges <- stack(ed1, ed2, ed3, bos.can) # just to make damn sure everything lines up
 
-### pie chart, relative canopy distance fraction
-dist <- read.csv("processed/bos.can.cummdist.csv")
-library(data.table)
-dist <- as.data.table(dist)
-ed.all <- dist[dist==0, pix.more.than]
-ed.10m <- dist[dist==10, pix.less.than]
-ed.20m <- dist[dist==20, pix.less.than]
-ed.30m <- dist[dist==30, pix.less.than]
-ed.int <- dist[dist==30, pix.more.than]
-ed.all
-ed.10m/ed.all
-ed.20m.only <- ed.20m-ed.10m
-ed.20m.only/ed.all
-ed.30m.only <- ed.30m-ed.20m
-ed.30m.only/ed.all
-ed.int/ed.all
-
-slices <- c(ed.10m/ed.all, ed.20m.only/ed.all, ed.30m.only/ed.all, ed.int/ed.all)*100
-
-par(mar=c(1, 1,3, 4))
-  
-pie(slices, labels=paste(c("<10m, ", "10-20m, ", "20-30m, ", ">30m, "), round(slices, 0), "%", sep=""),
-    main="", font=2, cex=2,
-    col = c("salmon", "orange", "lightgoldenrod1", "green3"))
-mtext("Fraction of canopy per distance class", side = 3, cex=2.3, font=2)
-
-### do same canopy area calcs for buffers in specific sub-areas
-hoods <- c("downtown", "jamaica", "allston", "southie", "dorchester", "hydepark", "common")
-
-
-### masks for individual test AOIs
-for(d in 1:length(hoods)){
-  print(paste("rasterizing", hoods[d]))
-  clipme <- readOGR(dsn=paste("processed/zones/bos.", hoods[d], ".shp", sep=""), layer=paste("bos.", hoods[d], sep=""))
-  # rasterize(clipme, bos.canF, format="GTiff", overwrite=T, filename=paste("processed/zones/bos.", hoods[d], ".tif", sep=""))
-  ma <- raster(paste("processed/zones/bos.", hoods[d], ".tif", sep=""))
-  ma <- crop(ma, extent(clipme))
-  writeRaster(ma, format="GTiff", overwrite=T, filename=paste("processed/zones/bos.", hoods[d], ".tif", sep=""))
-}
-
-### get 0 buffer canopy area first, then mask as you go
-for(d in 1: length(hoods)){
-  print(paste("initializing", hoods[d]))
-  rm(results)
-  tot <- integer()
-  dist <- 0
-  ma <- raster(paste("processed/zones/bos.", hoods[d], ".tif", sep=""))
-  area.tot <- sum(getValues(ma), na.rm=T) ## total size of the AOI
-  r <- raster("processed/boston/bos_can01_filt.tif")
-  r <- crop(r, ma)
-  r <- mask(r, ma)
-  dog <- can.sum(r)
-  tot <- c(tot, sum(dog, na.rm=T))
-  
-  for(g in 1:length(can.buffs)){
-    print(paste("working on", can.buffs[g], "in", hoods[d]))
-    r <- raster(paste("processed/boston/", can.buffs[g], sep=""))
-    r <- crop(r, ma)
-    r <- mask(r, ma)
-    dog <- can.sum(r)
-    tot <- c(tot, sum(dog, na.rm=T))
-    dist <- c(dist, buff.dist[g])
-  }
-  results <- cbind(dist, tot)
-  results <- results[order(dist),]
-  results <- as.data.frame(results)
-  colnames(results) <- c("dist", "pix.more.than")
-  results$pix.less.than <- results$pix.more.than[1]-results$pix.more.than ## recall that this method completely leaves out any gap areas that are <50m2 -- neither counted as canopy nor as gap area
-  results$less.rel <- results$pix.less.than/results$pix.more.than[1]
-  results$frac.tot.area <- results$pix.less.than/area.tot
-  write.csv(results, paste("processed/bos.can.cummdist.", hoods[d], ".csv", sep=""))
-}
-
-### combined plot, canopy edge area as fraction of total area
-results <- read.csv("processed/bos.can.cummdist.csv")
-hoods <- c("downtown", "jamaica", "allston", "southie", "dorchester", "hydepark", "common")
-cols=rainbow(length(hoods))
-plot(results$dist, results$frac.tot.area, pch=1, col="black", type="l", lwd=3, 
-     xlab="distance from edge (m)", ylab="area fraction",
-     ylim=c(0, 0.65))
-for(d in 1:length(hoods)){
-  dat <- read.csv(paste("processed/bos.can.cummdist.", hoods[d], ".csv", sep=""))
-  lines(dat$dist, dat$frac.tot.area, col=cols[d], type="l", lwd=2)
-}
-legend(x=60, y=0.4, bty = "n", legend=c("Boston", hoods), fill=c("black", cols))
-
-
-
-######
-### canopy edge area cumulative, extract by LULC collapsed classes
-bos.forest <- raster("processed/boston/bos.forest.tif")
-bos.dev <- raster("processed/boston/bos.dev.tif")
-bos.hd.res <- raster("processed/boston/bos.hd.res.tif")
-bos.med.res <- raster("processed/boston/bos.med.res.tif")
-bos.low.res <- raster("processed/boston/bos.low.res.tif")
-bos.lowveg <- raster("processed/boston/bos.lowveg.tif")
-bos.other <- raster("processed/boston/bos.other.tif")
-bos.water <- raster("processed/boston/bos.water.tif")
-
-for.sum <- sum(getValues(bos.forest), na.rm=T)
-dev.sum <- sum(getValues(bos.dev), na.rm=T)
-res.sum <- sum(getValues(bos.hd.res), na.rm=T)
-bos.aoi <- raster("processed/boston/bos.AOI.1m.tif")
-plot(bos.aoi)
-aoi.sum <- sum(getValues(bos.aoi), na.rm=T)
-for.sum/aoi.sum
-dev.sum/aoi.sum
-res.sum/aoi.sum
-
-
-## sum of canopy area, masked by lulc
-can.sum.ma <- function(x,m) { # x is canopy 0/1 1m raster object, m is mask
-  bs <- blockSize(x)
-  y <- integer()
+edges.bl <- function(x, y, z, filename) { # x is edge class, y is canopy flag, z is aoi
+  out <- raster(x)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
   for (i in 1:bs$n) {
-    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i])
-    z <- getValues(m, row=bs$row[i], nrows=bs$nrows[i])
-    v[v>1 | v<0] <- NA  # for some reason some of the NA's are getting labeled as 120
-    v[z!=1] <- 0 ## cancel values outside mask area
-    y <- c(y, sum(v, na.rm=T))
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## edge flag at designated distance
+    g <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## canopy cover
+    a <- getValues(z, row=bs$row[i], nrows=bs$nrows[i]) ## aoi
+    t <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## dummy layer to modify
+    v[!(v%in%c(0,1))] <- NA # kill any weird values that aren't coming from the nocan==0 buffer map
+    t[g==1 & v==0] <- 1 ### wherever there's canopy that is inside the edge buffer (edge==0), flag it
+    t[g==1 & v==1] <- 0 ### wherever there's canopy that did not get edge buffer flagged (ie edge==1), cancel it
+    t[a!=1] <- NA ### cancel anything outside AOI
+    out <- writeValues(out, t, bs$row[i])
     print(paste("finished block", i, "of", bs$n))
   }
-  return(y)
+  out <- writeStop(out)
+  return(out)
 }
+s <- edges.bl(ed1, bos.can, bos.aoi, filename="processed/boston/bos.ed10m.redux.tif")
+t <- edges.bl(ed2, bos.can, bos.aoi, filename="processed/boston/bos.ed20m.redux.tif")
+u <- edges.bl(ed3, bos.can, bos.aoi, filename="processed/boston/bos.ed30m.redux.tif")
+#####
 
-
-## cumulative canopy area by edge distance, for each lulc class
-lu.classes <- c("dev", "hd.res", "med.res", "low.res", "lowveg", "other")
-for(l in 1:length(lu.classes)){
-  print(paste("initializing", lu.classes[l]))
-  rm(results)
-  tot <- integer()
-  dist <- 0
-  ma <- raster(paste("processed/boston/bos.", lu.classes[l], ".tif", sep=""))
-  area.tot <- sum(getValues(ma), na.rm=T) ## total size of the AOI, forest =3% of whole canopy raster
-  r <- raster("processed/boston/bos_can01_filt.tif")
-  can.tot <- sum(getValues(r), na.rm=T) ### 12% of boston raster is canopy
-  # r <- crop(r, ma)
-  # r <- mask(r, ma, maskvalue=0)
-  # dog <- can.sum(r)
-  dog <- can.sum.ma(r, ma)
-  tot <- c(tot, sum(dog, na.rm=T))
-  
-  for(g in 1:length(can.buffs)){
-    print(paste("working on", can.buffs[g], "in", lu.classes[l]))
-    r <- raster(paste("processed/boston/", can.buffs[g], sep=""))
-    # r <- crop(r, ma)
-    # r <- mask(r, ma)
-    # dog <- can.sum(r)
-    dog <- can.sum.ma(r, ma)
-    tot <- c(tot, sum(dog, na.rm=T))
-    dist <- c(dist, buff.dist[g])
-  }
-  results <- cbind(dist, tot)
-  results <- results[order(dist),]
-  results <- as.data.frame(results)
-  colnames(results) <- c("dist", "pix.more.than")
-  results$pix.less.than <- results$pix.more.than[1]-results$pix.more.than ## recall that this method completely leaves out any gap areas that are <50m2 -- neither counted as canopy nor as gap area
-  results$less.rel <- results$pix.less.than/results$pix.more.than[1]
-  results$frac.tot.area <- results$pix.less.than/area.tot
-  write.csv(results, paste("processed/bos.can.cummdist.", lu.classes[l], ".csv", sep=""))
-}
-
-### combined plot, canopy edge area as fraction of total area (by LULC class)
-results <- read.csv("processed/bos.can.cummdist.csv")
-lu.classes <- c("forest", "dev", "hd.res", "med.res", "low.res", "lowveg", "other")
-lu.classes <- c("forest", "dev", "hd.res")
-cols=rainbow(length(lu.classes))
-cols=c("forestgreen", "blue", "red")
-par(mar=c(4.5, 5.5, 1, 1), oma=c(0,0,0, 0), xpd=F)
-
-plot(results$dist, results$frac.tot.area, pch=1, col="black", type="l", lwd=7, bty="n", lty=1, 
-     xlab="Distance from edge (m)", ylab="Cummulative area fraction",
-     ylim=c(0, 0.9), xlim=c(0, 60), yaxt="n", font.lab=2, cex.lab=2, cex.axis=2)
-axis(2, at=c(0, 0.2, 0.4, 0.6, 0.8), labels=c("0", "20%", "40%", "60%", "80%"), cex.axis=2)
-for(d in 1:length(lu.classes)){
-  dat <- read.csv(paste("processed/bos.can.cummdist.", lu.classes[d], ".csv", sep=""))
-  lines(dat$dist, dat$frac.tot.area, col=cols[d], type="l", lwd=3)
-}
-legend("right", x=40, y=0.80, cex=2, legend=c("Boston", "Forest", "Developed", "Residential"), fill=c("black", cols), bty="n")
-
-### combined plot, canopy edge area as fraction of total area (by LULC class)
-results <- read.csv("processed/bos.can.cummdist.csv")
-lu.classes <- c("forest", "dev", "hd.res", "med.res", "low.res", "lowveg", "other")
-cols=rainbow(length(lu.classes))
-cols=c("forestgreen", "blue", "red")
-par(mar=c(4.5, 5.5, 1, 1), oma=c(0,0,0, 0), xpd=F)
-
-plot(results$dist, results$frac.tot.area, pch=1, col="black", type="l", lwd=7, bty="n", lty=1, 
-     xlab="Distance from edge (m)", ylab="Cummulative area fraction",
-     ylim=c(0, 0.9), xlim=c(0, 60), yaxt="n", font.lab=2, cex.lab=2, cex.axis=2)
-axis(2, at=c(0, 0.2, 0.4, 0.6, 0.8), labels=c("0", "20%", "40%", "60%", "80%"), cex.axis=2)
-for(d in 1:length(lu.classes)){
-  dat <- read.csv(paste("processed/bos.can.cummdist.", lu.classes[d], ".csv", sep=""))
-  lines(dat$dist, dat$frac.tot.area, col=cols[d], type="l", lwd=3)
-}
-legend("right", x=40, y=0.80, cex=2, legend=c("Boston", "Forest", "Developed", "Residential"), fill=c("black", cols), bty="n")
-
-
-lu.classes <- c("forest", "dev", "hd.res", "med.res", "low.res", "lowveg", "other")
-for.dat <- read.csv(paste("processed/bos.can.cummdist.", lu.classes[1], ".csv", sep=""))
-hd.dat <-  read.csv(paste("processed/bos.can.cummdist.", lu.classes[3], ".csv", sep=""))
-md.dat <-  read.csv(paste("processed/bos.can.cummdist.", lu.classes[2], ".csv", sep=""))
-dev.dat <-  read.csv(paste("processed/bos.can.cummdist.", lu.classes[4], ".csv", sep=""))
-aoi <- raster("processed/boston/bos.AOI.1m.tif")
-aoi.dat <- as.data.table(as.data.frame(aoi))
-
-
-## raw pixel count by LULC at each distance class
-bos.forest <- raster("processed/boston/bos.forest.tif")
-bos.dev <- raster("processed/boston/bos.dev.tif")
-bos.hd.res <- raster("processed/boston/bos.hd.res.tif")
-bos.med.res <- raster("processed/boston/bos.med.res.tif")
-bos.low.res <- raster("processed/boston/bos.low.res.tif")
-bos.lowveg <- raster("processed/boston/bos.lowveg.tif")
-bos.other <- raster("processed/boston/bos.other.tif")
-bos.water <- raster("processed/boston/bos.water.tif")
-bos.canF <- raster("processed/boston/bos_can01_filt.tif")
-
-## sum of canopy area, masked by lulc
-can.sum.ma <- function(x,m) { # x is canopy 0/1 1m raster object, m is mask
-  bs <- blockSize(x)
-  y <- integer()
-  for (i in 1:bs$n) {
-    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i])
-    z <- getValues(m, row=bs$row[i], nrows=bs$nrows[i])
-    v[v>1 | v<0] <- NA  # for some reason some of the NA's are getting labeled as 120
-    v[z!=1] <- 0 ## cancel values outside mask area
-    y <- c(y, sum(v, na.rm=T))
-    print(paste("finished block", i, "of", bs$n))
-  }
-  return(y)
-}
-
-
-contain <- data.frame(distance=integer(), LULC=character(), pix.num=integer())
-for(g in 1:length(lu.classes)){
-  dist.dat <- read.csv(paste("processed/bos.can.cummdist.", lu.classes[g], ".csv", sep=""))
-  # m <- raster(paste("processed/boston/bos.", lu.classes[g], ".tif", sep=""))
-  # r <- raster("processed/boston/bos_can01_filt.tif") ## full canopy layer
-  # tot.can <- can.sum.ma(r, m)
-  # a <- sum(tot.can, na.rm=T) ## total number of canopy pixels in this LULC class
-  pix.d <- 0
-  for(e in 2:dim(dist.dat)[1]){
-    pix.d <- c(pix.d, dist.dat$pix.less.than[e]-dist.dat$pix.less.than[(e-1)])
-  }
-  contain <- rbind(contain, cbind(seq(0,100), rep(lu.classes[g], 101), pix.d))
-}
-colnames(contain) <- c("distance", "LULC", "pix.num")
-contain$distance <- as.integer(as.character(contain$distance))
-contain$pix.num <- as.integer(as.character(contain$pix.num))
-
-library(ggplot2)
-contain <- as.data.table(contain)
-ggplot(contain[distance!=0,], aes(x=distance, y=pix.num, fill=LULC)) + 
-  geom_area(aes(color=LULC, fill=LULC))+
-  xlim(1,50)
-
-# ### read in edge rasters and correct classifications to produce raster of edge rings (>10, 10-20, 20-30, >30)
-# bos.cov <- raster("processed/bos.cov.tif")
-# ed1 <- raster("processed/nocan_10mbuff.tif")
-# ed2 <- raster("processed/nocan_20mbuff.tif")
-# ed3 <- raster("processed/nocan_30mbuff.tif")
-# ed1 <- extend(ed1, bos.cov) # edge and cover on same grid already
-# ed2 <- extend(ed2, bos.cov)
-# ed3 <- extend(ed3, bos.cov)
-# # edges <- stack(ed1, ed2, ed3, bos.cov) # just to make damn sure everything lines up
-# 
-# edges.bl <- function(x, y, filename) { # x is edge class, y is cover class
-#   out <- raster(x)
-#   bs <- blockSize(out)
-#   out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
-#   for (i in 1:bs$n) {
-#     v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## edge class
-#     g <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## cover map
-#     v[v!=0] <- NA # kill any weird values that aren't coming from the nocan==0 buffer map
-#     v[g!=2] <- NA # cancel edge ID for non-canopy
-#     v[v==0] <- 1 # ID edge pixels as 1
-#     v[v!=1] <- 0 ## set non-edge values to 0 to hold space
-#     out <- writeValues(out, v, bs$row[i])
-#     print(paste("finished block", i, "of", bs$n))
-#   }
-#   out <- writeStop(out)
-#   return(out)
-# }
-# s <- edges.bl(ed1, bos.cov, filename="processed/edge10m.tif")
-# t <- edges.bl(ed2, bos.cov, filename="processed/edge20m.tif")
-# u <- edges.bl(ed3, bos.cov, filename="processed/edge30m.tif")
-
-### package up all the 1m data for Boston and write to disk
-ed10 <- raster("processed/boston/bos.ed10.tif")
-ed20 <- raster("processed/boston/bos.ed20.tif")
-ed30 <- raster("processed/boston/bos.ed30.tif")
-bos.cov <- raster("processed/boston/bos.cov.tif")
-bos.can <- raster("data/dataverse_files/bostoncanopy_1m.tif")
-bos.ndvi <- raster("data/NDVI/NDVI_1m_res_cangrid.tif")
-bos.ndvi <- crop(bos.ndvi, bos.can)
-
-ed10 <- extend(ed10, bos.cov)
-ed20 <- extend(ed20, bos.cov)
-ed30 <- extend(ed30, bos.cov)
-
+###
 ### Compare canopy map from 2006 to map from 2014
+#####
 bos.can06 <- raster("data/dataverse_files/bostoncanopy_1m.tif")
 bos.can14 <- raster("data/BosTrees2014/LC_boston2014_NAD83_1m.tif")
 bos.aoi <- raster("processed/boston/bos.AOI.1m.tif")
@@ -735,573 +638,33 @@ loss <- addme(COMP, 2) ## area lost by 2014, 1125.14 ha
 can06.tot/aoi06.tot # 31.6% canopy in 06
 can14.tot/aoi14.tot # 30.0% canopy in 14
 sum(getValues(bos.can06), na.rm=T)/aoi.tot ## same 31.6% canopy
+#####
 
-
-# ### add in 1m ISA (go get it, crop it, then reproject)
-# isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
-# towns <- readOGR(dsn = "/projectnb/buultra/atrlica/BosAlbedo/data/towns/town_AOI.shp", layer = "town_AOI" )
-# bos.bord <- towns[towns@data$TOWN=="BOSTON",]
-# bos.bord <- spTransform(bos.bord, crs(isa))
-# bos.isa <- crop(isa, bos.bord)
-# writeRaster(bos.isa, filename="processed/bos_isa_1m.tif", format="GTiff", overwrite=T)
-# # python.load("Rscripts/bosISA_resamp.py") ### test this
-# bos.isa <- raster("processed/isa_cangrid.tif")
-
-### 1m ISA was manually reregistered to the cov==barren layer because of poor feature overlap esp. in Allston.
-### some improvement was made in reregistration, but not perfect in W part of Boston
-### this layer lives as processed/boston/bos.isa.rereg.tif
-### this layer was manually resampled to 30m landsat EVI grid as bos.isa.rereg30m.tif
-# bos.isa <- raster("processed/boston/bos.isa.rereg.tif")
-bos.isa <- extend(bos.isa, bos.cov)
-bos.isa <- setExtent(bos.isa, extent(bos.cov), keepres=T)
-bos.stack <- stack(bos.can, bos.ndvi, bos.cov, bos.isa, ed10, ed20, ed30)
-writeRaster(bos.stack, "processed/boston/bos.stack.1m.tif", format="GTiff", overwrite=T)
-
-
-##### work to get 1m boston data aggregated to 30m EVI grid
-bos.stack <- stack("processed/boston/bos.stack.1m.tif")
-names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
-
-### get Boston limits, raterize to EVI 30m grid
-# towns <- readOGR(dsn = "F:/BosAlbedo/data/towns/town_AOI.shp", layer = "town_AOI" )
-# bos.AOI <- towns[towns@data$TOWN=="BOSTON",]
-# bos.AOI <- bos.AOI[bos.AOI@data$SHAPE_AREA>1E07,] ## remove Harbor Islands
-# bos.AOI <- spTransform(bos.AOI, crs(bos.stack))
-# bos.AOI@data$include <- 1
-# bos.AOI.r <- rasterize(bos.AOI[bos.AOI@data$include], evi.stack[[1]])
-# bos.AOI.r <- crop(bos.AOI.r, bos.AOI)
-# ba.dat <- as.data.table(as.data.frame(bos.AOI.r))
-# ba.dat[!is.na(OBJECTID) | !is.na(OBJECTID.1), dogshit:=1] ## set all areas to same value
-# bos.AOI.r <- setValues(bos.AOI.r, ba.dat$dogshit)
-# 
-# bos.evi <- crop(evi.stack, bos.AOI.r)
-# bos.evi <- mask(bos.evi, bos.AOI.r)
-# names(bos.evi) <- c("evi", "isa", "lulc", "AOI") ### the Boston city limits in 30m grid
-# sum(getValues(bos.evi[["AOI"]]), na.rm=T) ## 138k pixels
-
-##### Work boston 1m layers out into separate 0/1 classified files
-### make 1m Boston AOI raster mask
-# bos.AOI.1m <- rasterize(bos.AOI[bos.AOI@data$include], bos.stack[[1]])
-# bos.AOI.1m <- crop(bos.AOI.1m, bos.AOI)
-# bos.AOI.1mf <- raster(bos.AOI.1m)
-# bos.AOI.1mf <- setValues(bos.AOI.1mf, values = rep(1, length=ncell(bos.AOI.1m)))
-# bos.AOI.1mf <- mask(bos.AOI.1mf, bos.AOI.1m)
-# writeRaster(bos.AOI.1mf, filename="processed/boston/bos.aoi.tif", format="GTiff", overwrite=T)
-
-
-### get separate layers for each with cover=0/1 (vs. cover=0,1,2)
-bos.stack <- stack("processed/boston/bos.stack.1m.tif")
-names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
-
-aoi <- raster("processed/boston/bos.aoi.tif")
-bos.stack.c <- extend(bos.stack, extent(aoi))
-bos.stack.c <- crop(bos.stack, extent(aoi))
-
-isa.rereg <- raster("processed/boston/bos.isa.rereg.tif")
-isa.rereg <- extend(isa.rereg, extent(aoi))
-isa.rereg <- resample(isa.rereg, aoi, res=1, method="ngb")
-
-grass.find <- function(x){
-  x[x!=1] <- 0
-  return(x)
-}
-grass.only <- calc(bos.stack[["cov"]], fun=grass.find, filename="processed/boston/bos.grass.tif", format="GTiff", overwrite=T)
-
-
-
-barr.find <- function(x){
-  x[x==0] <- 10
-  x[x!=10] <- 0
-  x[] <- x[]/10
-}
-barr.only <- calc(bos.stack[["cov"]], barr.find, filename="processed/boston/bos.barr.tif", format="GTiff", overwrite=T)
-
-# can.find <- function(x){
-#   x[x==2] <- 10
-#   x[x!=10] <- 0
-#   x[] <- x[]/10
-#   return(x)
-# }
-# can <- calc(bos.stack[["cov"]], can.find, filename="processed/bos.can.tif", format="GTiff", overwrite=T)
-# can.only <- raster("processed/bos.can.tif")
-# # test if can_only == can
-# can.test <- overlay(bos.stack[["can"]], can.only, fun=function(x,y){return(x-y)})
-# plot(can.test) # yes they are identical
-
-### The cover class layer needs some correction for artifacts
-### lower res on NDVI data means that some spillover is happening into probable ISA next to canopy edges
-### i.e. grass is showing up in v. small isolated patches also classed as ISA
-### also ISA and cover are not perfectly aligned, even in the reregistered data -- so need to work that out somehow
-### reclass grass==1 & isa==1 as grass==0
-bos.grass <- raster("processed/boston/bos.grass.tif")
-bos.isa <- bos.stack[["isa"]]
-c <- brick(bos.grass, bos.isa)
-grass.fix <- function(x,y){
-  x[y==1] <- 0
-  return(x)
-}
-bos.grass <- overlay(c, fun=grass.fix, filename="processed/boston/bos.grass.tif", format="GTiff", overwrite=T)
-
-
-# # identify non-impervious fraction of barren
-# nonimp.only <- overlay(barr.only, bos.stack[["isa"]], fun=function(x,y){return(x-y)}, filename="processed/boston/bos.nonimp_only.tif", overwrite=T, format="GTiff")
-# nonimp.only <- raster("processed/boston/bos.nonimp.tif")
-# nonimp.find <- function(x, filename.nonimpbarr, filename.vegisa) { # x is first-pass nonimp
-#   out1 <- raster(x)
-#   out2 <- raster(x)
-#   bs <- blockSize(out1)
-#   out1 <- writeStart(out1, filename.nonimpbarr, overwrite=TRUE, format="GTiff")
-#   out2<- writeStart(out2, filename.vegisa, overwrite=TRUE, format="GTiff")
-#   for (i in 1:bs$n) {
-#     v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## original raster
-#     d <- rep(0, length(v)) ## create blank 0 raster
-#     e <- d
-#     d[v==1] <- 1
-#     e[v==(-1)] <- 1
-#     out1 <- writeValues(out1, d, bs$row[i])
-#     out2 <- writeValues(out2, e, bs$row[i])
-#     print(paste("finished block", i, "of", bs$n))
-#   }
-#   out1 <- writeStop(out1)
-#   out2 <- writeStop(out2)
-#   return(out1)
-#   return(out2)
-# }
-# nonimp.find(nonimp.only, filename.nonimpbarr="processed/boston/bos.nonimpbarr.tif", filename.vegisa = "processed/boston/bos.vegisa.tif")
-# nonimpbarr.only <- raster("processed/boston/bos.nonimpbarr.tif")
-# vegisa.only <- raster("processed/boston/bos.vegisa.tif")
-
-### new approach to finding veg-over-isa and nonimpervious barren
-bos.stack <- stack("processed/boston/bos.stack.1m.tif")
-names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
-bos.can <- bos.stack[["can"]]
-bos.isa <- bos.stack[["isa"]] ## manually reregistered
-bos.barr <- raster("processed/boston/bos.barr.tif")
-
-a <- brick(bos.can, bos.isa)
-vegisa.calc <- function(x, y){
-  x[x==1 & y==1] <- 2 ## mark where there is isa & canopy
-  x[y==0 & x==1] <- 0 ## erase where there is canopy but no isa
-  x[x==2] <- 1 ## give vegisa marker value of 1
-  return(x)
-}
-vegisa <- overlay(a, fun=vegisa.calc, filename="processed/boston/bos.vegisa.tif", format="GTiff", overwrite=T)
-
-b <- brick(bos.isa, bos.barr)
-nib.calc <- function(x,y){
-  y[x==0 & y==1] <- 2 ## mark where it's barren but not paved
-  y[x==1] <- 0 ## erase any paved area
-  y[y==2] <- 1 ## give nonimpbarr marker value of 1
-  return(y)
-}
-nonimpbarr <- overlay(b, fun=nib.calc, filename="processed/boston/bos.nonimpbarr.tif", format="GTiff", overwrite=T)
-### both of these, like grass, vulnerable to getting screwed up by misregistration between ISA and barren layers
-### March 17 used the manually reregistered 1m isa to recalculate, hopefully reduce some of these artifacts
-
-## new attempt to produce a grass map 
-## previous work to reregister the isa vs. the canopy looks like it did basically jack shit.
-bos.can <- raster("data/dataverse_files/bostoncanopy_1m.tif")
-bos.ndvi <- raster("data/NDVI/NDVI_1m_res_cangrid.tif")
-bos.isa <- raster("processed/boston/bos.isa.tif")
-bos.aoi <- raster("processed/boston/bos.aoi.tif")
-bos.can <- crop(bos.can, bos.aoi)
-bos.ndvi <- crop(bos.ndvi, bos.aoi)
-
-grass.find <- function(c, isa, green, a, filename.out) { #canopy, impervious, greeness, aoi, output file
-  out1 <- raster(c)
-  bs <- blockSize(out1)
-  out1 <- writeStart(out1, filename.out, overwrite=TRUE, format="GTiff")
-  for (i in 1:bs$n) {
-    v <- getValues(c, row=bs$row[i], nrows=bs$nrows[i]) ## canopy
-    w <- getValues(isa, row=bs$row[i], nrows=bs$nrows[i]) ## ISA
-    x <- getValues(green, row=bs$row[i], nrows=bs$nrows[i]) ## greenness (NDVI)
-    y <- getValues(a, row=bs$row[i], nrows=bs$nrows[i]) # aoi
-    rr <- rep(9999, length(v))
-    rr[w==1] <- 0 ## if paved, 0
-    rr[is.na(y)] <- NA ## if out of bounds, NA
-    rr[v==0 & x>0.15] <- 1 ## not canopy but green --> grass
-    rr[v==1] <- 0 ## if marked canopy
-    rr[x<0.15] <- 0 ## if not green enough
-    out1 <- writeValues(out1, rr, bs$row[i])
-    print(paste("finished block", i, "of", bs$n))
-  }
-  out1 <- writeStop(out1)
-  return(out1)
-}
-grass.find(bos.can, bos.isa, bos.ndvi, bos.aoi, "processed/boston/bos.grass.tif")
-
-
-bos.can <- raster("data/dataverse_files/bostoncanopy_1m.tif")
-bos.ndvi <- raster("data/NDVI/NDVI_1m_res_cangrid.tif")
-bos.isa <- raster("processed/boston/bos.isa.tif")
-bos.aoi <- raster("processed/boston/bos.aoi.tif")
-bos.can <- crop(bos.can, bos.aoi)
-bos.ndvi <- crop(bos.ndvi, bos.aoi)
-
-nonveg.find <- function(c, isa, grass, a, filename.out) { #canopy, impervious, grass, aoi, output file
-  out1 <- raster(c)
-  bs <- blockSize(out1)
-  out1 <- writeStart(out1, filename.out, overwrite=TRUE, format="GTiff")
-  for (i in 1:bs$n) {
-    v <- getValues(c, row=bs$row[i], nrows=bs$nrows[i]) ## canopy
-    w <- getValues(isa, row=bs$row[i], nrows=bs$nrows[i]) ## ISA
-    x <- getValues(grass, row=bs$row[i], nrows=bs$nrows[i]) ## grass
-    y <- getValues(a, row=bs$row[i], nrows=bs$nrows[i]) # aoi
-    rr <- rep(9999, length(v))
-    rr[w==1] <- 0 ## if paved
-    rr[is.na(y)] <- NA ## if out of bounds, NA
-    rr[x==1] <- 0 ## if marked grass
-    rr[v==1] <- 0 ## if marked canopy
-    rr[rr!=0 & !is.na(rr)] <- 1
-    out1 <- writeValues(out1, rr, bs$row[i])
-    print(paste("finished block", i, "of", bs$n))
-  }
-  out1 <- writeStop(out1)
-  return(out1)
-}
-bos.grass <- raster("processed/boston/bos.grass.tif")
-
-nonveg.find(bos.can, bos.isa, bos.grass, bos.aoi, "processed/boston/bos.nonveg.tif")
-bos.nonveg <- raster("processed/boston/bos.nonveg.tif")
-
-# ### make map of individual buffer rings
-# bos.stack <- stack("processed/boston/bos.stack.1m.tif")
-# names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
-# bos.aoi <- raster("processed/boston/bos.aoi_only.tif")
-# 
-# ### first need to reclass the edge maps to 0/1 (are in 1/NA)
-# fix.buff <- function(x){ # x is buffer, y is next smallest buffer
-#   x[is.na(x)] <- 0
-#   return(x)
-# }
-# bos.stack[["ed10"]] <- calc(bos.stack[["ed10"]], fun=fix.buff)
-# bos.stack[["ed20"]] <- calc(bos.stack[["ed20"]], fun=fix.buff)
-# bos.stack[["ed30"]] <- calc(bos.stack[["ed30"]], fun=fix.buff)
-# ### these need masking
-# bos.stack <- crop(bos.stack, bos.aoi)
-# bos.stack <- mask(bos.stack, bos.aoi)
-# writeRaster(bos.stack, filename="processed/boston/bos.stack.1m.tif", format="GTiff", overwrite=T)
-# plot(bos.stack)
-# 
-# bos.stack <- stack("processed/boston/bos.stack.1m.tif")
-# names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
-# 
-# ### 10m ring is already done in ed10
-# 
-# ### 20m ring
-# buff.20only <- overlay(bos.stack[["ed10"]], bos.stack[["ed20"]], fun=function(x,y){return(y-x)}, filename="processed/boston/bos.buff20_only.tif", format="GTiff", overwrite=T)
-# 
-# ### 30m ring
-# buff.30only <- overlay(bos.stack[["ed20"]], bos.stack[["ed30"]], fun=function(x,y){return(y-x)}, filename="processed/boston/bos.buff30_only.tif", format="GTiff", overwrite=T)
-# 
-# ### interior
-# buff.Intonly <- overlay(bos.stack[["ed30"]], bos.stack[["can"]], fun=function(x,y){return(y-x)}, filename="processed/boston/bos.buffInt_only.tif", format="GTiff", overwrite=T)
-# 
-# buffs.only <- stack(buff.20only, buff.30only, buff.Intonly)
-# writeRaster(buffs.only, filename="processed/boston/bos.buffs_only.tif", format="GTiff", overwrite=T)
 
 ###
-## add LULC 1m raster info
-### call python script for rasterize LULC in Boston to 1m canopy grid
-# pyth.path = './Rscripts/LULC_bos_rast.py'
-# output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE)
-# print(output)
-
-### get a clean copy of the LULC 1m raster
-# bos.lulc <- raster("processed/boston/LU_bos_r1m.tif")
+### Aggregate 1m into 30m raster w Landsat grid
+#####
 # bos.aoi <- raster("processed/boston/bos.aoi.tif")
-# # bos.lulc <- crop(bos.lulc, bos.aoi)
-# # bos.lulc <- mask(bos.lulc, bos.aoi)
-# # writeRaster(bos.lulc, filename="processed/boston/bos.lulc_only.tif", format="GTiff", overwrite=T)
-# bos.lulc <- raster("processed/boston/bos.lulc_only.tif")
+# bos.isa <- raster("processed/boston/bos.isa.RR2.tif")
+# bos.can <- raster("processed/boston/bos.can.redux.tif")
+# # bos.lulc <- raster("processed/boston/bos.lulc.lumped.tif")
+# bos.ed10 <- raster("processed/boston/bos.ed10m.redux.tif")
+# bos.biom <- raster("processed/boston/bos.biom.tif")
 
-## decide on a collapsed LULC scheme to flag for area fraction
-lu.classnames <- c("forest", "dev", "hdres", "ldres", "lowveg", "water")
-lu.forest <- c(3,37) # Forest, FWet
-lu.dev <- c(5,8,15,16,17,18,19,29,31,36,39) #Mining, Spect-rec, Comm, Ind, Transitional, Transp, Waste Disp, Marina, Urb Pub/Inst., Nursery, Junkyard
-lu.hdres <- c(10,11) # HDResid., MFResid.,
-lu.ldres <- c(12,13,38) # MDResid., LDResid, VLDResid
-lu.lowveg <- c(1,2,4,6,7,9,14,25,26,34,40) # Crop, pasture, open, part-rec, water-rec, SWwet, SWbeach, Golf, Cemetery, Brushland
-lu.water <- c(20)
-lulc.tot <- list(lu.forest, lu.dev, lu.hdres, lu.ldres, lu.lowveg, lu.water)
-
-lulc.lump <- function(x, lu.defs, filename) { # x is lulc, lu.defs is the list of collapsed classes, filename=output
-  out <- raster(x)
-  bs <- blockSize(out)
-  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
-  for (i in 1:bs$n) {
-    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ##  LULC raster raw LUCODES
-    o <- v
-    o[v%in%lu.defs[[1]]] <- 1 ## forest
-    o[v%in%lu.defs[[2]]] <- 2 ## dev
-    o[v%in%lu.defs[[3]]] <- 3 ## hdres
-    o[v%in%lu.defs[[4]]] <- 4 ## ldres
-    o[v%in%lu.defs[[5]]] <- 5 ## loweveg
-    o[v%in%lu.defs[[6]]] <- 6 ## water
-    out <- writeValues(out, o, bs$row[i])
-    print(paste("finished block", i, "of", bs$n))
-  }
-  out <- writeStop(out)
-  return(out)
-}
-## 1m lumped LULC raster
-bos.lulc <- raster("processed/boston/bos.lulc_only.tif")
-bos.aoi <- raster("processed/boston/bos.aoi.tif")
-lulc.lump(bos.lulc, lulc.tot, "processed/boston/bos.lulc.lumped.tif")
-
-bos.lulc <- raster("processed/boston/bos.lulc.lumped.tif")
-plot(bos.lulc)
-
-## create comparable single 30m raster with collapsed LULC classes
-## used arc for poly-->raster at 30m EVI grid
-bos.lulc30m <- raster("processed/boston/bos_lulc30m.tif")
-bos.aoi <- raster("processed/boston/bos.aoi30m.tif")
-bos.lulc30m <- extend(bos.lulc30m, bos.aoi)
-bos.lulc30m <- crop(bos.lulc30m, bos.aoi)
-bos.lulc30m <- mask(bos.lulc30m, bos.aoi)
-lulc.lump(bos.lulc30m, lulc.tot, "processed/boston/bos.lulc30m.lumped.tif")
-
-bos.lulc30m <- raster("processed/boston/bos.lulc30m.lumped.tif")
-plot(bos.lulc30m)
-
-## flexible blockwise function for flagging different class groups of LULC
-lulc.flag <- function(x, lu.spot, aoi, filename) { # x is 1m lulc, lu.spot is list of LULC targeted, aoi is aoi 1m raster
-  out <- raster(x)
-  bs <- blockSize(out)
-  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
-  for (i in 1:bs$n) {
-    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## 1m LULC raster
-    a <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) # AOI mask
-    o <- rep(0, length(v))
-    o[v%in%lu.spot] <- 1 ## flag the in-category with 1
-    o[is.na(a)] <- NA ## cancel values outside of AOI
-    out <- writeValues(out, o, bs$row[i])
-    print(paste("finished block", i, "of", bs$n, "in", lu.classnames[l]))
-  }
-  out <- writeStop(out)
-  return(out)
-}
-
-### loop through LULC class groups and create separately flagged LULC rasters
-for(l in 1:length(lulc.tot)){
-  tmp <- do.call(lulc.flag,
-          args = list(bos.lulc,
-                      lulc.tot[[l]],
-                      bos.aoi,
-                      paste("processed/boston/bos.", lu.classnames[l], "_only.tif", sep="")))
-  # print(paste("masking to Boston AOI"))
-  # tmp <- mask(tmp, bos.aoi)
-  # writeRaster(tmp, filename=paste("processed/boston/bos.", lu.classnames[l], "_only.tif", sep=""), format="GTiff", overwrite=T)
-}
-# bos.lulc <- raster("processed/boston/bos.lulc_only.tif")
-# bos.aoi <- raster("processed/boston/bos.aoi.tif")
-# lulc.flag(bos.lulc, lulc.tot[[1]], bos.aoi, "processed/boston/bos.forest.tif")
-
-bos.forest <- raster("processed/boston/bos.forest_only.tif")
-bos.dev <- raster("processed/boston/bos.dev_only.tif")
-bos.hdres <- raster("processed/boston/bos.hdres_only.tif")
-bos.ldres <- raster("processed/boston/bos.ldres_only.tif")
-bos.lowveg <- raster("processed/boston/bos.lowveg_only.tif")
-bos.water <- raster("processed/boston/bos.water_only.tif")
-plot(bos.forest, main="forest")
-plot(bos.dev, main="Developed")
-plot(bos.hdres, main="HDres")
-plot(bos.ldres, main="LDRes")
-plot(bos.lowveg, main="LowVeg")
-plot(bos.water, main="water")
-
-### package these collapsed categories back up into a common coded raster
-bos.lulc <- raster("processed/boston/bos.lulc_only.tif")
-plot(bos.lulc)
-
-
-
-
-
-#### Aggregate 1m into 30m raster w Landsat grid
-### prep all individual raster layers (0/1) for aggregation all at once in arc
-bos.aoi <- raster("processed/boston/bos.aoi.tif")
-bos.stack <- stack("processed/boston/bos.stack.1m.tif")
-names(bos.stack) <- c("can", "ndvi", "cov", "isa", "ed10", "ed20", "ed30")
-plot(bos.stack)
-bos.stack <- crop(bos.stack, bos.aoi)
-bos.stack <- mask(bos.stack, bos.aoi)
-
-ndvi.only <- bos.stack[["ndvi"]]
-can.only <- bos.stack[["can"]]
-# isa.only <- raster("processed/boston/bos.isa.rereg.tif")
-## new hotness Oct. 17: Properly rectified isa layer using the road centerlines shapefile
-isa.only <- raster("processed/boston/bos.isa.RR2.tif")
-# isa.only <- crop(isa.only, bos.aoi)
-# isa.only <- mask(isa.only, bos.aoi)
-# isa.only <- extend(isa.only, bos.aoi)
-# extent(isa.only) <- extent(bos.aoi) ## fuck it, just tweak the x extent 0.4 m
-
-### these cover layers are fucked up somehow and I can't be asked to fix them
-### bos.grass is facing some bizarre internal error where I can process it down but it won't save to disk and evnetually disappears
-grass.only <- raster("processed/boston/bos.grass.tif")
-grass.only <- crop(grass.only, bos.aoi)
-grass.only <- mask(grass.only, bos.aoi, filename="processed/boston/bos.grass.tif", format="GTiff", overwrite=T)
-grass.only <- raster("processed/boston/bos.grass.tif")
-writeRaster(grass.only, filename="processed/boston/bos.grass.tif", format="GTiff", overwrite=T)
-barr.only <- raster("processed/boston/bos.barr.tif")
-barr.only <- crop(barr.only, bos.aoi)
-barr.only <- mask(barr.only, bos.aoi, filename="processed/boston/bos.barr.tif", format="GTiff", overwrite=T)
-barr.only <- raster("processed/boston/bos.barr.tif")
-nonimpbarr.only <- raster("processed/boston/bos.nonimpbarr.tif")
-nonimpbarr.only <- crop(nonimpbarr.only, bos.aoi)
-nonimpbarr.only <- mask(nonimpbarr.only, bos.aoi, filename="processed/boston/bos.nonimpbarr.tif", format="GTiff", overwrite=T)
-nonimpbarr.only <- raster("processed/boston/bos.nonimpbarr.tif")
-vegisa.only <- raster("processed/boston/bos.vegisa.tif")
-vegisa.only <- crop(vegisa.only, bos.aoi)
-vegisa.only <- mask(vegisa.only, bos.aoi, filename="processed/boston/bos.vegisa.tif", format="GTiff", overwrite=T)
-vegisa.only <- raster("processed/boston/bos.vegisa.tif")
-
-ed10.only <- bos.stack[["ed10"]]
-ed20.only <- bos.stack[["ed20"]]
-ed30.only <- bos.stack[["ed30"]]
-buffs.only <- stack("processed/boston/bos.buffs.tif")
-names(buffs.only) <- c("buff.20only","buff.30only", "buff.Intonly")
-buff.20only <- buffs.only[["buff.20only"]]
-buff.30only <- buffs.only[["buff.30only"]]
-buff.Intonly <- buffs.only[["buff.Intonly"]]
-bos.forest <- raster("processed/boston/bos.forest.tif")
-bos.dev <- raster("processed/boston/bos.dev.tif")
-bos.hd.res <- raster("processed/boston/bos.hd.res.tif")
-bos.med.res <- raster("processed/boston/bos.med.res.tif")
-bos.low.res <- raster("processed/boston/bos.low.res.tif")
-bos.lowveg <- raster("processed/boston/bos.lowveg.tif")
-bos.other <- raster("processed/boston/bos.other.tif")
-bos.water <- raster("processed/boston/bos.water.tif")
-
-
-## package up the boston areamarks stack for safekeeping, then split up for aggregation
-### order for area marking: 
-# ndvi, can, grass, barren, isa, nonimpbarr, vegisa, (1-7)
-# ed10, ed20, ed30, buff.20only, buff.30only, buff.Intonly, (8-13)
-# for, dev, hd.res, med.res, low.res, lowveg, other, water (9-16)
-bos.stack <- stack(ndvi.only, can.only, barr.only, isa.only, nonimpbarr.only, vegisa.only,
-                   ed10.only, ed20.only, ed30.only, buff.20only, buff.30only, buff.Intonly,
-                   bos.forest, bos.dev, bos.hd.res, bos.med.res, bos.low.res, bos.lowveg, bos.other, bos.water)
-names(bos.stack) <- c("ndvi", "can", "barr", "isa", "nonimpbarr", "vegisa", 
-                      "ed10", "ed20", "ed30", "buff.20only", "buff.30only", "buff.Intonly", 
-                      "forest", "dev", "hd.res", "med.res", "low.res", "lowveg", "other", "water")
-
-## make sure everything has been exported as single raster files
-for(l in 1:nlayers(bos.stack)){
-    print(paste("writing ", "processed/boston/bos.", names(bos.stack)[l], ".tif", sep=""))
-    writeRaster(bos.stack[[l]], 
-                filename=paste("processed/boston/bos.", names(bos.stack)[l], ".tif", sep=""),
-                format="GTiff", overwrite=T)
-}
-
-# ### make up the final raster stack and export
-# bos.names <- c("ndvi", "can", "grass", "barr", "isa", "nonimpbarr", "vegisa", 
-#   "ed10", "ed20", "ed30", "buff.20only", "buff.30only", "buff.Intonly", 
-#   "forest", "dev", "hd.res", "med.res", "low.res", "lowveg", "other", "water")
-# bos.stack.30m <- raster("processed/boston/bos.ndvi.tif")
-# for(n in 2:length(bos.names)){
-#   bos.stack.30m <- stack(bos.stack.30m, raster(paste("processed/boston/bos", bos.names[n], "tif", sep=".")))
-# }
-# writeRaster(bos.stack, filename="processed/bos.stack.1m.areamarks.tif", format="GTiff", overwrite=T)
-# 
-
-## get fractional area of each cover class per 30m aggregate cell
+### get fractional area of each cover class per 30m aggregate cell
 pyth.path = './Rscripts/bos1m_agg.py'
 output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
-
-### shovel out individual files and compile as data frame
-bos.sizes <- raster("processed/boston/bos.aoi30m.tif")
-bos.30m <- list.files("processed/boston/")
-bos.30m <- bos.30m[grepl(pattern = "30m", x=bos.30m)]
-bos.30m <- bos.30m[!grepl(pattern=".xml", x=bos.30m)]
-bos.30m <- bos.30m[!grepl(pattern=".tfw", x=bos.30m)]
-
-tmp <- stack()
-
-for(f in 1:length(bos.30m)){
-  tmp <- stack(tmp, raster(paste("processed/boston/", bos.30m[f], sep="")))
-  print(f)
-}
-
-fields <- sub("bos. *(.*?) *30m.tif.*", "\\1", bos.30m)
-bos.dat <- as.data.table(as.data.frame(tmp))
-names(bos.dat) <- fields
-
-## combine with 30m EVI data
-evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif")
-evi.r <- crop(evi.r, bos.sizes)
-evi.r <- mask(evi.r, bos.sizes)
-bos.dat[,evi:=as.vector(evi.r)]
-write.csv(bos.dat, "processed/boston.30m.agg.csv")
-
-
-towns <- readOGR(dsn="data/towns/TOWNS_POLY.shp", layer="TOWNS_POLY")
-towns <- spTransform(towns, crs(evi.r))
-plot(towns[towns@data$TOWN=="PETERSHAM",])
-
-
-
-
-####
-### whole-AOI data aggregated to 30 m Landsat grid -- only have ISA AOI LULC and EVI as of Feb 22 2018
-### read in AOI for crs description
-# AOI <- readOGR(dsn="/projectnb/buultra/atrlica/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/", layer="AOI_simple_NAD83UTM19N")
-# master.crs <- crs(AOI)
-
-# load EVI composite for grid and process for ISA grid
-# evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI.tif") ## this is the July 2010-2012 AOI EVI composite
-# evi.r <- projectRaster(from=evi.r, crs=master.crs, res = 30, method = "ngb")
-# writeRaster(evi.r, filename="processed/EVI/030005-6_2010-2012_EVI_NAD83.tif", format="GTiff", overwrite=T)
-# evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif")
-
-### aggregate raw 1m ISA to 30m
-### don't fart around with the ISA grid until it's stacked with a 30 m EVI and cropped -- too hard to monkey with, leave in its native state until the end
-### raster-native approach required, file too large for data.table -- takes a long time
-### correct the 16 values to NA to get a proper aggregated mean value per cell (0 = not impervious, 1 = impervious)
-# isa <- raster("/projectnb/buultra/atrlica/BosAlbedo/data/ISA/isa_1m_AOI.tif")
-# fun <- function(x){
-#   x[x==16] <- NA
-#   return(x)
-# }
-# isa.na <- calc(isa, fun)
-# isa.na.agg <- aggregate(isa.na, fact=30, fun=mean, na.rm=FALSE) # get mean ISA per 30 m footprint
-# writeRaster(isa.na.agg, filename="processed/isa.30m.tif", format="GTiff", overwrite=T)
-# isa.na.agg <- raster("processed/isa.30m.tif")
-# plot(isa.na.agg)
-
-# ### align isa and evi grids, crop by AOI
-# ### call python script for resampling 30m ISA to EVI grid
-# pyth.path = './Rscripts/AOIISA_resamp.py'
-# output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
-
-isa.r <- raster("processed/isa30m_evigrd.tif")
-# evi.r <- raster("processed/EVI/030005-6_2010-2012_EVI_NAD83.tif") ## this is the July 2010-2012 AOI EVI composite
-# AOI <- readOGR(dsn="E:/BosAlbedo/data/AOI/AOI_simple_NAD83UTM19N/AOI_simple_NAD83UTM19N.shp", layer="AOI_simple_NAD83UTM19N")
-# plot(isa.na.agg); plot(AOI, add=T)
-# plot(evi.r); plot(AOI, add=T)
-# AOI.r <- rasterize(AOI, evi.r)
-# writeRaster(AOI.r, filename="processed/AOI.r.tif", format="GTiff", overwrite=T)
-AOI.r <- raster("processed/AOI.r.tif")
 
 ### prep LULC --> EVI grid
 pyth.path = './Rscripts/LULC_EVIgrid.py'
 output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRUE); print(output)
 LULC.r <- raster("processed/LULC30m.tif")
-
-LULC.r <- extend(LULC.r, isa.r)
-evi.r <- crop(evi.r, isa.r)
-AOI.r <- crop(AOI.r, isa.r)
-evi.r <- mask(evi.r, mask = AOI.r)
-
-evi.stack <- stack(evi.r, isa.r, LULC.r, AOI.r)
-writeRaster(evi.stack, filename="processed/EVI30m.stack.tif", format="GTiff", overwrite=T)
+#####
 
 
-
-
-
+###
 ### aggregate AOI-wide data to 250m MODIS grid
+#####
 ### similar process as for aggregating to Landsat 30m, only more differenter too.
 
 ## read in AOI for crs description
@@ -1443,9 +806,11 @@ names(AOI.1km.dat)<- c("EVI.1km", "ISA.1km", "dev.frac.1km", "forest.frac.1km",
 write.csv(AOI.1km.dat, "processed/AOI.1km.dat.csv")
 AOI.1km.stack <- stack("processed/AOI.1km.stack.tif")
 plot(AOI.1km.stack)
+#####
 
 
-# ### Test Code: Process NAIP 1m CIR data to NDVI
+# ###Process NAIP 1m CIR data to NDVI
+#####
 # ### NOTE SO MUCH: BAND ORDER IN NAIP CIR DATA IS RED GREEN BLUE NIR (1,2,3,4)
 # naip.test <- stack("Z:/Ultra2/Users/atrlica/FragEVI/NAIP/EssexCIR/m_4207123_ne_19_h_20160706/m_4207123_ne_19_h_20160706.tif")
 # naip.dat <- as.data.table(as.data.frame(naip.test))
@@ -1528,4 +893,5 @@ plot(AOI.1km.stack)
 # evi2.bos <- raster("processed/boston/bos.evi2.1m.tif")
 # ndvi.bos <- raster("processed/boston/bos.ndvi.1m.tif")
 # nirv.bos <- raster("processed/boston/bos.nirv.1m.tif")
+#####
 

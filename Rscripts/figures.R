@@ -2,80 +2,11 @@ library(raster)
 library(data.table)
 library(ggplot2)
 
-## Some kind of processing for canopy edge distance
-#####
-# ### Canopy area by cumulative distance from edge
-# bos.canF <- raster("processed/boston/bos_can01_filt.tif")
-# # bos.can <- raster("data/dataverse_files/bostoncanopy_1m.tif")
-# 
-# can.sum <- function(x) { # x is canopy 0/1 1m raster object
-#   bs <- blockSize(x)
-#   y <- integer()
-#   for (i in 1:bs$n) {
-#     v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i])
-#     v[v>1] <- NA  # for some reason some of the NA's are getting labeled as 120
-#     y <- c(y, sum(v, na.rm=T))
-#     print(paste("finished block", i, "of", bs$n))
-#   }
-#   return(y)
-# }
-# 
-# ### get the total area of canopy (excluding tiny canopy gaps that are filtered in buffer calculations)
-# can.buffs <- list.files("processed/boston/")
-# can.buffs <- can.buffs[grep(pattern = "bos.nocan_", x = can.buffs)]
-# can.buffs <- can.buffs[grep(pattern=".tif", x=can.buffs)]
-# can.buffs <- can.buffs[!grepl(pattern = ".vat", x=can.buffs)]
-# can.buffs <- can.buffs[!grepl(pattern = ".aux", x=can.buffs)]
-# can.buffs <- can.buffs[!grepl(pattern = ".ovr", x=can.buffs)]
-# buff.dist <- as.integer(unlist(rm_between(can.buffs, "nocan_", "mbuff", extract=TRUE)))
-# 
-# ### prep masking rasters
-# ## all of Boston
-# # towns <- readOGR(dsn = "F:/BosAlbedo/data/towns/town_AOI.shp", layer = "town_AOI" )
-# # bos.AOI <- towns[towns@data$TOWN=="BOSTON",]
-# # bos.AOI <- bos.AOI[bos.AOI@data$SHAPE_AREA>1E07,] ## remove Harbor Islands
-# # bos.AOI <- spTransform(bos.AOI, crs(bos.canF))
-# # bos.AOI@data$include <- 1
-# # bos.AOI.r <- rasterize(bos.AOI[bos.AOI@data$include], bos.canF)
-# # ba.dat <- as.data.table(as.data.frame(bos.AOI.r))
-# # ba.dat[!is.na(OBJECTID) | !is.na(OBJECTID.1), dogshit:=1] ## set all areas to same value
-# # bos.AOI.r <- setValues(bos.AOI.r, ba.dat$dogshit)
-# # writeRaster(bos.AOI.r, filename="processed/boston/bos.AOI.1m.tif", format="GTiff", overwrite=T)
-# 
-# ### whole area of canopy first
-# print("getting total canopy and area for all Boston")
-# ma <- raster("processed/boston/bos.AOI.1m.tif")
-# # bos.canF<- mask(bos.canF, ma) ## masking takes awhile and isn't necessary for whole-city -- use mask for full area calc
-# tot <- integer()
-# dog <- can.sum(bos.canF)
-# tot <- c(tot, sum(dog, na.rm=T))
-# dist <- 0 ## keep track of the buffer distances as you process the rasters in whatever random order they come in
-# area.tot <- can.sum(ma)
-# area.tot <- sum(area.tot, na.rm=T)
-# 
-# ## now load up each 0/1 classed canopy raster (1 represents canopy interior to the indicated buffer distance -- areas diminish with greater buffer)
-# for(g in 1:length(can.buffs)){
-#   print(paste("working on", can.buffs[g]))
-#   r <- raster(paste("processed/boston/", can.buffs[g], sep=""))
-#   dog <- can.sum(r)
-#   tot <- c(tot, sum(dog, na.rm=T))
-#   dist <- c(dist, buff.dist[g])
-# }
-# results <- cbind(dist, tot)
-# results <- results[order(dist),]
-# results <- as.data.frame(results)
-# colnames(results) <- c("dist", "pix.more.than")
-# results$pix.less.than <- results$pix.more.than[1]-results$pix.more.than ## recall that this method completely leaves out any gap areas that are <50m2 -- neither counted as canopy nor as gap area
-# results$less.rel <- results$pix.less.than/results$pix.more.than[1]
-# results$frac.tot.area <- results$pix.less.than/area.tot
-# plot(results$dist, results$less.rel) ## cumulative distribution of canopy edge
-# write.csv(results, "processed/bos.can.cummdist.csv")
-#####
 
 # ### pie chart, relative canopy distance fraction
 #####
 
-# dist <- read.csv("processed/bos.can.cummdist.csv")
+# dist <- read.csv("processed/bos.can.cummdist.csv") ## from frag.processing.R
 # library(data.table)
 # dist <- as.data.table(dist)
 # ed.all <- dist[dist==0, pix.more.than]
@@ -160,6 +91,9 @@ library(ggplot2)
 # }
 # legend(x=60, y=0.4, bty = "n", legend=c("Boston", hoods), fill=c("black", cols))
 #####
+
+
+
 
 ### FIGURE 1: CANOPY AREA STACKED BY DISTANCE+LULC
 #####
@@ -1513,14 +1447,25 @@ dev.off()
 ## note this is just to extract summary stats on the underlying area of interest. figure itself is mainly built in Arcmap
 library(raster)
 library(rgdal)
-ndvi <- raster("processed/boston/bos.ndvi.tif")
-isa <- raster("processed/boston/bos.isa.tif")
-can <- raster("processed/boston/bos.can.tif")
+library(data.table)
+# ndvi <- raster("processed/boston/bos.ndvi.tif")
+lsat.ndviA <- raster("processed/NDVI/030005_NDVI.tif")
+lsat.ndviB <- raster("processed/NDVI/030006_NDVI.tif")
+isa <- raster("processed/boston/bos.isa.RR2.tif")
+can <- raster("processed/boston/bos.can.redux.tif")
 biom <- raster("data/dataverse_files/bostonbiomass_1m.tif")
 ed <- raster("processed/boston/bos.ed10.tif")
 
+##quick composite of N and S landsat NDVI scenes
+mos.ndvi <- mosaic(lsat.ndviA, lsat.ndviB, fun=median, na.rm=T)
+ndviA.dat <- as.data.table(as.data.frame(lsat.ndviA))
+ndviB.dat <- as.data.table(as.data.frame(lsat.ndviB))
+ndvi <- mos.ndvi
+  
+  
 ## backbay
-targ <- readOGR("processed/boston/southend_sample.shp")
+# targ <- readOGR("processed/boston/southend_sample.shp")
+targ <- readOGR("processed/boston/southend_inset.shp")
 # targ <- readOGR("processed/boston/frankpark_sample.shp")
 targ.ndvi <- unlist(extract(ndvi, spTransform(targ, crs(ndvi))))
 mean(targ.ndvi, na.rm=T)
