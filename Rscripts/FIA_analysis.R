@@ -343,7 +343,8 @@ hist(plot.sum[HWfrac>0.25, biom.delt.ann.rel.HW.HW])
 write.csv(plot.sum, "processed/fia.live.plot.groomedV2.csv")
 #####
 
-## OK, figure a model and coefficient error terms
+## mixed model plot-area growth rate
+#####
 live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomedV2.csv"))
 summary(live.plot[,YEAR-prev.sample])
 
@@ -539,174 +540,12 @@ coef(summary(a.log))
 # hist(dat[biomHW.gain.rel>0, biom0.MgC.ha]) ## peak about 100, then long tail up to 300 MgC/ha
 # ## I reckon that's alright
 # write.csv(dat, "processed/fia.live.plot.groomedV2.csv")
-
-#######
-### previous analysis not paying attention to stem or plot repeat visits
-live.plot <- live[,
-                  .(length(unique(SubID)),
-                    sum(ba.pred(DIAM_T0)),
-                    sum(biom.delt.spp, na.rm=T), 
-                    sum(biom0.spp, na.rm=T),
-                    length(DIAM_T0)),
-                  by=PlotID]
-# dim(live.plot) ## 221 plots with at least one valid subplot
-names(live.plot) <- c("PlotID", "num.subplots", "total.BA", "biom.growth", "total.biom0.kg", "num.stems")
-plot(live.plot[,num.stems], live.plot[,total.biom0.kg]) ## linear but gets unconstrained above ~20 stems/plot
-# cor(live.plot[, total.biom0.kg], live.plot[, num.stems]) ## rho 0.60
-# live.plot[total.biom0.kg<5000,] ## mostly single-subplot plots (ie plot is mostly non-forest)
-
-## plot-level growth
-subplot.area <- (7.3152^2)*pi ## subplots are 24ft in radius
-live.plot[,total.biom0.MgC.ha:=(total.biom0.kg/2000)/((num.subplots*subplot.area)/1E4)] ## biomass density in aggregated area covered by the fully forested subplots
-live.plot[,biom.growth.ann:=biom.growth/4.8]
-live.plot[,biom.growth.ann.rel:=(biom.growth.ann)/total.biom0.kg]
-# hist(live.plot$biom.growth.ann.rel) ## most plots below 5%, a few are wildly productive, a couple decline
-# hist(live.plot$BA.plot) ## ok BA is looking like forest mostly -- 20-40
-# summary(live.plot$biom.growth.ann.rel) ## -1% to 14%
-
-# ## plot level density
-live.plot[,stems.ha:=(num.stems/(subplot.area*num.subplots))*1E4]
-live.plot[,BA.plot:=total.BA/(num.subplots*subplot.area/1E4)]
-# hist(live.plot$BA.plot)## peak below 40m2/ha, a few up to 80
-# summary(live.plot$ba.ha)
-# hist(live.plot$stems.ha) # 400-500 peak
-# hist(live.plot[, total.biom0.kg], breaks=10) ## peak 5-10k kg
-# hist((live.plot[, total.biom0.kg]/675)*1E4/2000, breaks=10) ## i.e. peaking 50-100 MgC/ha, up to 200
-# summary(live.plot[, total.biom0.kg/(subplot.area*num.subplots)*1E4]/2000) ## 90 MgC/ha, 34-307 -- so a forest
-# hist(live.plot$num.stems)
-# hist(live.plot$num.subplots) ## pretty even distribution, about 1/4 in each class from 1 to 4 subplots available
-
-
-
-# ## basic growth~biomass modeling
-# plot(live.plot$total.biom0.kg, live.plot$biom.growth.ann.rel) ## exponential negative, the super productive ones were very low biomass to begin
-# plot(live.plot$total.biom0.kg, live.plot$biom.growth.ann) ## linear-ish, more biomass --> more growth (no bottoming out)
-# plot(live.plot$total.biom0.MgC.ha, live.plot$biom.growth.ann.rel) ## OK more happily exponential
-# plot(live.plot[,log(total.biom0.MgC.ha)], live.plot[,log(biom.growth.ann.rel)]) ## here's our regular log-log linear relationship, pretty shotgunned
-# 
-# l <- lm(log(biom.growth.ann.rel)~log(total.biom0.Mg.ha), data=live.plot) ### R2 0.17, significant
-# plot(live.plot[,log(total.biom0.Mg.ha)], live.plot[,log(biom.growth.ann.rel)])
-# s <- summary(l)
-# abline(a=s$coefficients[1], b=s$coefficients[2], col="red") ## ok ho hum
-# ## can do this as a proper expnential nls to also incorporate the negative growth plots
-
-
-## look at specific growth rates in the hardwood/softwood population separate from total growth in all trees
-## spp in these names indicates that species-specific allometries were applied to the underlying stem data
-hwood <- live[type=="H", .(sum(biom1.spp-biom0.spp, na.rm=T), 
-                           sum(biom0.spp, na.rm=T)), 
-              by=PlotID]
-names(hwood)[2:3] <- c("biom.growth.spp.hw", "total.biom0.spp.kg.hw")
-swood <- live[type=="S", .(sum(biom1.spp-biom0.spp, na.rm=T), 
-                           sum(biom0.spp, na.rm=T)),
-              by=PlotID]
-names(swood)[2:3] <- c("biom.growth.spp.sw", "total.biom0.spp.kg.sw")
-
-live.plot <- merge(live.plot, hwood, by="PlotID")
-live.plot <- merge(live.plot, swood, by="PlotID")
-live.plot[,biom.growth.ann.hw:=(biom.growth.spp.hw/4.8)/total.biom0.spp.kg.hw]
-live.plot[,biom.growth.ann.sw:=(biom.growth.spp.sw/4.8)/total.biom0.spp.kg.sw]
-live.plot[,hw.frac:=total.biom0.spp.kg.hw/total.biom0.kg] ## get fraction of hardwood in total biomass
-write.csv(live.plot, "processed/fia.live.plot.groomed.csv")
-
-live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomed.csv"))
-# ### here follows a lot of hemming and hawing until the final model, excluding low hw.frac, is discovered.
-# ## hard wood and soft wood growth in stands, identifying stands that a low in either
-# plot(live.plot[,total.biom0.MgC.ha], live.plot[,biom.growth.ann.hw]) ## ding dong goofball with big outliers, all low hw
-# points(live.plot[hw.frac<0.25, total.biom0.MgC.ha], live.plot[hw.frac<0.25, biom.growth.ann.hw], cex=1.5, col="red", pch=14)
-# 
-# plot(live.plot[,total.biom0.MgC.ha], live.plot[,biom.growth.ann.sw]) ## low softwood frac is the norm, but more well behaved
-# points(live.plot[hw.frac>0.75, total.biom0.MgC.ha], live.plot[hw.frac>0.75, biom.growth.ann.sw], cex=1.5, col="green", pch=14)
-# 
-# ### comparative models in hardwoods and softwoods in isolation
-# hw <- lm(live.plot[biom.growth.ann.hw>0,log(biom.growth.ann.hw)]~live.plot[biom.growth.ann.hw>0,log(total.biom0.MgC.ha)])
-# summary(hw) ## barely significant (p 0.07), R2 0.01
-# sw <- lm(live.plot[biom.growth.ann.sw>0,log(biom.growth.ann.sw)]~live.plot[biom.growth.ann.sw>0,log(total.biom0.MgC.ha)])
-# summary(sw) ## significant, R2 0.12
-# 
-# ### model without respect to hard/softwood
-# plot(live.plot[,log(total.biom0.MgC.ha)], live.plot[,log(biom.growth.ann.rel)])
-# points(live.plot[hw.frac<0.25,log(total.biom0.MgC.ha)], live.plot[hw.frac<0.25,log(biom.growth.ann.rel)], col="red", pch=14, cex=1.6)
-# tot.mod <- lm(live.plot[biom.growth.ann.rel>0,log(biom.growth.ann.rel)]~live.plot[biom.growth.ann.rel>0,log(total.biom0.MgC.ha)])
-# summary(tot.mod) ### ok does like R2 0.18 and significant
-# 
-# plot(live.plot[,log(total.biom0.MgC.ha)], live.plot[,log(biom.growth.ann.rel)], 
-#      main="FIA growth~biomass (plot level)", ylab="Relative growth rate (Mg/Mg/ha)", xlab="Plot biomass density (Mg/ha)",
-#      xaxt="n", yaxt="n")
-# axis(side = 1, at = c(4.5, 5, 5.5, 6, 6.5), labels = round(exp(c(4.5, 5, 5.5, 6, 6.5)), digits=0))
-# axis(side=2, at=seq(-5.5, -2.5, by=0.5), labels=round(exp(seq(-5.5, -2.5, by=0.5)), digits=3))
-# abline(a=tot.mod$coefficients[1], b=tot.mod$coefficients[2], lwd=1.4, col="black")
-# # points(live.plot[,log(((total.biom0.spp.kg.hw/1000)/(num.subplots*subplot.area))*1E4)],
-# #        live.plot[,log(biom.growth.ann.hw)], pch=15, cex=0.6, col="red")
-# points(live.plot[,log(total.biom0.Mg.ha)],
-#        live.plot[,log(biom.growth.ann.hw)], pch=15, cex=0.6, col="red")
-# abline(a=hw$coefficients[1], b=hw$coefficients[2], col="red")
-# # points(live.plot[,log(((total.biom0.spp.kg.sw/1000)/(num.subplots*subplot.area))*1E4)],
-# #        live.plot[,log(biom.growth.ann.sw)], pch=17, cex=0.6, col="blue")
-# points(live.plot[,log(total.biom0.Mg.ha)],
-#        live.plot[,log(biom.growth.ann.sw)], pch=17, cex=0.6, col="blue")
-# abline(a=sw$coefficients[1], b=sw$coefficients[2], col="blue")
-# legend(x=4.3, y=-5, legend = c("All", "Hardwoods", "Softwoods"), 
-#        fill = c("black", "red", "blue"))
-# summary(live.plot$biom.growth.ann.hw) ## hardwood growth rate just doesn't vary much across range of TOTAL biomass density: 2-3% growth (0.4 to 15%)
-# 
-# 
-# #### let's look at it in untransformed space
-# tot.mod <- lm(live.plot[biom.growth.ann.rel>0,log(biom.growth.ann.rel)]~live.plot[biom.growth.ann.rel>0,log(total.biom0.Mg.ha)])
-# summary(tot.mod) ### R2 0.18 and significant
-# hw.mod <- lm(live.plot[biom.growth.ann.hw>0,log(biom.growth.ann.hw)]~live.plot[biom.growth.ann.hw>0,log(total.biom0.Mg.ha)])
-# summary(hw.mod) ### R2 0.01 and only sig at p<0.10
-# hw.mod$coefficients
-# tot.mod$coefficients ## slope in hw.mod is very low, not particularly high in tot.mod
-# 
-# ## untransformed
-# hw.mod.exp <- nls(biom.growth.ann.hw ~ exp(a + b * log(total.biom0.Mg.ha)),
-#                   data=live.plot, start=list(a=0, b=0))
-# q <- summary(hw.mod.exp) ## b is not even close to significant
-# exp(q$coefficients[1]) ## ie. about 3% boyo
-# 
-# tot.mod.exp <- nls(biom.growth.ann.rel ~ exp(a + b * log(total.biom0.Mg.ha)),
-#                    data=live.plot, start=list(a=0, b=0)) ### not terrifically differfent from final HW-frac filtered model below
-# r <- summary(tot.mod.exp) ## definitely significant
-# 
-# ## visual comparison of the plot-level models
-# plot(live.plot[,(total.biom0.Mg.ha)], 
-#      live.plot[,(biom.growth.ann.rel)], main="FIA growth~biomass (plot-level)",
-#      xlab="Biomass Density (Mg/ha)", ylab="Relative growth (Mg/Mg/ha)")
-# points(live.plot[,(total.biom0.Mg.ha)], 
-#        live.plot[,(biom.growth.ann.hw)], col="red", pch=17, cex=0.6)
-# test <- seq(min(live.plot$total.biom0.Mg.ha), max(live.plot$total.biom0.Mg.ha), length.out=100)
-# lines(test, exp(r$coefficients[1]+(r$coefficients[2]*log(test))),
-#       lwd=3, lty=2)
-# # abline(h=mean(live.plot$biom.growth.ann.hw), col="orangered", lwd=3, lty=4)
-# 
-# ## why so poor fit on hw model, why some high biomass plots have such high hw growth rate?
-# # summary(live.plot$hw.frac) ## most have a majority hardwoods, a few v low
-# # hist(live.plot$hw.frac)
-# # live.plot[total.biom0.Mg.ha>400, hw.frac] ## high biomass contains the low hw fraction ones
-# points(live.plot[hw.frac<0.25, total.biom0.Mg.ha],
-#        live.plot[hw.frac<0.25, biom.growth.ann.hw],
-#        cex=1.2, lwd=3, pch=5, col="seagreen")
-
-### OOOOOOKKKKKKAAAAYYYYY Let's elminate the handful of weird low-HW plots (could be weird places that favor pines or something, not really how an urban forest do)
-hw.mod.exp.filt <- nls(biom.growth.ann.hw ~ exp(a + b * log(total.biom0.MgC.ha)),
-                       data=live.plot[hw.frac>0.25,], start=list(a=0, b=0))
-y <- summary(hw.mod.exp.filt) ## all significant
-
-## so we will use the low-hw filtered plots to approximate growth in the final NPP calculations
-plot(live.plot[,total.biom0.MgC.ha], live.plot[,biom.growth.ann.hw], pch=17, col="red", cex=0.6)
-points(live.plot[hw.frac<0.25, total.biom0.MgC.ha], live.plot[hw.frac<0.25, biom.growth.ann.hw], pch=5, col="seagreen", cex=0.8)
-test <- seq(min(live.plot$total.biom0.MgC.ha), max(live.plot$total.biom0.MgC.ha, length.out=100))
-lines(test, exp(y$coefficients[1]+(y$coefficients[2]*log(test))),
-      lwd=3, lty=2, col="black")
-legend(x=100, y=0.01, legend=c("Hardwoods", "Low HW frac.", "All"), 
-       fill=c("red",  "seagreen", "black"), bty="n")
+#####
 
 
 
 
-########
-##### PART B: BOSTON NPP FROM FIA EMPRICAL GROWTH~BIOMASS ANALYSIS
+### PART B: BOSTON NPP FROM FIA EMPRICAL GROWTH~BIOMASS ANALYSIS
 ######
 ### V2.2: 1) uses species-specific biometrics; 2) models hardwood growth separately from trees in general; 3) uses nls to avoid dumping negative growth records
 ### V2.3 1) Uses subplot IDs to remove dbh records from subplot sites that are not fully forested; 2) filtered plots that have low hw fraction to determine hw-only growth rate
@@ -717,34 +556,14 @@ legend(x=100, y=0.01, legend=c("Hardwoods", "Low HW frac.", "All"),
 # live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomed.csv")) ## previous data set not tracking morts/removals or plot/stem multiple records appearances
 library(lme4)
 live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomedV2.csv")) ## newest thing
-# runme <- unique(live.plot[rocked==0 & !PlotID%in%c(47,283,183,5) & HWfrac>=0.25, PlotID]) ## 184 unique plots
 
-# mod.live.plot.final <- nls(biom.growth.ann.hw ~ exp(a + b * log(total.biom0.MgC.ha)),
-#                            data=live.plot[hw.frac>0.25,], start=list(a=0, b=0))
-# summary(mod.live.plot.final) ## all significant
-# load("processed/mod.live.plot.final.sav") ## direct from npp_anlysis.R
-# 
-# mod.live.plot.final <- lmer(biomHW.gain.rel~poly(biom0.MgC.ha, degree=2, raw=T)+
-#             (1|PlotID)+
-#             (1|Year),
-#           data=live.plot[PlotID%in%runme,], REML=F)
-### 4th degree fits slightly better but leads to unstable growth factor prediction when you vary the coefficients by a bit
-
-# hw.mod.exp.filt <- mod.live.plot.final
-# y <- summary(hw.mod.exp.filt) ## residual standard error = standard error of regression = how far off values may be from predicted (vs. R2, which is unreliable)
-
-## model using biomass gain MgC/ha/yr
-# mod.live.plot.final <- lmer(biom.delt.ann.HW.MgC.ha~biom0.MgC.ha+
-#                               (1|PlotID)+
-#                               (1|prev.sample), 
-#                             data=live.plot[HWfrac>0.25,])
 
 ## model using biomass gain MgC/MgC logxform
-## the below is model a.log above
+## the below is model a.log above; 297 end-to-end plot records, 200 unique plots
 mod.live.plot.final <- lmer(log(biom.delt.ann.rel.HW)~biom0.MgC.ha+
                 (1|PlotID)+
                 (1|prev.sample),
-              data=live.plot[HWfrac>0.25], REML=F)
+              data=live.plot[HWfrac>0.25,], REML=F)
 
 plot(live.plot[,biom0.MgC.ha], live.plot[,biom.delt.ann.rel.HW])
 points(live.plot[HWfrac<=0.25,biom0.MgC.ha], live.plot[HWfrac<=0.25,biom.delt.ann.rel.HW], pch=12, col="red")
@@ -756,20 +575,18 @@ save(mod.live.plot.final, file="processed/mod.live.plot.final.sav")
 ## load the biomass data and reprocess
 biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-biomass to 30m pixel
 aoi <- raster("processed/boston/bos.aoi30m.tif")
-can <- raster("processed/boston/bos.can30m.tif")
+can <- raster("processed/boston/bos.can.redux30m.tif")
 isa <- raster("processed/boston/bos.isa30m.tif") ## this is the newly reregistered guy
 biom <- crop(biom, aoi)
 can <- crop(can, aoi)
 isa <- extend(isa, aoi)
 lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
+
 biom.dat <- as.data.table(as.data.frame(biom))
 biom.dat[,aoi:=as.vector(getValues(aoi))]
-can.dat <- as.data.table(as.data.frame(can))
-biom.dat[, can.frac:=can.dat$bos.can30m]
-isa.dat <- as.data.table(as.data.frame(isa))
-biom.dat[, isa.frac:=isa.dat$bos.isa30m]
-lulc.dat <- as.data.table(as.data.frame(lulc))
-biom.dat[,lulc:=lulc.dat$bos.lulc30m.lumped]
+biom.dat[, can.frac:=getValues(can)]
+biom.dat[, isa.frac:=getValues(isa)]
+biom.dat[,lulc:=getValues(lulc)]
 biom.dat[,pix.ID:=seq(1, dim(biom.dat)[1])]
 
 
@@ -789,7 +606,7 @@ biom.dat[,live.MgC.ha.perv:=((bos.biom30m/2000)/(aoi*(1-isa.frac)))*(1E4)]
 biom.dat[bos.biom30m<10, live.MgC.ha.perv:=0] ## have to manually fix this because of isa=1 pix
 biom.dat[isa.frac>0.99, live.MgC.ha.perv:=0]
 
-# ### what do our densities look like
+# # ### what do our densities look like
 # hist(biom.dat[aoi>800, live.MgC.ha.ground]) ## up to 600 Mgbiom/ha = 300 MgC/ha -- a lot of this below the range sampled by the FIA plot data
 # summary(biom.dat[aoi>800, live.MgC.ha.ground]) ## mostly below 40 MgC/ha
 # hist(biom.dat[aoi>800, live.MgC.ha.forest]) ## same, more medium sized
@@ -798,21 +615,19 @@ biom.dat[isa.frac>0.99, live.MgC.ha.perv:=0]
 # summary(biom.dat[aoi>800, live.MgC.ha.perv]) ## a few very high
 # biom.dat[aoi>800 & live.MgC.ha.perv>300,] ### 3k v high, these are the classic artifacts, v. low pervious cover, but low overall biomass
 # ### contrast: what is the range sampled in the live.plot FIA data?
-# summary(live.plot[,total.biom0.MgC.ha]) ## don't get into the low range of things! Minimum biomass density is about where most of the pixels fall
-
+# summary(live.plot[HWfrac>0.25,biom0.MgC.ha]) ## don't get into the low range of things! Minimum biomass density is about where most of the pixels fall
+# hist(live.plot[HWfrac>0.25,biom0.MgC.ha]) ## looks a lot like the forest spread in my data -- but these are presumably wall to wall trees!
+# 
 # ## root out any artifacts in density calcs
 # biom.dat[aoi>800, length(aoi)] #136667 valid pixels
 # biom.dat[aoi>800, length(bos.biom30m)] #136667 valid pixels
 # biom.dat[aoi>800 & is.finite(bos.biom30m), length(bos.biom30m)] ##135705 is the number to hit
-# biom.dat[!is.na(npp.kg.hw.ground) & aoi>800, length(npp.kg.hw.ground)] ## 135705 pix
-# biom.dat[!is.na(npp.kg.hw.ground) & aoi>800, length(live.kgbiom.ha.ground)] ## 135705 pix
-# biom.dat[is.finite(npp.kg.hw.forest) & aoi>800 & is.finite(bos.biom30m), length(npp.kg.hw.forest)] ## 135705 pix
-# biom.dat[is.finite(npp.kg.hw.perv) & aoi>800 & is.finite(bos.biom30m), length(npp.kg.hw.perv)] ## 135695, a few have can but no isa
-# biom.dat[is.na(npp.kg.hw.perv) & aoi>800 & is.finite(bos.biom30m),] ## 127736 pix
+# biom.dat[!is.na(live.MgC.ha.ground) & aoi>800,] ## 135705 pix
+# biom.dat[is.finite(live.MgC.ha.ground) & aoi>800,] ## 135705 pix
+# biom.dat[is.finite(live.MgC.ha.perv) & aoi>800,] ## 135714 pix
 # ### this is biomass associated with 100% paved pixels, added fix above
 
 ## calculate growth factors per cell
-
 ### new hotness: build in model estimate uncertainty
 dump <- copy(biom.dat)
 
@@ -823,77 +638,83 @@ sav.perv <- biom.dat[,1:9, with=F]
 # sav.floor <- numeric()
 # sav.floor.implemented <- numeric()
 max.fact <- live.plot[,max(biom.delt.ann.rel.HW)]
-for(i in 1:100){
+for(i in 1:1000){
   b0.sel <- rnorm(1, coef(y)[1,1], coef(y)[1,2])
   b1.sel <- rnorm(1, coef(y)[2,1], coef(y)[2,2])
 
   ## assign growth factors based on position and biomass density
   dump[,ground.gfact:=exp(b0.sel+(b1.sel*live.MgC.ha.ground))] ## predict growth factors ground
   dump[(live.MgC.ha.ground)<0.5, ground.gfact:=0] ## anything without less than about 9 kg biomass/cell gets 0 factor
-  # dump[ground.gfact<gfact.min, ground.gfact:=gfact.min] ## anything high enough to be past the reliable part of the curve gets stet to min
   dump[,forest.gfact:=exp(b0.sel+(b1.sel*live.MgC.ha.forest))] ## predict growth factors ground
   dump[(live.MgC.ha.forest)<0.5, forest.gfact:=0]
-  # dump[forest.gfact<gfact.min, forest.gfact:=gfact.min]
   dump[can.frac<0.01, forest.gfact:=0]
   dump[,perv.gfact:=exp(b0.sel+(b1.sel*live.MgC.ha.perv))] ## predict growth factors ground
   dump[(live.MgC.ha.perv)<0.5, perv.gfact:=0]
-  # dump[perv.gfact<gfact.min, perv.gfact:=gfact.min]
   dump[isa.frac>0.99, perv.gfact:=0]
+  
   ### all of these are limited to the minimum, but can reach too high maxima 
   dump[ground.gfact>max.fact, ground.gfact:=max.fact]
   dump[forest.gfact>max.fact, forest.gfact:=max.fact]
   dump[perv.gfact>max.fact, perv.gfact:=max.fact]
   
-  
-  # ### limit the predictions to something reasonable in this polynomial model
-  # test=0:300
-  # pred <- b0.sel+(b1.sel*test)+(b2.sel*test^2)+(b3.sel*test^3)+(b4.sel*test^4)
-  # # plot(test, pred)
-  # gfact.min <- min(pred) ### for when you get into the high biomass stuff
-  # sav.floor <- c(sav.floor, gfact.min)
-  # if(gfact.min<0){gfact.min <- 0} ## sometimes predict large biomass losses, can't abide this
-  # sav.floor.implemented <- c(sav.floor.implemented, gfact.min)
-  # ## assign growth factors based on position and biomass density
-  # dump[,ground.gfact:=b0.sel+(b1.sel*live.MgC.ha.ground)+(b2.sel*live.MgC.ha.ground^2)+(b3.sel*live.MgC.ha.ground^3)+(b4.sel*live.MgC.ha.ground^4)] ## predict growth factors ground
-  # dump[(live.MgC.ha.ground)<0.5, ground.gfact:=0] ## anything without less than about 9 kg biomass/cell gets 0 factor
-  # dump[ground.gfact<gfact.min, ground.gfact:=gfact.min] ## anything high enough to be past the reliable part of the curve gets stet to min
-  # dump[,forest.gfact:=b0.sel+(b1.sel*live.MgC.ha.forest)+(b2.sel*live.MgC.ha.forest^2)+(b3.sel*live.MgC.ha.forest^3)+(b4.sel*live.MgC.ha.forest^4)] ## predict growth factors ground
-  # dump[(live.MgC.ha.forest)<0.5, forest.gfact:=0]
-  # dump[forest.gfact<gfact.min, forest.gfact:=gfact.min]
-  # dump[can.frac<0.01, forest.gfact:=0]
-  # dump[,perv.gfact:=b0.sel+(b1.sel*live.MgC.ha.perv)+(b2.sel*live.MgC.ha.perv^2)+(b3.sel*live.MgC.ha.perv^3)+(b4.sel*live.MgC.ha.perv^4)] ## predict growth factors ground
-  # dump[(live.MgC.ha.perv)<0.5, perv.gfact:=0]
-  # dump[perv.gfact<gfact.min, perv.gfact:=gfact.min]
-  # dump[isa.frac>0.99, perv.gfact:=0]
-  
-  ## calculate NPP and store
+    ## calculate NPP and store
   ### biomass productivity factors
   dump[,npp.kg.hw.ground:=bos.biom30m*ground.gfact] ## apply ground growth factor to whole pixel area
   dump[,npp.kg.hw.forest:=bos.biom30m*forest.gfact] ## apply growth factor to FOREST AREA
   dump[,npp.kg.hw.perv:=bos.biom30m*perv.gfact] ## apply growth factor to PERVIOUS AREA
+  names(dump)[14:16] <- paste0("fia.npp.", c("ground", "forest", "perv"), ".iter", i, ".csv")
   
-  # ### area productivity factors
-  # dump[,npp.kg.hw.ground:=(aoi/1E4)*ground.gfact*2000] ## apply ground growth factor to whole pixel area
-  # dump[,npp.kg.hw.forest:=((aoi*can.frac)/1E4)*forest.gfact*2000] ## apply growth factor to FOREST AREA
-  # dump[,npp.kg.hw.perv:=((aoi*(1-isa.frac))/1E4)*perv.gfact*2000] ## apply growth factor to PERVIOUS AREA
-
-  sav.ground <- cbind(sav.ground, dump[,npp.kg.hw.ground])
-  names(sav.ground)[9+i] <- paste("npp.fia.ground.iter.", i, ".kg", sep="")
-  sav.forest <- cbind(sav.forest, dump[,npp.kg.hw.forest])
-  names(sav.forest)[9+i] <- paste("npp.fia.forest.iter.", i, ".kg", sep="")
-  sav.perv <- cbind(sav.perv, dump[,npp.kg.hw.perv])
-  names(sav.perv)[9+i] <- paste("npp.fia.perv.iter.", i, ".kg", sep="")
+  write.csv(dump[,14], paste0("processed/results/fia/ground/fia.npp.ground.iter", i, ".csv"))
+  write.csv(dump[,15], paste0("processed/results/fia/forest/fia.npp.forest.iter", i, ".csv"))
+  write.csv(dump[,16], paste0("processed/results/fia/perv/fia.npp.perv.iter", i, ".csv"))
+  # sav.ground <- cbind(sav.ground, dump[,npp.kg.hw.ground])
+  # names(sav.ground)[9+i] <- paste("npp.fia.ground.iter.", i, ".kg", sep="")
+  # sav.forest <- cbind(sav.forest, dump[,npp.kg.hw.forest])
+  # names(sav.forest)[9+i] <- paste("npp.fia.forest.iter.", i, ".kg", sep="")
+  # sav.perv <- cbind(sav.perv, dump[,npp.kg.hw.perv])
+  # names(sav.perv)[9+i] <- paste("npp.fia.perv.iter.", i, ".kg", sep="")
   print(paste("iteration",i))
 }
-## save them out
+
+## rebuild the frames
 ### Version history: 
 ### V24 = static model 
 ### V3 = 2nd poly to predict relative growth rate, with model noise;
 ### V4 = linear model to predict area growth rate (MgC/ha/yr) with model noise
 ### V5 = log-xform linear model to predict relative growth rate, with model noise
-write.csv(sav.ground, "npp.FIA.empirV5.ground.csv")
-write.csv(sav.forest, "npp.FIA.empirV5.forest.csv")
-write.csv(sav.perv, "npp.FIA.empirV5.perv.csv")
+### V6 = biomass>0 canopy map, 1000 iterations, log-xform linear model to predict relative growth rate, with model noise
+
+tmp <- biom.dat
+for(g in 1:1000){
+  aa <- read.csv(paste0(paste0("processed/results/fia/ground/fia.npp.ground.iter", g, ".csv")))
+  tmp <- cbind(tmp, aa[,2])
+  print(paste("built iteration", g))
+}
+# tmp2 <- tmp[,c(1:10, seq(12,2010, by=2))]
+# names(tmp2)[11:1010] <- paste0("fia.npp.ground.iter", 1:1000)
+write.csv(tmp2, "npp.FIA.empirV6.ground.csv")
+
+tmp <- biom.dat
+for(g in 1:1000){
+  aa <- read.csv(paste0(paste0("processed/results/fia/forest/fia.npp.forest.iter", g, ".csv")))
+  tmp <- cbind(tmp, aa[,2])
+  print(paste("built iteration", g))
+}
+names(tmp)[11:1010] <- paste0("fia.npp.forest.iter", 1:1000)
+write.csv(tmp, "npp.FIA.empirV6.forest.csv")
+
+tmp <- biom.dat
+for(g in 1:1000){
+  aa <- read.csv(paste0(paste0("processed/results/fia/perv/fia.npp.perv.iter", g, ".csv")))
+  tmp <- cbind(tmp, aa[,2])
+  print(paste("built iteration", g))
+}
+names(tmp)[11:1010] <- paste0("fia.npp.perv.iter", 1:1000)
+write.csv(tmp, "npp.FIA.empirV6.perv.csv")
+
+# write.csv(sav.ground, "npp.FIA.empirV6.ground.csv")
+# write.csv(sav.forest, "npp.FIA.empirV6.forest.csv")
+# write.csv(sav.perv, "npp.FIA.empirV6.perv.csv")
 # 
 # dump[aoi>800, .(sum(npp.kg.hw.ground, na.rm=T)/2000/1000,
 #                 sum(npp.kg.hw.forest, na.rm=T)/2000/1000,
@@ -903,94 +724,13 @@ write.csv(sav.perv, "npp.FIA.empirV5.perv.csv")
 # hist(dump[aoi>800, perv.gfact])
 
 
-#####
-# ### static, using model coefficients
-# biom.dat[,ground.gfact:=exp(y$coefficients[1]+y$coefficients[2]*log(live.MgC.ha.ground))]
-# biom.dat[,forest.gfact:=exp(y$coefficients[1]+y$coefficients[2]*log(live.MgC.ha.forest))]
-# biom.dat[,perv.gfact:=exp(y$coefficients[1]+y$coefficients[2]*log(live.MgC.ha.perv))]
 
-# ### are we getting reasonable mapping of growth factors?
-# summary(biom.dat[aoi>800, ground.gfact]) ## up to inf
-# biom.dat[aoi>800 & ground.gfact>0.07,] ## 75k unfiltered are above 7% max measured biomass gain rate
-# summary(biom.dat[aoi>800, forest.gfact]) ## better, still max at inf
-# biom.dat[aoi>800 & forest.gfact>0.07,] ## 34k above 7%
-# summary(biom.dat[aoi>800, perv.gfact]) ## a lot of inf
-# biom.dat[aoi>800 & perv.gfact>0.07,] ## 54k above 7%
-
-## kill basic artifacts
-# # ((10/2000)/900)*1E4 # 10 kg-biom/pix is 0.06 MgC/ha
-# biom.dat[aoi>800 & bos.biom30m<10, ground.gfact:=0]
-# biom.dat[aoi>800 & bos.biom30m<10, forest.gfact:=0]
-# biom.dat[aoi>800 & can.frac<0.01, forest.gfact:=0]
-# biom.dat[aoi>800 & bos.biom30m<10, perv.gfact:=0]
-# biom.dat[aoi>800 & isa.frac>0.99, perv.gfact:=0]
-
-# summary(biom.dat[aoi>800, ground.gfact]) ## nax 2,8
-# biom.dat[aoi>800 & ground.gfact>0.07,] ## 46k unfiltered are above 7% max measured biomass gain rate
-# summary(biom.dat[aoi>800, forest.gfact]) ## max 0.68
-# biom.dat[aoi>800 & forest.gfact>0.07,] ## only 917 above 7%
-# summary(biom.dat[aoi>800, perv.gfact]) ## max 2.8
-# biom.dat[aoi>800 & perv.gfact>0.07,] ## 15kk above 7%
-
-# ## old filter set for v23
-# biom.dat[bos.biom30m<10 | live.Mgbiom.ha.forest<1, forest.gfact:=0]
-# biom.dat[bos.biom30m<10 | live.Mgbiom.ha.perv<1, perv.gfact:=0]
-# biom.dat[bos.biom30m<10 | live.Mgbiom.ha.ground<1, ground.gfact:=0]
-
-### New refinement: We will cap the low biomass pixels at the predicted maximum growth rate at minimum measured biomass
-cutoff <- exp(y$coefficients[1]+y$coefficients[2]*log(live.plot[hw.frac>0.25, min(total.biom0.MgC.ha)])) ## cut off is 34 MgC/ha = 0.043
-
-## new filter set for v24
-# biom.dat[aoi>800 & ground.gfact>cutoff,] ## 66k are valid with too high growth factor!
-# hist(biom.dat[aoi>800 & ground.gfact>cutoff, live.MgC.ha.ground]) ## all are below 35, skewed small
-biom.dat[ground.gfact>cutoff, ground.gfact:=cutoff]
-
-# biom.dat[aoi>800 & forest.gfact>cutoff,] ## 17k
-# hist(biom.dat[aoi>800 & forest.gfact>cutoff, live.MgC.ha.forest]) ## skewed large
-biom.dat[forest.gfact>cutoff, forest.gfact:=cutoff]
-
-# biom.dat[aoi>800 & perv.gfact>cutoff,] ## 29k
-# hist(biom.dat[aoi>800 & perv.gfact>cutoff, live.MgC.ha.perv]) ## mostly uniform
-biom.dat[perv.gfact>cutoff, perv.gfact:=cutoff]
-
-## final cleanup: remove gfacts for NA AOI
-biom.dat[is.na(aoi), ground.gfact:=NA]
-biom.dat[is.na(aoi), forest.gfact:=NA]
-biom.dat[is.na(aoi), perv.gfact:=NA]
-
-## calculate npp from these growth factors
-## regression coeff*biom.density(kg/ha, 3 approaches)-->growth factors (kg/kg) per cell
-## growth factors * cell biomass (kg | Mg | MgC) --> NPP (kg biomass per cell, or etc.) 
-biom.dat[,npp.kg.hw.ground:=bos.biom30m*ground.gfact] ## this is just the growth factor, can be applied to any biomass units
-biom.dat[,npp.kg.hw.forest:=bos.biom30m*forest.gfact]
-biom.dat[,npp.kg.hw.perv:=bos.biom30m*perv.gfact]
-
-### totals for aoi
-biom.dat[aoi>800 & is.finite(isa.frac) & is.finite(can.frac), sum(npp.kg.hw.ground, na.rm=T)]/2000 ## 9.7k MgC/yr v24; v23 12k MgC/yr ground basis
-biom.dat[aoi>800 & is.finite(isa.frac) & is.finite(can.frac), sum(npp.kg.hw.forest, na.rm=T)]/2000 ## 7.8k MgC/yr v24; v23 7.8k MgC/yr forest basis
-biom.dat[aoi>800 & is.finite(isa.frac) & is.finite(can.frac), sum(npp.kg.hw.perv, na.rm=T)]/2000  ## 7.4k MgC/yr v24; v23 7.8k MgC/yr perv basis
-biom.dat[aoi>800 & is.finite(isa.frac) & is.finite(can.frac), ((sum(npp.kg.hw.ground, na.rm=T)/2000)/sum(aoi))*1E4] ## 0.79 MgC/ha/yr v24; v23 0.98 MgC/ha/yr ground basis
-biom.dat[aoi>800 & is.finite(isa.frac) & is.finite(can.frac), ((sum(npp.kg.hw.forest, na.rm=T)/2000)/sum(aoi))*1E4] ## 0.63 MgC/ha/yr v24; v23 0.63 MgC/ha/yr forest basis
-biom.dat[aoi>800 & is.finite(isa.frac) & is.finite(can.frac), ((sum(npp.kg.hw.perv, na.rm=T)/2000)/sum(aoi))*1E4]  ## 0.60 MgC/ha/yr v24; 0.64 MgC/ha/yr perv basis
-
-biom.dat[aoi>800, .(median(npp.kg.hw.ground, na.rm=T), ## median is ~60-90 kg-biomass/pix
-                    median(npp.kg.hw.forest, na.rm=T),
-                    median(npp.kg.hw.perv, na.rm=T))]
-
-hist(biom.dat[aoi>800, ((npp.kg.hw.forest/2000)/aoi)*1E4]) ### sombitch, it too craps out at about 3 MgC/ha/yr
-hist(biom.dat[aoi>800, ((npp.kg.hw.ground/2000)/aoi)*1E4]) ### 
-hist(biom.dat[aoi>800, ((npp.kg.hw.perv/2000)/aoi)*1E4]) ### 
-## all of these seem to recapitulate the productivity distributions seen IN THE EQUATION-BASED FIA THING WHATT???
-
-write.csv(biom.dat, "processed/npp.FIA.empirV24.csv")
-
-# biom.dat <- as.data.table(read.csv("processed/npp.FIA.empirV24.csv"))
-
-#######
 #### Supplemental analysis
-#### following section contains:
-#### 1) Analysis of weird artifact seen in stem-level growth~dbh plots (log-log) -- why parallel lines?
-#### 2) Initial Boston NPP estimation based on published biomass-->Age-->C.aquisition equations provided by FIA COLE search
+### following section contains:
+### 1) Analysis of weird artifact seen in stem-level growth~dbh plots (log-log) -- why parallel lines?
+### 2) Initial Boston NPP estimation based on published biomass-->Age-->C.aquisition equations provided by FIA COLE search
+#####
+
 ### 1) Why do stem growth~dbh plots have distinct parallel lines?
 # #### what is the deal with these scatter plots -- parallel lines, artifact bug hunt
 # dat <- read.csv("data/FIA/MA_Tree_Data_ID_NOMORT_SUBID.csv")
@@ -1094,9 +834,10 @@ write.csv(biom.dat, "processed/npp.FIA.empirV24.csv")
 # ## so counting up from the bottom, each line represents 1, 2, 3, etc dbh increment gain, across a range of starting dbh (and bigger dbh class gives *relatively* less biomass gain at a given dbh increment class, but absolutely more)
 
 
-##### SUPPLEMENTAL 2
-##### FIA, EQUATION BASIS BIOMASS-->AGE-->GROWTH
-###### FIA V1: Equation for wood volume~time (proxy for stand biomass density)
+### SUPPLEMENTAL 2: FIA, EQUATION BASIS BIOMASS-->AGE-->GROWTH
+#####
+###
+## FIA V1: Equation for wood volume~time (proxy for stand biomass density)
 a=123.67
 b=0.04
 gogo <- 120
@@ -1114,7 +855,7 @@ log(1-(y/a)^(1/3))/(-b) ## predicts 40 years
 tC <- seq(0,120)
 plot(tC, log(1-(tC/a)^(1/3))/(-b), xlab="live biomass, tC/ha", ylab="Site age, yr")
 
-
+###
 ### standing live wood C storage in local forest that resemble (?) what we'd have in Boston:
 ### i.e. N.red oak; red maple/oak; mixed upland hwoods; red maple uplands: Range is  94.7-105.1 MgC/ha
 ## read in summaries of C stock change in Q.alba/Q.rubra/Carya and Q.rubra forest
@@ -1148,7 +889,7 @@ plot(tC, log(1-(tC/a)^(1/3))/(-b), xlab="live biomass, tC/ha", ylab="Site age, y
 # plot(ne.summ$Age.yrs, ne.summ$live.tree.tCha)
 # plot(ne.summ$Age.yrs, ne.summ$mean.vol.m3) ## basic sigmoid 0 to max at 100
 
-##########
+###
 ### prototype process for using FIA aggregate data to figure npp from Raciti biomass
 # 1) determine MgC/ha in 30m plot, normalize by appropriate area factor (raw ground/canopy/pervious) (i.e. there is X many ha of forest there with Y much living carbon in place)
 # 2) Figure out the next-year tC/ha in the plot
@@ -1347,7 +1088,6 @@ biom.dat[, median(age.perv, na.rm = T)] ##37.3
 
 write.csv(biom.dat, "processed/npp.FIA.v3.csv")
 
-# ######################
 ### A SLIGHT TWEAK (not a big or systematic effect apparently)
 # ### Applying different FIA coefficients for different forest types to estimate 30m annual NPP (MgC/yr)
 # 
@@ -1384,9 +1124,4 @@ write.csv(biom.dat, "processed/npp.FIA.v3.csv")
 #   writeRaster(r, filename=paste("processed/boston/fia/fia", colnames(biom.dat)[g], "tif", sep="."),
 #               format="GTiff", overwrite=T)
 # }
-
-
-
-
-
-
+#####
