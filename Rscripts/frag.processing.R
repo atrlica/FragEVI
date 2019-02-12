@@ -563,6 +563,30 @@ edges.bl <- function(x, y, z, filename) { # x is edge class, y is canopy flag, z
 s <- edges.bl(ed1, bos.can, bos.aoi, filename="processed/boston/bos.ed10m.redux.tif")
 t <- edges.bl(ed2, bos.can, bos.aoi, filename="processed/boston/bos.ed20m.redux.tif")
 u <- edges.bl(ed3, bos.can, bos.aoi, filename="processed/boston/bos.ed30m.redux.tif")
+
+## make a corresponding biomass map that is just the <10m edge biomass
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+bos.ed <- raster("processed/boston/bos.ed10m.redux.tif")
+bos.biom <- raster("data/dataverse_files/bostonbiomass_1m.tif")
+bos.biom <- crop(bos.biom, bos.aoi)
+bos.ed <- crop(bos.ed, bos.aoi)
+edge.biom <- function(x, y, z, filename) { # x is edge10 canopy, y is biomass, z is aoi
+  out <- raster(y)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## edge canopy
+    g <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) ## biomass
+    a <- getValues(z, row=bs$row[i], nrows=bs$nrows[i]) ## aoi
+    g[v!=1] <- 0
+    g[a!=1] <- NA
+    out <- writeValues(out, g, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+ff <- edge.biom(bos.ed, bos.biom, bos.aoi, filename="processed/boston/bos.ed10m.biom.redux.tif")
 #####
 
 ###
