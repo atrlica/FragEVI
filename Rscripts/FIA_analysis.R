@@ -102,13 +102,14 @@ for(u in 1:dim(arboles)[1]){
 }
 
 ## make sure the lag calculation went well
-# View(live[lag==0 & order(uniqueID),])
-# orph <- live[lag==0 & DIAM_T0>0, uniqueID] ## 13 orphans with prior records but no first-instance record
-# live <- live[!(uniqueID%in%orph), ] ### kill the orphans, down to 15724
-# live[, length(unique(uniqueID))] ## 6384 stems with DBH histories 
-# length(live[,unique(PlotID)])## 249 unique plots
-# a <- live[PlotID==231,]
-# View(a[order(TreeID),])
+View(live[lag==0 & order(uniqueID),])
+orph <- live[lag==0 & DIAM_T0>0, uniqueID] ## 13 orphans with prior records but no first-instance record
+live <- live[!(uniqueID%in%orph), ] ### kill the orphans, down to 15724
+live[, length(unique(uniqueID))] ## 6384 stems with DBH histories
+length(live[,unique(PlotID)])## 249 unique plots
+a <- live[PlotID==231,]
+View(a[order(TreeID),])
+a[,sum(length(DIAM_T0)), by=YEAR]
 
 ### get time series of dbh change
 live[lag>0, delta.diam:=DIAM_T1-DIAM_T0] ## 9340 second or more measures
@@ -253,8 +254,11 @@ save(yyy, file="processed/mod.fia.final.sav")
 #### Plot-level assessment of growth~biomass.density
 #####
 ### equivalent plot-level assessment in live-only data ## 331 plots have at least one subplot dense enough to bother with
+library(data.table)
 live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv")) ## this is data groomed to remove artifacts and subplots with <5 stems
-
+live[DIAM_T0>0 & STATUS==1, .(quantile(DIAM_T0, probs=c(0.05, 0.5, 0.95), na.rm=T), 
+                              quantile(diam.rate, probs=c(0.05, 0.5, 0.95), na.rm=T))]
+unique(live[DIAM_T0>0 & STATUS==1, unique(YEAR)])
 ### attempting to track the fate of individual stems (didn't work that well)
 #####
 # ba.pred <- function(x){(x/2)^2*pi*0.0001} ## get BA per stump from dbh
@@ -289,15 +293,16 @@ live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv")) ## thi
 #   }
 # }
 ### there is evidently trees dropping out, and new trees that are growing into the qualifying range over the intervals 
-#####
-
-
 ### OK these records may not be solid enough to track tree populations down to individual over time
 ### INSTEAD: Bulk DBH (biomass) change from t0 (earliest instance) to t1 (next instance)
 ### remove/account for sparse subplots
 ### affix the records-based lag for annualizing change
 ### this approach doesn't pay attention to the fate of individual stems -- these may come and go, but we know how much biomass is there at each sampling event and how many subplots we've included
 
+
+#####
+
+###
 ### groom data to get plot-basis biomass change over time
 #####
 ### get the total biomass at t0 and t1 + # of subplots in each sampling event past the first instance
@@ -347,6 +352,8 @@ write.csv(plot.sum, "processed/fia.live.plot.groomedV2.csv")
 #####
 live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomedV2.csv"))
 summary(live.plot[,YEAR-prev.sample])
+live.plot[HWfrac>0.25, .(quantile(biom0.MgC.ha, probs=c(0.05, 0.5, 0.95), na.rm=T),
+                         quantile(biom.delt.ann.rel.HW, probs=c(0.05, 0.5, 0.95), na.rm=T))]
 
 ### modeling growth as MgC/ha/yr(rate)~MgC/ha (density)
 plot(live.plot$biom0.MgC.ha, live.plot$biom.delt.ann) ## pretty linear, low slope
@@ -429,7 +436,7 @@ hist(residuals(a.log))
 sigma(a.log) ## 0.235
 AIC(a.log) ##535.8
 co.log <- coef(summary(a.log))
-plot(live.plot[HWfrac>0.25, biom0.MgC.ha], live.plot[HWfrac>0.25, biom.delt.ann.rel.HW])
+plot(live.plot[HWfrac>0.25, biom0.MgC.ha], live.plot[HWfrac>0.25, biom.delt.ann.rel.HW], xlim=c(0,250))
 points(live.plot[HWfrac>0.25, biom0.MgC.ha],
        exp(co.log[1]+(co.log[2]*live.plot[HWfrac>0.25, biom0.MgC.ha])),
        col="red", pch=16, cex=0.3)
@@ -555,8 +562,11 @@ coef(summary(a.log))
 ##
 # live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomed.csv")) ## previous data set not tracking morts/removals or plot/stem multiple records appearances
 library(lme4)
+library(data.table)
+library(raster)
 live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomedV2.csv")) ## newest thing
-
+live.plot[HWfrac>0.25,.(min(biom.delt.ann.rel.HW),
+                        max(biom.delt.ann.rel.HW))]
 
 ## model using biomass gain MgC/MgC logxform
 ## the below is model a.log above; 297 end-to-end plot records, 200 unique plots
@@ -577,47 +587,49 @@ biom <- raster("processed/boston/bos.biom30m.tif") ## this is summed 1m kg-bioma
 aoi <- raster("processed/boston/bos.aoi30m.tif")
 can <- raster("processed/boston/bos.can.redux30m.tif")
 isa <- raster("processed/boston/bos.isa30m.tif") ## this is the newly reregistered guy
+lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
 biom <- crop(biom, aoi)
 can <- crop(can, aoi)
-isa <- extend(isa, aoi)
-lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
+isa <- crop(isa, aoi)
+lulc <- crop(lulc,aoi)
 
 biom.dat <- as.data.table(as.data.frame(biom))
-biom.dat[,aoi:=as.vector(getValues(aoi))]
+biom.dat[, aoi:=as.vector(getValues(aoi))]
 biom.dat[, can.frac:=getValues(can)]
 biom.dat[, isa.frac:=getValues(isa)]
-biom.dat[,lulc:=getValues(lulc)]
-biom.dat[,pix.ID:=seq(1, dim(biom.dat)[1])]
-
+biom.dat[, lulc:=getValues(lulc)]
+biom.dat[, pix.ID:=seq(1, dim(biom.dat)[1])]
+names(biom.dat)[1] <- "biom"
+dim(biom.dat[!is.na(biom) & biom>10 & aoi>800,]) ## 106659 valid biomass pixels
 
 ### Now we have to decide how to calculate the "forest" density of the biomass on the ground
 ### Three approaches: GROUND (kg-biomass/m2-pixel); "FOREST" (kg-biomass/m2-canopy); "PERV" (kg-biomass/m2-pervious)
 ## Ground biomass density
-biom.dat[, live.MgC.ha.ground:=((bos.biom30m/2000)/aoi)*(1E4)] ## convert kg-biomass/pixel based on size of pixel (summed by 1m2 in "aoi"), 
-biom.dat[bos.biom30m<10, live.Mgbiom.ha.ground:=0] ## cancel out tiny biomass cells
+biom.dat[, live.MgC.ha.ground:=((biom/2000)/aoi)*(1E4)] ## convert kg-biomass/pixel based on size of pixel (summed by 1m2 in "aoi"), 
+biom.dat[biom<10, live.MgC.ha.ground:=0] ## cancel out tiny biomass cells
 
 ## Forest biomass density
-biom.dat[,live.MgC.ha.forest:=((bos.biom30m/2000)/(aoi*can.frac))*(1E4)]
-biom.dat[bos.biom30m<10, live.MgC.ha.forest:=0] ## have to manually fix this because of 0 canopy pix
+biom.dat[,live.MgC.ha.forest:=((biom/2000)/(aoi*can.frac))*(1E4)]
+biom.dat[biom<10, live.MgC.ha.forest:=0] ## have to manually fix this because of 0 canopy pix
 biom.dat[can.frac<0.01, live.MgC.ha.forest:=0]
 
 ## Perv biomass density
-biom.dat[,live.MgC.ha.perv:=((bos.biom30m/2000)/(aoi*(1-isa.frac)))*(1E4)]
-biom.dat[bos.biom30m<10, live.MgC.ha.perv:=0] ## have to manually fix this because of isa=1 pix
+biom.dat[,live.MgC.ha.perv:=((biom/2000)/(aoi*(1-isa.frac)))*(1E4)]
+biom.dat[biom<10, live.MgC.ha.perv:=0] ## have to manually fix this because of isa=1 pix
 biom.dat[isa.frac>0.99, live.MgC.ha.perv:=0]
 
-# # ### what do our densities look like
-# hist(biom.dat[aoi>800, live.MgC.ha.ground]) ## up to 600 Mgbiom/ha = 300 MgC/ha -- a lot of this below the range sampled by the FIA plot data
+# ### what do our densities look like
+# hist(biom.dat[aoi>800 & live.MgC.ha.ground>0, live.MgC.ha.ground]) ## up to 600 Mgbiom/ha = 300 MgC/ha -- a lot of this below the range sampled by the FIA plot data
 # summary(biom.dat[aoi>800, live.MgC.ha.ground]) ## mostly below 40 MgC/ha
-# hist(biom.dat[aoi>800, live.MgC.ha.forest]) ## same, more medium sized
+# hist(biom.dat[aoi>800 & live.MgC.ha.forest>0, live.MgC.ha.forest]) ## 0-300 MgC/ha, nice normal peak ~80
 # summary(biom.dat[aoi>800,live.MgC.ha.forest]) ## everything nudged denser
-# hist(biom.dat[aoi>800 & isa.frac<0.98, live.MgC.ha.perv]) ## up to 800k kgbiom/ha
+# hist(biom.dat[aoi>800 & isa.frac<0.98 & live.MgC.ha.perv>0, live.MgC.ha.perv]) ## up to 3000 MgC/ha skewed as fuck
 # summary(biom.dat[aoi>800, live.MgC.ha.perv]) ## a few very high
 # biom.dat[aoi>800 & live.MgC.ha.perv>300,] ### 3k v high, these are the classic artifacts, v. low pervious cover, but low overall biomass
 # ### contrast: what is the range sampled in the live.plot FIA data?
 # summary(live.plot[HWfrac>0.25,biom0.MgC.ha]) ## don't get into the low range of things! Minimum biomass density is about where most of the pixels fall
 # hist(live.plot[HWfrac>0.25,biom0.MgC.ha]) ## looks a lot like the forest spread in my data -- but these are presumably wall to wall trees!
-# 
+
 # ## root out any artifacts in density calcs
 # biom.dat[aoi>800, length(aoi)] #136667 valid pixels
 # biom.dat[aoi>800, length(bos.biom30m)] #136667 valid pixels
@@ -629,19 +641,39 @@ biom.dat[isa.frac>0.99, live.MgC.ha.perv:=0]
 
 ## calculate growth factors per cell
 ### new hotness: build in model estimate uncertainty
-dump <- copy(biom.dat)
 
 ### loop and interatively make maps with different model realizations
-sav.ground <- biom.dat[,1:9, with=F]
-sav.forest <- biom.dat[,1:9, with=F]
-sav.perv <- biom.dat[,1:9, with=F]
-# sav.floor <- numeric()
-# sav.floor.implemented <- numeric()
-max.fact <- live.plot[,max(biom.delt.ann.rel.HW)]
-for(i in 1:1000){
-  b0.sel <- rnorm(1, coef(y)[1,1], coef(y)[1,2])
-  b1.sel <- rnorm(1, coef(y)[2,1], coef(y)[2,2])
+max.fact <- live.plot[HWfrac>0.25, max(biom.delt.ann.rel.HW)]
+min.fact <- live.plot[HWfrac>0.25, min(biom.delt.ann.rel.HW)]
+b0.rand <- rnorm(1000, coef(y)[1,1], coef(y)[1,2])
+b1.rand <- rnorm(1000, coef(y)[2,1], coef(y)[2,2])
 
+# ## what is the expected general range of gfacts given the distribution of biomass densities?
+# gfacts.ground.mn <- exp(mean(b0.rand)+biom.dat[aoi>800 & live.MgC.ha.ground>0, live.MgC.ha.ground]*mean(b1.rand))
+# gfacts.ground.mn[gfacts.ground.mn>max.fact] <- max.fact
+# hist(gfacts.ground.mn); summary(gfacts.ground.mn) ### skew left, a lot pile up at the high end but none hit the limit
+# plot(biom.dat[aoi>800 & live.MgC.ha.ground>0, live.MgC.ha.ground], gfacts.ground.mn) ## looks just like the fixed fit
+# plot(live.plot[HWfrac>0.25, biom0.MgC.ha], live.plot[HWfrac>0.25, biom.delt.ann.rel.HW], xlim=c(0,250))
+# points(live.plot[HWfrac>0.25, biom0.MgC.ha], exp(mean(b0.rand)+(live.plot[HWfrac>0.25, biom0.MgC.ha]*mean(b1.rand))), col="red", cex=0.4, pch=15)
+# 
+# gfacts.forest.mn <- exp(mean(b0.rand)+biom.dat[aoi>800 & live.MgC.ha.forest>0, live.MgC.ha.forest]*mean(b1.rand))
+# gfacts.forest.mn[gfacts.forest.mn>max.fact] <- max.fact
+# hist(gfacts.forest.mn); summary(gfacts.forest.mn) ### a pretty pretty bell
+# plot(biom.dat[aoi>800 & live.MgC.ha.forest>0, live.MgC.ha.forest], gfacts.forest.mn) ## looks just like the fixed fit
+# plot(live.plot[HWfrac>0.25, biom0.MgC.ha], live.plot[HWfrac>0.25, biom.delt.ann.rel.HW], xlim=c(0,250))
+# points(live.plot[HWfrac>0.25, biom0.MgC.ha], exp(mean(b0.rand)+(live.plot[HWfrac>0.25, biom0.MgC.ha]*mean(b1.rand))), col="red", cex=0.4, pch=15)
+# 
+# ## a comparison of histograms, or: Why it do be like it is sometimes.
+# par(mar=c(2,2,2,2), oma=c(0,0,0,0), mfrow=c(2,2))
+# hist(biom.dat[aoi>800 & live.MgC.ha.ground>0, live.MgC.ha.ground])
+# hist(gfacts.ground.mn)
+# hist(biom.dat[aoi>800 & live.MgC.ha.forest>0, live.MgC.ha.forest])
+# hist(gfacts.forest.mn)
+
+for(i in 1:1000){
+  b0.sel <- b0.rand[i]
+  b1.sel <- b1.rand[i]
+  dump <- copy(biom.dat)
   ## assign growth factors based on position and biomass density
   dump[,ground.gfact:=exp(b0.sel+(b1.sel*live.MgC.ha.ground))] ## predict growth factors ground
   dump[(live.MgC.ha.ground)<0.5, ground.gfact:=0] ## anything without less than about 9 kg biomass/cell gets 0 factor
@@ -659,22 +691,17 @@ for(i in 1:1000){
   
     ## calculate NPP and store
   ### biomass productivity factors
-  dump[,npp.kg.hw.ground:=bos.biom30m*ground.gfact] ## apply ground growth factor to whole pixel area
-  dump[,npp.kg.hw.forest:=bos.biom30m*forest.gfact] ## apply growth factor to FOREST AREA
-  dump[,npp.kg.hw.perv:=bos.biom30m*perv.gfact] ## apply growth factor to PERVIOUS AREA
-  names(dump)[14:16] <- paste0("fia.npp.", c("ground", "forest", "perv"), ".iter", i, ".csv")
-  
-  write.csv(dump[,14], paste0("processed/results/fia/ground/fia.npp.ground.iter", i, ".csv"))
-  write.csv(dump[,15], paste0("processed/results/fia/forest/fia.npp.forest.iter", i, ".csv"))
-  write.csv(dump[,16], paste0("processed/results/fia/perv/fia.npp.perv.iter", i, ".csv"))
-  # sav.ground <- cbind(sav.ground, dump[,npp.kg.hw.ground])
-  # names(sav.ground)[9+i] <- paste("npp.fia.ground.iter.", i, ".kg", sep="")
-  # sav.forest <- cbind(sav.forest, dump[,npp.kg.hw.forest])
-  # names(sav.forest)[9+i] <- paste("npp.fia.forest.iter.", i, ".kg", sep="")
-  # sav.perv <- cbind(sav.perv, dump[,npp.kg.hw.perv])
-  # names(sav.perv)[9+i] <- paste("npp.fia.perv.iter.", i, ".kg", sep="")
-  print(paste("iteration",i))
+  dump[,npp.kg.hw.ground:=biom*ground.gfact] ## apply ground growth factor to whole pixel area
+  dump[,npp.kg.hw.forest:=biom*forest.gfact] ## apply growth factor to FOREST AREA
+  dump[,npp.kg.hw.perv:=biom*perv.gfact] ## apply growth factor to PERVIOUS AREA
+  names(dump)[13:15] <- paste0("fia.npp.", c("ground", "forest", "perv"), ".iter", i, ".csv")
+
+  fwrite(dump[,13], paste0("processed/results/fia/ground/fia.npp.ground.iter", i, ".csv"), na = NA)
+  fwrite(dump[,14], paste0("processed/results/fia/forest/fia.npp.forest.iter", i, ".csv"), na = NA)
+  fwrite(dump[,15], paste0("processed/results/fia/perv/fia.npp.perv.iter", i, ".csv"), na = NA)
+  print(paste("FIA NPP iteration",i))
 }
+dim(dump[biom>10 & !is.na(biom) & aoi>800,]) ## 106659 valid pix still
 
 ## rebuild the frames
 ### Version history: 
@@ -684,44 +711,81 @@ for(i in 1:1000){
 ### V5 = log-xform linear model to predict relative growth rate, with model noise
 ### V6 = biomass>0 canopy map, 1000 iterations, log-xform linear model to predict relative growth rate, with model noise
 
-tmp <- biom.dat
-for(g in 1:1000){
-  aa <- read.csv(paste0(paste0("processed/results/fia/ground/fia.npp.ground.iter", g, ".csv")))
-  tmp <- cbind(tmp, aa[,2])
-  print(paste("built iteration", g))
+tmp <- matrix(nrow=dim(biom.dat)[1], ncol=1009)
+tmp[,1:9] <- unlist(biom.dat)
+for(d in 1:1000){
+  a <- fread(paste0("processed/results/fia/ground/fia.npp.ground.iter", d, ".csv"))
+  tmp[,d+9] <- unlist(a)
+  print(paste("attached iteration", d, "ground"))
 }
-# tmp2 <- tmp[,c(1:10, seq(12,2010, by=2))]
-# names(tmp2)[11:1010] <- paste0("fia.npp.ground.iter", 1:1000)
-write.csv(tmp2, "npp.FIA.empirV6.ground.csv")
+tmp <- as.data.frame(tmp)
+colnames(tmp)[1:9] <- names(biom.dat)
+colnames(tmp)[10:1009] <- paste0("fia.npp.ground.iter", 1:1000)
+fwrite(tmp, "processed/results/fia/npp.FIA.empirV6.ground.csv", na=NA)
 
-tmp <- biom.dat
-for(g in 1:1000){
-  aa <- read.csv(paste0(paste0("processed/results/fia/forest/fia.npp.forest.iter", g, ".csv")))
-  tmp <- cbind(tmp, aa[,2])
-  print(paste("built iteration", g))
+tmp <- matrix(nrow=dim(biom.dat)[1], ncol=1009)
+tmp[,1:9] <- unlist(biom.dat)
+for(d in 1:1000){
+  a <- fread(paste0("processed/results/fia/forest/fia.npp.forest.iter", d, ".csv"))
+  tmp[,d+9] <- unlist(a)
+  print(paste("attached iteration", d, "forest"))
 }
-names(tmp)[11:1010] <- paste0("fia.npp.forest.iter", 1:1000)
-write.csv(tmp, "npp.FIA.empirV6.forest.csv")
+tmp <- as.data.frame(tmp)
+colnames(tmp)[1:9] <- names(biom.dat)
+colnames(tmp)[10:1009] <- paste0("fia.npp.forest.iter", 1:1000)
+fwrite(tmp, "processed/results/fia/npp.FIA.empirV6.forest.csv", na=NA)
 
-tmp <- biom.dat
-for(g in 1:1000){
-  aa <- read.csv(paste0(paste0("processed/results/fia/perv/fia.npp.perv.iter", g, ".csv")))
-  tmp <- cbind(tmp, aa[,2])
-  print(paste("built iteration", g))
+tmp <- matrix(nrow=dim(biom.dat)[1], ncol=1009)
+tmp[,1:9] <- unlist(biom.dat)
+for(d in 1:1000){
+  a <- fread(paste0("processed/results/fia/perv/fia.npp.perv.iter", d, ".csv"))
+  tmp[,d+9] <- unlist(a)
+  print(paste("attached iteration", d, "perv"))
 }
-names(tmp)[11:1010] <- paste0("fia.npp.perv.iter", 1:1000)
-write.csv(tmp, "npp.FIA.empirV6.perv.csv")
+tmp <- as.data.frame(tmp)
+colnames(tmp)[1:9] <- names(biom.dat)
+colnames(tmp)[10:1009] <- paste0("fia.npp.perv.iter", 1:1000)
+fwrite(tmp, "processed/results/fia/npp.FIA.empirV6.perv.csv", na=NA)
 
-# write.csv(sav.ground, "npp.FIA.empirV6.ground.csv")
-# write.csv(sav.forest, "npp.FIA.empirV6.forest.csv")
-# write.csv(sav.perv, "npp.FIA.empirV6.perv.csv")
-# 
-# dump[aoi>800, .(sum(npp.kg.hw.ground, na.rm=T)/2000/1000,
-#                 sum(npp.kg.hw.forest, na.rm=T)/2000/1000,
-#                 sum(npp.kg.hw.perv, na.rm=T)/2000/1000)]
-# hist(dump[aoi>800, ground.gfact])
-# hist(dump[aoi>800, forest.gfact])
-# hist(dump[aoi>800, perv.gfact])
+
+### what is the general distribution of predicted growth factors for the forest FIA runs?
+# tmp.fia <- fread("processed/results/fia/npp.FIA.empirV6.forest.csv")
+# dim(tmp.fia); names(tmp.fia) ## 354068 total pixels
+# dim(tmp.fia[!is.na(biom) & aoi>800,]) ## 135705 biomass pixels
+# dim(tmp.fia[aoi>800 & !is.na(fia.npp.forest.iter1) & !is.na(biom),]) ## 135705 valid retrievals
+# plot(tmp.fia[,biom], tmp.fia[,fia.npp.forest.iter1]) ## a bell curve, nice
+# median.na <- function(x){median(x, na.rm=T)}
+# npp.med <- apply(as.matrix(tmp.fia[,10:1009]), MARGIN=1, FUN=median.na)
+# hist(npp.med) ## seems believable
+# length(npp.med)## 354068, so it's the full raster
+# aa <- npp.med-tmp.fia$fia.npp.forest.iter51 ## this appears to truly be the median
+# summary(aa) 
+# sum(npp.med, na.rm=T)/2000 ## 4.8 ktC
+
+### write out the median rasters
+tmp <- fread("processed/results/fia/npp.FIA.empirV6.ground.csv")
+median.na <- function(x){median(x, na.rm=T)}
+npp.med <- apply(as.matrix(tmp[,10:1009]), MARGIN=1, FUN=median.na)
+r <- raster(aoi)
+r <- setValues(r, values = npp.med)
+writeRaster(r, filename="processed/results/fia/npp.FIA.empirV6.ground.median.tif", format="GTiff", overwrite=T)
+sum(npp.med, na.rm=T)/2000 ## 7.0 ktC
+
+tmp <- fread("processed/results/fia/npp.FIA.empirV6.forest.csv")
+median.na <- function(x){median(x, na.rm=T)}
+npp.med <- apply(as.matrix(tmp[,10:1009]), MARGIN=1, FUN=median.na)
+r <- raster(aoi)
+r <- setValues(r, values = npp.med)
+writeRaster(r, filename="processed/results/fia/npp.FIA.empirV6.forest.median.tif", format="GTiff", overwrite=T)
+sum(npp.med, na.rm=T)/2000 ## sum 4.8 ktC
+
+tmp <- fread("processed/results/fia/npp.FIA.empirV6.perv.csv")
+median.na <- function(x){median(x, na.rm=T)}
+npp.med <- apply(as.matrix(tmp[,10:1009]), MARGIN=1, FUN=median.na)
+r <- raster(aoi)
+r <- setValues(r, values = npp.med)
+writeRaster(r, filename="processed/results/fia/npp.FIA.empirV6.perv.median.tif", format="GTiff", overwrite=T)
+sum(npp.med, na.rm=T)/2000 ## sum 5.13 ktC
 
 
 

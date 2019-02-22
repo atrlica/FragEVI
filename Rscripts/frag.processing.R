@@ -469,25 +469,39 @@ writeOGR(plantP.canReject, "processed/boston/plant10m_simp_4mbuff_canBAD.shp", "
 ### notes: Feb 6 2019 -- have reprocessed this with the un-smoothed canopy cover 1m raster (had to simplify polygons)
 
 ### Canopy area by cumulative distance from edge
-# bos.canF <- raster("processed/boston/bos_can01_filt.tif")
-# bos.can <- raster("data/dataverse_files/bostoncanopy_1m.tif")
-bos.can <- raster("processed/boston/bos.can.redux.tif")
-bos.aoi <- raster("processed/boston/bos.aoi.tif")
-bos.can <- crop(bos.can, bos.aoi)
-
-can.sum <- function(x) { 
-  bs <- blockSize(x)
-  y <- integer()
+can.sum <- function(c, b, l) { # c is full canopy, b is buffer, l is lulc
+  bs <- blockSize(c)
+  tot <- integer()
+  forest <- integer()
+  dev <- integer()
+  hdres <- integer()
+  ldres <- integer()
+  lowveg <- integer()
+  water <- integer()
   for (i in 1:bs$n) {
-    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i])
-    v[v>1] <- NA  # for some reason some of the NA's are getting labeled as 120
-    y <- c(y, sum(v, na.rm=T))
+    v <- getValues(c, row=bs$row[i], nrows=bs$nrows[i])
+    buff <- getValues(b, row=bs$row[i], nrows=bs$nrows[i])
+    lulc <- getValues(l, row=bs$row[i], nrows=bs$nrows[i])
+    v[v==1 & buff==1] <- 0 ## anything canopy that gets labeled as interior to buff, 0 out
+    tot <- c(tot, sum(v, na.rm=T))
+    forest <- c(forest, sum(v[lulc==1], na.rm=T))
+    dev <- c(dev, sum(v[lulc==2], na.rm=T))
+    hdres <- c(hdres, sum(v[lulc==3], na.rm=T))
+    ldres <- c(ldres, sum(v[lulc==4], na.rm=T)) 
+    lowveg <- c(lowveg, sum(v[lulc==5], na.rm=T))
+    water <- c(water, sum(v[lulc==6], na.rm=T))
     print(paste("finished block", i, "of", bs$n))
   }
-  return(y)
+  return(c(sum(tot, na.rm=T), sum(forest, na.rm=T), sum(dev, na.rm=T), 
+           sum(hdres, na.rm=T), sum(ldres, na.rm=T), sum(lowveg, na.rm=T),
+           sum(water, na.rm=T)))
 }
+# test <- raster("processed/boston/bos.nocan_10mbuff.tif")
+# test <- (extend(test, bos.aoi))
+# test <- crop(test, bos.aoi)
+# d <- can.sum(bos.can, test, bos.lulc) ## this is exactly = all can area (by LULC) within 10m of edge (see Table S5)
 
-### get the total area of canopy (excluding tiny canopy gaps that are filtered in buffer calculations)
+### load up the list of canopy buffer files to process
 can.buffs <- list.files("processed/boston/")
 can.buffs <- can.buffs[grep(pattern = "bos.nocan_", x = can.buffs)]
 can.buffs <- can.buffs[grep(pattern=".tif", x=can.buffs)]
@@ -496,31 +510,96 @@ can.buffs <- can.buffs[!grepl(pattern = ".aux", x=can.buffs)]
 can.buffs <- can.buffs[!grepl(pattern = ".ovr", x=can.buffs)]
 buff.dist <- as.integer(unlist(rm_between(can.buffs, "nocan_", "mbuff", extract=TRUE)))
 
-ma <- raster("processed/boston/bos.aoi.tif")
-tot <- integer()
-dog <- can.sum(bos.can)
-tot <- c(tot, sum(dog, na.rm=T))
-dist <- 0 ## keep track of the buffer distances as you process the rasters in whatever random order they come in
-area.tot <- can.sum(ma)
-area.tot <- sum(area.tot, na.rm=T)
+bos.can <- raster("processed/boston/bos.can.redux.tif")
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+bos.can <- crop(bos.can, bos.aoi)
+bos.lulc <- raster("processed/boston/bos.lulc.lumped.tif")
+bos.lulc <- crop(bos.lulc, bos.aoi)
 
-## now load up each 0/1 classed canopy raster (1 represents canopy interior to the indicated buffer distance -- areas diminish with greater buffer)
+### set up the row 0 of the buffers area file -- row "0" is the whole area...
+dist <- integer() ## keep track of the buffer distances as you process the rasters in whatever random order they come in
+buff.area.inclusive <- data.frame()
+
+## loop through successive buffer files and and get inclusive canopy buffer areas by buffer distance
 for(g in 1:length(can.buffs)){
-  print(paste("working on", can.buffs[g]))
+  print(paste("initializing buffer raster", can.buffs[g]))
   r <- raster(paste("processed/boston/", can.buffs[g], sep=""))
-  dog <- can.sum(r)
-  tot <- c(tot, sum(dog, na.rm=T))
+  ## make sure every goddamn one is the same ncell as aoi/can/lulc
+  r <- extend(r, bos.aoi)
+  r <- crop(r, bos.aoi)
+  buff.area.inclusive <- rbind(buff.area.inclusive, can.sum(bos.can, r, bos.lulc)/1E4) ## calc total and LULC canopy area inside this buffer distance
   dist <- c(dist, buff.dist[g])
 }
-results <- cbind(dist, tot)
-results <- results[order(dist),]
-results <- as.data.frame(results)
-colnames(results) <- c("dist", "pix.more.than")
-results$pix.less.than <- results$pix.more.than[1]-results$pix.more.than ## recall that this method completely leaves out any gap areas that are <50m2 -- neither counted as canopy nor as gap area
-results$less.rel <- results$pix.less.than/results$pix.more.than[1]
-results$frac.tot.area <- results$pix.less.than/area.tot
-plot(results$dist, results$less.rel) ## cumulative distribution of canopy edge
-write.csv(results, "processed/bos.can.cummdist.csv")
+buff.area.inclusive <- cbind(dist, buff.area.inclusive)
+names(buff.area.inclusive) <- c("buff.dist", "total.can.ha", "forest.can.ha", "dev.can.ha", "hdres.can.ha", "ldres.can.ha",
+                        "lowveg.can.ha", "water.can.ha")
+
+
+## get the single-distance ring areas for each buffer 
+can.tot <- integer()
+can.forest <- integer()
+can.dev <- integer()
+can.hdres <- integer()
+can.ldres <- integer()
+can.lowveg <- integer()
+can.water <- integer()
+buff.track <- integer()
+for(d in 2:100){ ## working from buffer distance 2 up (will add in 1m buffer and whole canopy areas below)
+  can.tot <- c(can.tot,
+               buff.area.inclusive$total.can.ha[buff.area.inclusive$buff.dist==d]-buff.area.inclusive$total.can.ha[buff.area.inclusive$buff.dist==(d-1)])
+  can.forest <- c(can.forest,
+                  buff.area.inclusive$forest.can.ha[buff.area.inclusive$buff.dist==d]-buff.area.inclusive$forest.can.ha[buff.area.inclusive$buff.dist==(d-1)])
+  can.dev <- c(can.dev,
+               buff.area.inclusive$dev.can.ha[buff.area.inclusive$buff.dist==d]-buff.area.inclusive$dev.can.ha[buff.area.inclusive$buff.dist==(d-1)])
+  can.hdres <- c(can.hdres, 
+                 buff.area.inclusive$hdres.can.ha[buff.area.inclusive$buff.dist==d]-buff.area.inclusive$hdres.can.ha[buff.area.inclusive$buff.dist==(d-1)])
+  can.ldres <- c(can.ldres,
+                 buff.area.inclusive$ldres.can.ha[buff.area.inclusive$buff.dist==d]-buff.area.inclusive$ldres.can.ha[buff.area.inclusive$buff.dist==(d-1)])
+  can.lowveg <- c(can.lowveg,
+                  buff.area.inclusive$lowveg.can.ha[buff.area.inclusive$buff.dist==d]-buff.area.inclusive$lowveg.can.ha[buff.area.inclusive$buff.dist==(d-1)])
+  can.water <- c(can.water,
+                 buff.area.inclusive$water.can.ha[buff.area.inclusive$buff.dist==d]-buff.area.inclusive$water.can.ha[buff.area.inclusive$buff.dist==(d-1)])
+  buff.track <- c(buff.track, d) ## we are calculating areas up to buffer distance 2, which requires buffer distance 1 to get isolated
+}
+## add in buffer distance 1 area
+d=1
+can.tot <- c(can.tot, buff.area.inclusive$total.can.ha[buff.area.inclusive$buff.dist==d])
+can.forest <- c(can.forest, buff.area.inclusive$forest.can.ha[buff.area.inclusive$buff.dist==d])
+can.dev <- c(can.dev, buff.area.inclusive$dev.can.ha[buff.area.inclusive$buff.dist==d])
+can.hdres <- c(can.hdres, buff.area.inclusive$hdres.can.ha[buff.area.inclusive$buff.dist==d])
+can.ldres <- c(can.ldres, buff.area.inclusive$ldres.can.ha[buff.area.inclusive$buff.dist==d])
+can.lowveg <- c(can.lowveg, buff.area.inclusive$lowveg.can.ha[buff.area.inclusive$buff.dist==d])
+can.water <- c(can.water, buff.area.inclusive$water.can.ha[buff.area.inclusive$buff.dist==d])
+buff.track <- c(buff.track, d)
+
+##package up processed ring areas
+report <- data.frame(
+  buff.dist=buff.track,
+  total.can.ha=can.tot,
+  forest.can.ha=can.forest,
+  dev.can.ha=can.dev,
+  hdres.can.ha=can.hdres,
+  ldres.can.ha=can.ldres,
+  lowveg.can.ha=can.lowveg,
+  water.can.ha=can.water
+)
+### add in total canopy area by LULC
+all.can <- read.csv("processed/boston/results/TableS5_area_totals.csv")
+report <- rbind(report,
+                     c(0, 
+                       all.can$CAN[7],
+                       all.can$CAN[1:6]))
+## export report
+report <- report[order(report$buff.dist),]
+write.csv(report, "processed/boston/results/Canopy_area_by_edge_buffer.csv")
+
+# ## have a look
+# plot(report$buff.dist[2:101], report$total.can.ha[2:101], xlim=c(0, 50))
+# points(report$buff.dist[2:101], report$forest.can.ha[2:101], xlim=c(0, 50), pch=15, cex=0.6, col="darkgreen")
+# points(report$buff.dist[2:101], report$hdres.can.ha[2:101], xlim=c(0, 50), pch=15, cex=0.6, col="salmon")
+# points(report$buff.dist[2:101], report$lowveg.can.ha[2:101], xlim=c(0, 50), pch=15, cex=0.6, col="goldenrod")
+# points(report$buff.dist[2:101], report$dev.can.ha[2:101], xlim=c(0, 50), pch=15, cex=0.6, col="gray40")
+### the distance 0 figures are damn close to the LULC totals in Table S5
 
 ###
 ### Create canopy edge class ring rasters (>10, 10-20, 20-30, >30)
@@ -588,6 +667,108 @@ edge.biom <- function(x, y, z, filename) { # x is edge10 canopy, y is biomass, z
 }
 ff <- edge.biom(bos.ed, bos.biom, bos.aoi, filename="processed/boston/bos.ed10m.biom.redux.tif")
 #####
+
+###
+### Get area/biomass metrics for landscape structure summary
+#####
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+bos.can <- raster("processed/boston/bos.can.redux.tif")
+bos.ed <- raster("processed/boston/bos.ed10m.redux.tif")
+bos.isa <- raster("processed/boston/bos.isa.RR2.tif")
+bos.biom <- raster("data/dataverse_files/bostonbiomass_1m.tif")
+bos.lulc <- raster("processed/boston/bos.lulc.lumped.tif")
+
+# bos.aoi.tot <- sum(getValues(bos.aoi), na.rm=T) ## 12455 ha, lower than below
+bos.can <- crop(bos.can, bos.aoi)
+# bos.can.tot <- sum(getValues(bos.can), na.rm=T) ### 3144 ha, this is not the same as the number that comes out of the bottom here
+bos.biom <- crop(bos.biom, bos.aoi)
+# bos.biom.tot <- sum(getValues(bos.biom), na.rm=T) ## 357 GgC
+bos.ed <- crop(bos.ed, bos.aoi)
+# bos.ed.tot <- sum(getValues(bos.ed), na.rm=T) ## 2663 ha
+bos.isa <- crop(bos.isa, bos.aoi)
+# bos.isa.tot <- sum(getValues(bos.isa), na.rm=T) ## 7138 ha
+bos.lulc <- crop(bos.lulc, bos.aoi)
+
+sum.na <- function(x){sum(x, na.rm=T)}
+
+bs <- blockSize(bos.aoi)
+tmp.aoi <- matrix(ncol=6)
+tmp.can <- matrix(ncol=6)
+tmp.edge <- matrix(ncol=6)
+tmp.isa <- matrix(ncol=6)
+tmp.biom <- matrix(ncol=6)
+forest <- data.table()
+dev <- data.table()
+hdres <- data.table()
+ldres <- data.table()
+lowveg <- data.table()
+water <- data.table()
+aoi.tab <- data.table()
+for (i in 1:bs$n) {
+  df <- data.frame(
+    aoi=getValues(bos.aoi, row=bs$row[i], nrows=bs$nrows[i]),
+    can=getValues(bos.can, row=bs$row[i], nrows=bs$nrows[i]),
+    edge=getValues(bos.ed, row=bs$row[i], nrows=bs$nrows[i]),
+    isa=getValues(bos.isa, row=bs$row[i], nrows=bs$nrows[i]),
+    biom=getValues(bos.biom, row=bs$row[i], nrows=bs$nrows[i]),
+    lulc=getValues(bos.lulc, row=bs$row[i], nrows=bs$nrows[i]))
+  df <- as.data.table(df)
+  forest <- rbind(forest, df[lulc==1, .(sum.na(aoi),
+                          sum.na(can),
+                          sum.na(edge),
+                          sum.na(isa),
+                          sum.na(biom))])
+  dev <- rbind(dev, df[lulc==2, .(sum.na(aoi),
+                          sum.na(can),
+                          sum.na(edge),
+                          sum.na(isa),
+                          sum.na(biom))])
+  hdres <- rbind(hdres, df[lulc==3, .(sum.na(aoi),
+                          sum.na(can),
+                          sum.na(edge),
+                          sum.na(isa),
+                          sum.na(biom))])
+  ldres <- rbind(ldres, df[lulc==4, .(sum.na(aoi),
+                          sum.na(can),
+                          sum.na(edge),
+                          sum.na(isa),
+                          sum.na(biom))])
+  lowveg <- rbind(lowveg, df[lulc==5, .(sum.na(aoi),
+                          sum.na(can),
+                          sum.na(edge),
+                          sum.na(isa),
+                          sum.na(biom))])
+  water <- rbind(water, df[lulc==6, .(sum.na(aoi),
+                          sum.na(can),
+                          sum.na(edge),
+                          sum.na(isa),
+                          sum.na(biom))])
+  aoi.tab <- rbind(aoi.tab, df[, .(sum.na(aoi),
+                                    sum.na(can),
+                                    sum.na(edge),
+                                    sum.na(isa),
+                                    sum.na(biom))])
+  
+  print(paste("finished block", i, "of", bs$n))
+}
+area.tots <- rbind(apply(forest, MARGIN=2, FUN=sum.na),
+        apply(dev, MARGIN=2, FUN=sum.na),
+        apply(hdres, MARGIN=2, FUN=sum.na),
+        apply(ldres, MARGIN=2, FUN=sum.na),
+        apply(lowveg, MARGIN=2, FUN=sum.na),
+        apply(water, MARGIN=2, FUN=sum.na),
+        apply(aoi.tab, MARGIN=2, FUN=sum.na))
+area.tots[,1:4] <- area.tots[,1:4]/1E4
+area.tots[,5] <- area.tots[,5]/(2*1E6)
+area.tots <- data.frame(area.tots)
+area.tots <- cbind(c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water", "Total"),
+                   area.tots)
+names(area.tots) <- c("LULC", "AOI", "CAN", "EDGE", "ISA", "BIOM")
+write.csv(cbind(c("Forest", "Developed", "HD Resid.", "LD Resid.", "Other Veg.", "Water", "Total"),
+                area.tots),
+          "processed/boston/results/TableS5_area_totals.csv")
+#####
+
 
 ###
 ### Compare canopy map from 2006 to map from 2014
@@ -784,9 +965,7 @@ for(g in 1:length(gimme)){
                 overwrite=T)
   print(paste("finished aggregating", fields[g]))
 }
-# test <- raster("processed/LULC.250m.dev.frac.tif")
-# crs(test)
-# plot(test)
+
 
 ## this python script doesn't try to resample the LULC 240m post-aggregate stuff to the MODIS grid because of ongoing errors in Arc, no idea how to fix
 ## resampling to MODIS grid is done above using resample(). Don't know why I didn't do this before.

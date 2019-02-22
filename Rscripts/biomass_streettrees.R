@@ -760,19 +760,22 @@ quantile(nonfor.tot/2000, probs=c(0.05, 0.5, 0.95)) ## ##v6 4.4, 7.5 10.8k tC fo
 
 
 
-# # ### export the tifs
-# # 
-# # r <- biom
-# # r <- setValues(r, map[,pixM.tree.num])
-# # writeRaster(r, "processed/boston/bos.medNPP.tree.num.tif", format="GTiff", overwrite=T)
-# # for(j in 1:4){
-# #   r <- biom
-# #   r <- setValues(r, map[[(j+5)]])
-# #   writeRaster(r, paste("processed/boston/", names(map)[5+j], ".v1.tif", sep=""),
-# #               format="GTiff", overwrite=T)
-# # }
-# # 
-# # 
+### export the tifs
+npp.street <- fread("processed/results/street/streettrees.npp.simulator.v6.results.random.csv")
+median.na <- function(x){median(x, na.rm=T)}
+med.street <- apply(as.matrix(npp.street[,8:1007]), MARGIN=1, FUN=median.na)
+r <- biom
+r <- setValues(r, med.street)
+writeRaster(r, "processed/results/street/bos.street.V6.npp.med.tif", format="GTiff", overwrite=T)
+
+# for(j in 1:4){
+#   r <- biom
+#   r <- setValues(r, map[[(j+5)]])
+#   writeRaster(r, paste("processed/boston/", names(map)[5+j], ".v1.tif", sep=""),
+#               format="GTiff", overwrite=T)
+# }
+
+
 # ## brief exploratory
 # ### do simulations track cell biomass well enough?
 # vers=4

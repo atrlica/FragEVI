@@ -50,7 +50,9 @@ except:
 # Create expand map of canopy buffers by 1 m out to 100 m
 # get expand map of all distance classes by 1m increments 0-100m
 print("calculating 1m buffers for filtered canopy raster")
-buffs = range(1,101)
+arcpy.env.snapRaster = "E:/FragEVI/processed/boston/bos.can.redux.tif"
+# buffs = range(1,101)
+buffs = [3,30]
 for b in range(0,len(buffs)):
     try:
         buffR = Expand(in_raster=can01Filt, number_cells=buffs[b], zone_values=0)
