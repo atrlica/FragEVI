@@ -367,10 +367,10 @@ biom.dat[,hybrid.med:=getValues(raster("processed/results/hybrid.V7.median.tif")
 biom.dat[,fia.ground.med.MgC.ha:=((fia.ground.med/2000)/aoi)*1E4]
 biom.dat[,fia.forest.med.MgC.ha:=((fia.forest.med/2000)/aoi)*1E4]
 biom.dat[,hybrid.med.MgC.ha:=((hybrid.med/2000)/aoi)*1E4]
-hist(biom.dat[aoi>800 & !is.na(biom),hybrid.med.MgC.ha])
-hist(biom.dat[aoi>800 & !is.na(biom),fia.forest.med.MgC.ha])
+# hist(biom.dat[aoi>800 & !is.na(biom),hybrid.med.MgC.ha]) ## much longer positive tail
+# hist(biom.dat[aoi>800 & !is.na(biom),fia.forest.med.MgC.ha])
 
-## compile a table to pixel median ranges
+## compile a table of pixel median ranges
 l <- biom.dat[aoi>800 & !is.na(biom), round(quantile(hybrid.med.MgC.ha, probs=0.05, na.rm=T), 1), by=lulc]
 l <- l[order(lulc),]
 m <- biom.dat[aoi>800 & !is.na(biom), round(quantile(hybrid.med.MgC.ha, probs=0.5, na.rm=T), 1), by=lulc]
@@ -446,6 +446,7 @@ for(t in 1:3){ ## perform this routine for every map model
 burp <- as.data.frame(burp)
 names(burp) <- c("LULC", "Hybrid", "FIA.forest", "FIA.ground")
 write.csv(burp, paste0("processed/results/npp.model.sums.spread.csv"))
+read.csv(paste0("processed/results/npp.model.sums.spread.csv"))
 
 ### Results for ANDY FOREST, error distributed
 #####

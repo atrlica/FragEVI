@@ -768,6 +768,7 @@ median.na <- function(x){median(x, na.rm=T)}
 npp.med <- apply(as.matrix(tmp[,10:1009]), MARGIN=1, FUN=median.na)
 r <- raster(aoi)
 r <- setValues(r, values = npp.med)
+r <- mask(r, mask=aoi)
 writeRaster(r, filename="processed/results/fia/npp.FIA.empirV6.ground.median.tif", format="GTiff", overwrite=T)
 sum(npp.med, na.rm=T)/2000 ## 7.0 ktC
 
@@ -776,6 +777,7 @@ median.na <- function(x){median(x, na.rm=T)}
 npp.med <- apply(as.matrix(tmp[,10:1009]), MARGIN=1, FUN=median.na)
 r <- raster(aoi)
 r <- setValues(r, values = npp.med)
+r <- mask(r, mask=aoi)
 writeRaster(r, filename="processed/results/fia/npp.FIA.empirV6.forest.median.tif", format="GTiff", overwrite=T)
 sum(npp.med, na.rm=T)/2000 ## sum 4.8 ktC
 
@@ -784,6 +786,7 @@ median.na <- function(x){median(x, na.rm=T)}
 npp.med <- apply(as.matrix(tmp[,10:1009]), MARGIN=1, FUN=median.na)
 r <- raster(aoi)
 r <- setValues(r, values = npp.med)
+r <- mask(r, mask=aoi)
 writeRaster(r, filename="processed/results/fia/npp.FIA.empirV6.perv.median.tif", format="GTiff", overwrite=T)
 sum(npp.med, na.rm=T)/2000 ## sum 5.13 ktC
 
