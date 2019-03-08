@@ -1252,23 +1252,29 @@ bdat[,hyb.med.MgC.ha:=((hyb.pix.median/2000)/aoi)*1E4]
 # bdat[aoi>800 & !is.na(biom), median(hyb.med.MgC.ha, na.rm=T), by=lulc] ## looks about right
 bdat[,fia.med.MgC.ha:=((fia.pix.median/2000)/aoi)*1E4]
 # bdat[aoi>800 & !is.na(biom), median(fia.med.MgC.ha, na.rm=T), by=lulc] ## looks about right
+hist(bdat[aoi>800 & !is.na(biom), hyb.med.MgC.ha])
+hist(bdat[aoi>800 & !is.na(biom), fia.med.MgC.ha])
+bdat[aoi>800 & !is.na(biom), quantile(fia.med.MgC.ha, probs=c(0.05, 0.95)), by=lulc] ## looks about right
 
-
-
-bdat <- melt(hyb, measure.vars = c("hyb.pix.median", "fia.pix.median"), id.vars = c("bos.lulc30m.lumped", "bos.aoi30m"))
-bdat$lulc <- as.factor(bdat$bos.lulc30m.lumped)
-bdat.fin <- bdat[lulc!=6 & !(is.na(lulc)) & bos.aoi30m>800,]
-bdat.fin[,MgC.ha.yr:=((value/2000)/bos.aoi30m)*1E4]
+bdat.fin <- melt(bdat, measure.vars = c("hyb.med.MgC.ha", "fia.med.MgC.ha"), id.vars = c("lulc", "aoi", "biom"))
+bdat.fin[variable=="hyb.med.MgC.ha", alpha:=1]
+bdat.fin[variable=="fia.med.MgC.ha", alpha:=0.8]
+bdat.fin <- bdat.fin[lulc!=6 & !(is.na(lulc)) & aoi>800,]
+bdat.fin$lulc <- as.factor(bdat.fin$lulc)
 bdat.fin[,lulc:=factor(lulc, levels=c(2,5,3,4,1), ordered=T)]
-bdat.fin[variable=="hyb.pix.median", alpha:=1]
-bdat.fin[variable=="fia.pix.median", alpha:=0.8]
-facet.names <- c('hyb.pix.median'="Urban Hybrid", 'fia.pix.median'="Rural Forest")
-bdat.fin[, median(MgC.ha.yr, na.rm=T), by=lulc]
+
+###
+bdat.fin[variable=="hyb.med.MgC.ha", quantile(value, probs=c(0.25, 0.5, 0.75), na.rm=T), by=lulc]
+bdat.fin[variable=="fia.med.MgC.ha", quantile(value, probs=c(0.25, 0.5, 0.75), na.rm=T), by=lulc]
+
 
 lulc.pal <- viridis(6)
 bork <- plasma(5)
 plot(c(2,5,3,4,1,6), pch=15, col=lulc.pal)
 lulc.pal <- c(lulc.pal[2],lulc.pal[6], lulc.pal[3],lulc.pal[4],lulc.pal[5])
+
+
+# facet.names <- c('hyb.med.MgC.ha'="Urban Hybrid", 'fia.med.MgC.ha'="Rural Forest")
 # bplots.pixmed <- ggplot(bdat.fin,aes(x=lulc, y=MgC.ha.yr, fill=lulc))+
 #   geom_boxplot(outlier.shape=NA, coef=0, varwidth = TRUE)+
 #   facet_wrap(~variable, labeller=as_labeller(facet.names))+
@@ -1295,7 +1301,7 @@ lulc.pal <- c(lulc.pal[2],lulc.pal[6], lulc.pal[3],lulc.pal[4],lulc.pal[5])
 #         legend.key = element_rect(fill = "white"))
 
 
-bplots.pixmed <- ggplot(bdat.fin, aes(lulc, MgC.ha.yr, color=variable, alpha=variable))+
+bplots.pixmed <- ggplot(bdat.fin, aes(lulc, value, color=variable, alpha=variable))+
   geom_boxplot(aes(fill=lulc), outlier.shape = NA, 
                coef=0, varwidth=TRUE, position=position_dodge2(preserve="single",padding=0))+
   scale_fill_manual(values = c(lulc.pal),
@@ -1304,7 +1310,7 @@ bplots.pixmed <- ggplot(bdat.fin, aes(lulc, MgC.ha.yr, color=variable, alpha=var
                     labels=c("Developed", "Other Veg.", "HD Resid.", "LD Resid.", "Forest"))+
   scale_color_manual(values=c("black", "black"), guide="none")+
   ylab("Pixel median C uptake (MgC/ha/yr)")+
-  ylim(c(0,1.8))+
+  coord_cartesian(ylim = c(0, 2.2))+
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -1316,12 +1322,13 @@ bplots.pixmed <- ggplot(bdat.fin, aes(lulc, MgC.ha.yr, color=variable, alpha=var
         legend.title=element_text(size=8, face="bold"),
         axis.title.x=element_blank(),
         axis.ticks.x=element_blank(),
+        axis.text.x = element_text(angle=30, hjust=1, size=10, face="bold"),
         strip.text.x = element_text(size = 10, face="bold"))+
   guides(fill=FALSE)+
-  scale_alpha_manual(values=c(1,0.3), guide="none")+
+  scale_alpha_manual(values=c(1,0.4), guide="none")+
   scale_x_discrete(labels=c("Developed", "Other Veg.", "HD Resid.", "LD Resid.", "Forest"))
 
-png(width=5, height=4, units="in", res=600, bg="white", filename="images/Fig3B_pixelNPP.png")
+png(width=4, height=4, units="in", res=600, bg="white", filename="images/Fig3B_pixelNPP.png")
 bplots.pixmed
 dev.off()
 
@@ -1335,38 +1342,42 @@ library(raster)
 library(rgdal)
 library(data.table)
 # ndvi <- raster("processed/boston/bos.ndvi.tif")
-lsat.ndviA <- raster("processed/NDVI/030005_NDVI.tif")
-lsat.ndviB <- raster("processed/NDVI/030006_NDVI.tif")
+# lsat.ndviA <- raster("processed/NDVI/030005_NDVI.tif")
+# lsat.ndviB <- raster("processed/NDVI/030006_NDVI.tif")
 isa <- raster("processed/boston/bos.isa.RR2.tif")
 can <- raster("processed/boston/bos.can.redux.tif")
 biom <- raster("data/dataverse_files/bostonbiomass_1m.tif")
-ed <- raster("processed/boston/bos.ed10.tif")
+ed <- raster("processed/boston/bos.ed10m.redux.tif")
+aoi <- raster("processed/boston/bos.aoi30m.tif")
 
 ##quick composite of N and S landsat NDVI scenes
-mos.ndvi <- mosaic(lsat.ndviA, lsat.ndviB, fun=median, na.rm=T)
-ndviA.dat <- as.data.table(as.data.frame(lsat.ndviA))
-ndviB.dat <- as.data.table(as.data.frame(lsat.ndviB))
-ndvi <- mos.ndvi
-  
-  
+# mos.ndvi <- mosaic(lsat.ndviA, lsat.ndviB, fun=median, na.rm=T)
+# ndvi <- mos.ndvi
+# ndvi <- projectRaster(from=ndvi, to=aoi, res=30)
+# ndvi <- crop(ndvi, aoi)
+# writeRaster(ndvi, filename="processed/NDVI/bos.ndvi30m.tif", format="GTiff", overwrite=T)
+ndvi <- raster("processed/NDVI/bos.ndvi30m.tif")  
+
 ## backbay
 # targ <- readOGR("processed/boston/southend_sample.shp")
 targ <- readOGR("processed/boston/southend_inset.shp")
+targ <- spTransform(targ, crs(ndvi))
 # targ <- readOGR("processed/boston/frankpark_sample.shp")
-targ.ndvi <- unlist(extract(ndvi, spTransform(targ, crs(ndvi))))
-mean(targ.ndvi, na.rm=T)
-mean(targ.ndvi, na.rm=T)-(sd(targ.ndvi, na.rm=T)*1.96)
-mean(targ.ndvi, na.rm=T)+(sd(targ.ndvi, na.rm=T)*1.96)
-targ.can <- unlist(extract(can, spTransform(targ, crs(can))))
-sum(targ.can)/length(targ.can)
-targ.ed <- unlist(extract(ed, spTransform(targ, crs(ed))))
-sum(targ.ed)/sum(targ.can)
-targ.isa <- unlist(extract(isa, spTransform(targ, crs(isa))))
-sum(targ.isa)/length(targ.isa)
-targ.biom <- unlist(extract(biom, spTransform(targ, crs(biom))))
-(sum(targ.biom)/2000)/(length(targ.can)/1E4)
-(sum(targ.biom)/2000)/(sum(targ.can)/1E4)
-(sum(targ.biom)/2000)/(sum(targ.isa==0)/1E4)
+plot(ndvi); plot(targ, add=T)
+targ.ndvi <- unlist(extract(ndvi, targ))
+mean(targ.ndvi, na.rm=T) # 0.40
+mean(targ.ndvi, na.rm=T)-(sd(targ.ndvi, na.rm=T)*1.96) ## 0.22
+mean(targ.ndvi, na.rm=T)+(sd(targ.ndvi, na.rm=T)*1.96) ## 0.57
+targ.can <- unlist(extract(can, targ))
+sum(targ.can)/length(targ.can) ## 25%
+targ.ed <- unlist(extract(ed, targ))
+sum(targ.ed)/sum(targ.can) ## 99.999%
+targ.isa <- unlist(extract(isa, targ))
+sum(targ.isa)/length(targ.isa) ## 88%
+targ.biom <- unlist(extract(biom, targ))
+(sum(targ.biom)/2000)/(length(targ.can)/1E4) ## 22.4 MgC/ha
+(sum(targ.biom)/2000)/(sum(targ.can)/1E4) ## 89.0 MgC/ha
+(sum(targ.biom)/2000)/(sum(targ.isa==0)/1E4) ## 179.4 MgC/ha
 #####
 
 

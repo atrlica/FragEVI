@@ -532,9 +532,35 @@ for(i in 1:1000){
 
 # 
 # ## intercept 5.7%, interior -1.6%, -2.6% per 100 MgC+
-# t.test(plot.mod.b1, mu=0)
-# t.test(plot.mod.b2, mu=0)
+mean(plot.mod.b0); quantile(plot.mod.b0, probs=c(0.05, 0.95)); sd(plot.mod.b0)
+mean(plot.mod.b1); quantile(plot.mod.b1, probs=c(0.05, 0.95)); sd(plot.mod.b1)
+mean(plot.mod.b2); quantile(plot.mod.b2, probs=c(0.05, 0.95)); sd(plot.mod.b2)
+
+t.test(plot.mod.b1, mu=0)
+t.test(plot.mod.b2, mu=0)
 ## the whole purpose of the above is to produce a vector of model coefficients for use below in an interative NPP estimate
+
+### plot-level growth rate predictions with error
+e.plots <- andy.dbh[seg.F=="E", sum(biom0), by=Plot.ID]
+e.plots[,MgC.ha.can:=((V1/2000)/(10*30))*1E4]
+e.plots[,quantile(MgC.ha.can, probs=c(0.05, 0.5, 0.95))]
+a <- numeric()
+for(j in 1:dim(e.plots)[1]){
+  a <- c(a, plot.mod.b0+(plot.mod.b1*e.plots[,MgC.ha.can][j]))
+}
+quantile(a, probs=c(0.05, 0.5, 0.95))
+hist(a)
+
+i.plots <- andy.dbh[seg.F=="I", sum(biom0), by=Plot.ID]
+i.plots[,MgC.ha.can:=((V1/2000)/(10*30))*1E4]
+i.plots[,quantile(MgC.ha.can, probs=c(0.05, 0.5, 0.95))]
+a <- numeric()
+for(j in 1:dim(i.plots)[1]){
+  a <- c(a, plot.mod.b0+(plot.mod.b1*i.plots[,MgC.ha.can][j]))
+}
+quantile(a, probs=c(0.05, 0.5, 0.95))
+hist(a)
+
 #####
 
 ### NPP Calculation treating canopy as Andy-like forest, with model error

@@ -367,8 +367,11 @@ biom.dat[,hybrid.med:=getValues(raster("processed/results/hybrid.V7.median.tif")
 biom.dat[,fia.ground.med.MgC.ha:=((fia.ground.med/2000)/aoi)*1E4]
 biom.dat[,fia.forest.med.MgC.ha:=((fia.forest.med/2000)/aoi)*1E4]
 biom.dat[,hybrid.med.MgC.ha:=((hybrid.med/2000)/aoi)*1E4]
-# hist(biom.dat[aoi>800 & !is.na(biom),hybrid.med.MgC.ha]) ## much longer positive tail
-# hist(biom.dat[aoi>800 & !is.na(biom),fia.forest.med.MgC.ha])
+hist(biom.dat[aoi>800 & !is.na(biom),hybrid.med.MgC.ha]) ## much longer positive tail
+hist(biom.dat[aoi>800 & !is.na(biom),fia.forest.med.MgC.ha])
+biom.dat[,MgC.ha:=1E4*((biom/2000)/aoi)]
+plot(biom.dat[aoi>800 & biom>0, MgC.ha], biom.dat[aoi>800 & biom>0, hybrid.med.MgC.ha/MgC.ha])
+
 
 ## compile a table of pixel median ranges
 l <- biom.dat[aoi>800 & !is.na(biom), round(quantile(hybrid.med.MgC.ha, probs=0.05, na.rm=T), 1), by=lulc]

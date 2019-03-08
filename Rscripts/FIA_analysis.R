@@ -135,6 +135,9 @@ write.csv(live, "processed/fia.live.stem.dbh.growth.csv")
 library(lme4)
 live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv"))  ##  too-sparse subplots removed
 live$taxa <- live[,paste(GENUS, SPECIES)]
+length(live[lag>0 & STATUS==1, taxa]) ### these are our sticks used in the stem growth model
+write.csv(table(live[lag>0 & STATUS==1, taxa]), "processed/results/fia.plots.tree.spp.counts.csv")
+table(live[lag>0, PlotID])
 ### new hotness: dbh increment modeling
 plot(live$DIAM_T0, live$delta.diam)
 plot(live$DIAM_T0, live$diam.rate); mean(live[lag>0, mean(diam.rate)]) ### these boys grow about 0.2 cm/yr
@@ -601,6 +604,7 @@ biom.dat[, lulc:=getValues(lulc)]
 biom.dat[, pix.ID:=seq(1, dim(biom.dat)[1])]
 names(biom.dat)[1] <- "biom"
 dim(biom.dat[!is.na(biom) & biom>10 & aoi>800,]) ## 106659 valid biomass pixels
+load("processed/mod.live.plot.final.sav")
 
 ### Now we have to decide how to calculate the "forest" density of the biomass on the ground
 ### Three approaches: GROUND (kg-biomass/m2-pixel); "FOREST" (kg-biomass/m2-canopy); "PERV" (kg-biomass/m2-pervious)
@@ -643,10 +647,11 @@ biom.dat[isa.frac>0.99, live.MgC.ha.perv:=0]
 ### new hotness: build in model estimate uncertainty
 
 ### loop and interatively make maps with different model realizations
+load("processed/mod.live.plot.final.sav")
 max.fact <- live.plot[HWfrac>0.25, max(biom.delt.ann.rel.HW)]
 min.fact <- live.plot[HWfrac>0.25, min(biom.delt.ann.rel.HW)]
-b0.rand <- rnorm(1000, coef(y)[1,1], coef(y)[1,2])
-b1.rand <- rnorm(1000, coef(y)[2,1], coef(y)[2,2])
+b0.rand <- rnorm(1000, coef(mod.live.plot.final)[1,1], coef(mod.live.plot.final)[1,2])
+b1.rand <- rnorm(1000, coef(mod.live.plot.final)[2,1], coef(mod.live.plot.final)[2,2])
 
 # ## what is the expected general range of gfacts given the distribution of biomass densities?
 # gfacts.ground.mn <- exp(mean(b0.rand)+biom.dat[aoi>800 & live.MgC.ha.ground>0, live.MgC.ha.ground]*mean(b1.rand))

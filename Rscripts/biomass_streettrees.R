@@ -182,8 +182,13 @@ par(mfrow=c(1,1), mar=c(4,4,3,1))
 street[record.good==1,] ## 2592 records total
 # dip <- as.data.frame(table(street[record.good==1, Species]))
 # write.csv(dip, "docs/street.species.csv")
-### basics: how does delta diameter vary?
 
+### basic summaries
+street[record.good==1, quantile(dbh.2006, probs=c(0.05, 0.5, 0.95), na.rm=T)]
+street[record.good==1, quantile(diam.rate, probs=c(0.05, 0.5, 0.95), na.rm=T)]
+
+### now the growth modeling
+### basics: how does delta diameter vary?
 plot(street[record.good==1, dbh.2006], street[record.good==1, delta.diam])
 summary(lm(delta.diam~dbh.2006, data=street[record.good==1,])) ## so about a 0.1 cm decline in delta per cm of diameter
 plot(street[record.good==1, dbh.2006], street[record.good==1, diam.rate])
@@ -250,6 +255,7 @@ boxplot(dbh.2006~genus, data=street[record.good==1,])
 boxplot(diam.rate~genus.simp, data=street[record.good==1,])
 boxplot(dbh.2006~genus.simp, data=street[record.good==1,])
 
+#####
 #### mixed effects accounting for taxa differences
 library(lme4)
 hm2.me <- lmer(diam.rate~poly(dbh.2006, degree=2, raw=T)+
@@ -274,10 +280,20 @@ anova(hm0.me2, hm2.me2) ## better to have a dbh term than not
 
 ## different RE formulation
 hm2.me3 <-  lmer(diam.rate~poly(dbh.2006, degree=2, raw=T)+
-                             (dbh.2006|genus.simp), REML=F, data=street[record.good==1,]) ## same results
+                             (dbh.2006|genus.simp), REML=F, 
+                 data=street[record.good==1,]) ## same results
+hm1.me3 <-  lmer(diam.rate~poly(dbh.2006, degree=1, raw=T)+
+                   (dbh.2006|genus.simp), REML=F, 
+                 data=street[record.good==1,])
 hm3.me3 <- lmer(diam.rate~poly(dbh.2006, degree=3, raw=T)+
-                      (dbh.2006|genus.simp), REML=F, data=street[record.good==1,]) ## kills sig of poly terms
+                      (dbh.2006|genus.simp), REML=F, 
+                data=street[record.good==1,]) ## kills sig of poly terms
+hm0.me3 <- lmer(diam.rate~1+
+                  (dbh.2006|genus.simp), REML=F, 
+                data=street[record.good==1,])
 anova(hm2.me3, hm3.me3) ## NS 3rd order
+anova(hm1.me3, hm2.me3) ## 2nd order significant ***
+anova(hm0.me3, hm1.me3)
 
 mod.street.dbhdelta.me <- hm2.me3
 save(mod.street.dbhdelta.me, file="processed/mod.street.dbhdelta.me.sav")
@@ -613,7 +629,6 @@ for(c in 1:length(npp.dump)){
 
       #### new hotness: throw varying model parameters at a random dbh collection
       #### also newer hotness: match dbh samples via associated genus to urban-specific volumetric growth equations
-      
       ## randomly select a dbh collection, and successively apply all 1000 combinations of dbh growth coefficients
       npp.random[[b]] <- numeric() ## this is where we are storing the vectors (100 long) of npp estimates for each pixel
       for(p in 1:1000){  ## individual entries in cage.dbh are pixels, which contain vectors of dbh collections
