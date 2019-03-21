@@ -1,6 +1,6 @@
 # library(raster)
 library(data.table)
-# setwd("/projectnb/buultra/atrlica/FragEVI")
+setwd("/projectnb/buultra/atrlica/FragEVI")
 
 ## all of the simulator dump files
 # load(file=paste("processed/boston/biom_street/ann.npp.street.v", vers, ".weighted.", y, ".sav", sep=""))
@@ -27,15 +27,10 @@ mort <- function(x){(0.0008133*(x^2))-(0.0642407*x)+4.0614503}
 # x <- seq(1,100)
 # plot(x, mort(x))
 
-## allometric equation E hardwoods
-# b0.allo <- -2.48
-# b1.allo <- 2.4835 ## these are eastern hardwood defaults
-# biom.pred <- function(x){exp(b0.allo+(b1.allo*log(x)))}
-
-### upgrade: apply urban-specific allometries
+### apply urban-specific allometries
 street.allo <- read.csv("docs/street.biometrics.csv") ## AG wood vol (m3) as b0*DBH(cm)^b1; multiply by density to get kg-biomass
 
-### upgrade: use urban specific crown diameter measures to get canopy coverage
+### use urban specific crown diameter measures to get canopy coverage
 # street.canopy <- as.data.table(read.csv("docs/RDS-2016-0005/Data/TS6_Growth_coefficients.csv"))
 # street.canopy <- street.canopy[Region=="NoEast", ]
 # street.canopy <- street.canopy[Predicts.component=="crown dia",]
@@ -57,19 +52,13 @@ street.allo <- read.csv("docs/street.biometrics.csv") ## AG wood vol (m3) as b0*
 # write.csv(street.canopy, "docs/street.canopy.csv")
 street.canopy <- read.csv("docs/street.canopy.csv")
 
-### dbh~biomass growth equation (from nls street tree model)
-# mm.a=0.2281686
-# mm.b=(-1.1043188)
-# dbhg.pred <- function(x){exp(mm.a+(mm.b*log(x)))} ## function for predicting next year's relative dbh growth from this year's dbh
-## mm coefficients: had to hard code bc street data not avail on every machine
-
-### upgrade: get a list of model coefficients to run for each repetition (dbh.delta~dbh.start)
-library(lme4)
-load("processed/mod.street.dbhdelta.me.sav")
-aaa <- summary(mod.street.dbhdelta.me)
-b0.rand <- rnorm(100, coef(aaa)[1,1], coef(aaa)[1,2])
-b1.rand <- rnorm(100, coef(aaa)[2,1], coef(aaa)[2,2])
-b2.rand <- rnorm(100, coef(aaa)[3,1], coef(aaa)[3,2])
+###  get a list of model coefficients to run for each repetition (dbh.delta~dbh.start)
+# library(lme4)
+# load("processed/mod.street.dbhdelta.me.sav")
+# aaa <- summary(mod.street.dbhdelta.me)
+# b0.rand <- rnorm(100, coef(aaa)[1,1], coef(aaa)[1,2])
+# b1.rand <- rnorm(100, coef(aaa)[2,1], coef(aaa)[2,2])
+# b2.rand <- rnorm(100, coef(aaa)[3,1], coef(aaa)[3,2])
 b0.hard <- c(1.234, 8.178e-02) ### have to hard code shit because R version on cluster is old
 b1.hard <- c(-1.989e-02, 3.693e-03)
 b2.hard <- c(1.340e-04, 3.366e-05)
@@ -80,49 +69,59 @@ b0.rand <- b0.hard[1]
 b1.rand <- b1.hard[1]
 b2.rand <- b2.hard[1]
 
+###
 ### expand scenario data file processing
-library(rgeos)
-library(rgdal)
-library(raster)
-rbuff <- readOGR("processed/boston/newplanting/road2345_buffsD.shp") ## this is the prepared road buffers polygon
-isa <- raster("processed/boston/bos.isa.RR2.tif")
-aoi <- raster("processed/boston/bos.aoi.tif")
-# rbuff.t <- spTransform(rbuff, CRSobj = crs(isa))
-# writeOGR(rbuff.t, layer="road2345_buffsUTM", dsn = "processed/boston/newplanting/road2345_buffsUTM.shp", driver = "ESRI Shapefile") ## this gets rasterized to the isa.RR2 grid in arc
-rbuff.r <- raster("processed/boston/newplanting/road2345_buffsR.tif") ## this is the 1m raster of the road buffers, on the isa grid
-rbuff.r <- crop(rbuff.r, aoi)
-rbuff.r <- extend(rbuff.r, aoi)
-isa <- crop(isa, aoi)
-#### this function ID's road buffer pixels that are also pervious
-id.perv <- function(buff, perv, aoi, filename) {
-  out <- raster(buff)
-  bs <- blockSize(out)
-  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
-  for (i in 1:bs$n) {
-    b <- getValues(buff, row=bs$row[i], nrows=bs$nrows[i])
-    p <- getValues(perv, row=bs$row[i], nrows=bs$nrows[i])
-    a <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i])
-    g <- rep(0, length(b))
-    g[b==0 & p==0 & a==1] <- 1 ## mark all inside-aoi non-pervious buffer pix as good
-    g[is.na(a)] <- NA
-    g[b!=0] <- NA ## NA out non buffers and buffers over impervious
-    out <- writeValues(out, g, bs$row[i])
-    print(paste("finished block", i, "of", bs$n))
-  }
-  out <- writeStop(out)
-  return(out)
-}
-s <- id.perv(rbuff.r, isa, aoi, filename="processed/boston/newplanting/plantable.tif")
+#####
+# library(rgeos)
+# library(rgdal)
+# library(raster)
+# rbuff <- readOGR("processed/boston/newplanting/road2345_buffsD.shp") ## this is the prepared road buffers polygon
+# isa <- raster("processed/boston/bos.isa.RR2.tif")
+# aoi <- raster("processed/boston/bos.aoi.tif")
+# # rbuff.t <- spTransform(rbuff, CRSobj = crs(isa))
+# # writeOGR(rbuff.t, layer="road2345_buffsUTM", dsn = "processed/boston/newplanting/road2345_buffsUTM.shp", driver = "ESRI Shapefile") ## this gets rasterized to the isa.RR2 grid in arc
+# rbuff.r <- raster("processed/boston/newplanting/road2345_buffsR.tif") ## this is the 1m raster of the road buffers, on the isa grid
+# rbuff.r <- crop(rbuff.r, aoi)
+# rbuff.r <- extend(rbuff.r, aoi)
+# isa <- crop(isa, aoi)
+# #### this function ID's road buffer pixels that are also pervious
+# id.perv <- function(buff, perv, aoi, filename) {
+#   out <- raster(buff)
+#   bs <- blockSize(out)
+#   out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+#   for (i in 1:bs$n) {
+#     b <- getValues(buff, row=bs$row[i], nrows=bs$nrows[i])
+#     p <- getValues(perv, row=bs$row[i], nrows=bs$nrows[i])
+#     a <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i])
+#     g <- rep(0, length(b))
+#     g[b==0 & p==0 & a==1] <- 1 ## mark all inside-aoi non-pervious buffer pix as good
+#     g[is.na(a)] <- NA
+#     g[b!=0] <- NA ## NA out non buffers and buffers over impervious
+#     out <- writeValues(out, g, bs$row[i])
+#     print(paste("finished block", i, "of", bs$n))
+#   }
+#   out <- writeStop(out)
+#   return(out)
+# }
+# s <- id.perv(rbuff.r, isa, aoi, filename="processed/boston/newplanting/plantable.tif")
+# 
+# holes <- read.csv("processed/boston/newplanting/road2345_donut_line_rec.csv")
+# holes$plantable.length <- holes$Shape_Length/2
+# holes$num.trees <- floor(holes$plantable.length/8)+1
+# hist(holes$num.trees); boxplot(holes$num.trees, outline=F) ## bulk of them are 8 and below
+# sum(holes$num.trees) ## 170147 tree spaces plantable
+# sum(holes$plantable.length)/1000 ## 1197 km of plantable road buffer
 
-## que up the identified street tree planting polygons, filter, and figure out how much land we are dealing with
-# ### still need to figure how to locate planting areas in space viz the biomass grid
 
-
-box <- as.data.table(read.csv("processed/boston/plant10m_MBG.csv")); dim(box) ## 78618
-summary(box$Shape_Area); hist(box$Shape_Area)
-box <- box[Shape_Area<1000,]; dim(box) ##78034 ## eliminate a fair chunk of the weird giant boxes
-box[,num.trees:=((MBG_Width-1)%/%8)+1] ## this gives us 2 trees per 8m planter length with a little buffer at either end
-box[,sum(num.trees)] ## 79k trees can be planted in this population of boxes
+### this was the old way of doing the processing to determine street tree plantable area
+######
+# box <- as.data.table(read.csv("processed/boston/plant10m_MBG.csv")); dim(box) ## 78618
+# summary(box$Shape_Area); hist(box$Shape_Area)
+# box <- box[Shape_Area<1000,]; dim(box) ##78034 ## eliminate a fair chunk of the weird giant boxes
+# box[,num.trees:=((MBG_Width-1)%/%8)+1] ## this gives us 2 trees per 8m planter length with a little buffer at either end
+# box[,sum(num.trees)] ## 79k trees can be planted in this population of boxes
+######
+#####
 
 ## load up ancillary map data
 library(raster)
@@ -141,21 +140,21 @@ lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
 lulc.dat <- as.data.table(as.data.frame(lulc))
 biom.dat <- cbind(biom.dat, aoi.dat, can.dat, isa.dat, lulc.dat)
 biom.dat[,pix.ID:=seq(1:dim(biom.dat)[1])]
-nonfor <- biom.dat[bos.aoi30m>800 & bos.lulc30m.lumped!=1 & bos.biom30m<20000, pix.ID] ### identify pixel ID's that are nonforest
+nonfor <- biom.dat[bos.aoi30m>800 & !(bos.lulc30m.lumped %in% c(1,4,5,6)) & bos.biom30m<20000, pix.ID] ### identify pixel ID's that are dev, hdres, ldres
 
 ######
 ### set scenario options 
 # scenario <- c("BAU", "highmort", "lowreplant", "oldies", "lowmort", "slowreplant", "expand")
 scenario <- c("BAU", "oldies", "expand")
-scenario <- c("BAU", "oldies")
+# scenario <- "expand"
 ## record specific parameter sets
-resim.vers <- 5 ## what are we labeling this round of resims?
+resim.vers <- 6 ## what are we labeling this round of resims?
 ## 1 was prelim, 2 included full 100x pix resim per year, 3 is model mean single resim per year
 vers <- 6 ## what simulator results version are we dealing with?
 
 ### default factors
 npp.quant.range <- c(0.02, 0.02) ## what dbh samples to draw from
-mort.mod <- 1 ## modification to mortality rate (scenario specific)
+mort.mod <- 1 ## default modification to mortality rate (scenario specific)
 default.sizecutoff <- 10000 ## size of tree dbh over which to screw with mortality
 largemort.mod <- 1 ## multiplier for mortalities in large trees
 replant.factor <- 1 ## rate of replanting
@@ -172,7 +171,11 @@ oldies.sizecutoff <- 40 ## how to define "big" trees
 slowreplant.delay <- c(0,2) ## 1 to 3 year delay between death and regrowth starting
 expand.timeline <- 10 ### how many years to implement the expand scenario
 # expand.rate.go <- (box[,sum(num.trees)]/expand.timeline)/length(nonfor) ## this is the per non-forest pixel annual rate of planting needed to fill out the city (assuming that only a small number of the replant boxes fall in forest pixels)
-expand.rate.go <- 0
+# expand.rate.go <- 0
+# expand.rate.go <- (sum(holes$num.trees)/expand.timeline)/length(nonfor) ## new buffer calc, this is the per-year rate of new stem appearance in NONFOREST pixels needed to get us to full expand coverage after number of years = expand.timeline
+expand.rate.go <- 170147/length(nonfor) ## hard code the fucker
+
+
 # record run parameters to text file
 # params.list <- list(c(scenario, resim.vers, vers,
 #                     highmort.mortfactor, lowmort.mortfactor, 

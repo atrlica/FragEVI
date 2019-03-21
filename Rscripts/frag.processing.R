@@ -363,87 +363,138 @@ col2rgb(cov.pal) ## how to enter these assholes into arc RGB
 #####
 
 ##
-#### This is part of process to ID plantable road buffer space
+#### Subprocessing to ID plantable road buffer space
 #####
-### Now use cover map to locate near-road pervious pixels without canopy cover
-rdbuff <- raster("E:/FragEVI/processed/boston/ROAD10m_rast.tif")
-cov <- raster("E:/FragEVI/processed/boston/bos.cov.V3-canisa.tif")
-rdbuff <- crop(extend(rdbuff, cov), cov)
+### make broken up donut rasters of the two nested buffer polygons
+library(raster)
+library(rgdal)
+# bos.can <- raster("processed/boston/bos.can.redux.tif")
+bos.can <- raster("processed/boston/newplanting/bos_can_4mbuff.tif") ## use the canopy raster with 4m of buffer space to nearest canopy
+buff.O.r <- raster("processed/boston/newplanting/road2345_buffD_NAD83_R.tif")
+buff.I.r <- raster("processed/boston/newplanting/road2345_IbuffsD_NAD83_R.tif")
+bos.lulc <- raster("processed/boston/bos.lulc.lumped.tif")
 bos.aoi <- raster("processed/boston/bos.aoi.tif")
-
-#### find cover class 3 or 2 (non-veg pervious, veg pervious) in the buffer region
-road.planting <- function(roadbuffer, cover, aoi, filename) {
+buff.O.r <- crop(buff.O.r, bos.aoi)
+buff.I.r <- crop(buff.I.r, bos.aoi)
+buff.O.r <- extend(buff.O.r, bos.aoi)
+buff.I.r <- extend(buff.I.r, bos.aoi)
+bos.can <- crop(bos.can, bos.aoi)
+bos.lulc <- crop(bos.lulc, bos.aoi)
+bos.lulc <- extend(bos.lulc, bos.aoi)
+donut <- function(buffer.in, buffer.out, can, lulc, aoi, filename) {
   out <- raster(aoi)
   bs <- blockSize(aoi)
   out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
   for (i in 1:bs$n) {
-    target <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) ## dummy chunk
-    road <- getValues(roadbuffer, row=bs$row[i], nrows=bs$nrows[i]) ## road buffer chunk, 1=buffer/NA
-    plantme <- getValues(cover, row=bs$row[i], nrows=bs$nrows[i]) ## cover chunk
-    here <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) ## aoi chunk
-    target[here==1] <- 0 ## blank values for anything inside AOI
-    target[road==1 & plantme %in% c(2,3) & here==1] <- 1 ## mark the places inside AOI that are suitable
-    out <- writeValues(out, target, bs$row[i])
+    inner <- getValues(buffer.in, row=bs$row[i], nrows=bs$nrows[i]) ## inner buffer
+    outer <- getValues(buffer.out, row=bs$row[i], nrows=bs$nrows[i]) ## outer buffer
+    c <- getValues(can, row=bs$row[i], nrows=bs$nrows[i]) ## canopy
+    l <- getValues(lulc, row=bs$row[i], nrows=bs$nrows[i]) ## lulc
+    a <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) ## aoi
+    d <- outer ## the donut starts with the outer buffer pixels complete
+    d[inner==1] <- NA ## wherever the inner buffer pixels don't exist, cancel
+    d[a!=1] <- NA ## wherever the buffer gets outside the AOI, cancel
+    d[is.na(a)] <- NA ## wherever the buffer gets outside the AOI, cancel
+    d[d==1 & c==1] <- NA ## cancel buffer pixels that already have canopy
+    d[!(l%in%c(2,3,4))] <- NA ## cancel buffer pixels in non-developed/residential areas
+    out <- writeValues(out, d, bs$row[i])
     print(paste("finished block", i, "of", bs$n))
   }
   out <- writeStop(out)
   return(out)
 }
-cj <- road.planting(rdbuff, cov, bos.aoi, "processed/boston/bos.planting10m.tif")
-plot(cj)
+ddd <- donut(buff.I.r, buff.O.r, bos.can, bos.lulc, bos.aoi, "processed/boston/newplanting/road2345_donut_R.tif")
+plot(ddd)
 
-## converted to polygon in arc
-### Arc is being an asshole, won't filter the polygons properly, so do it here
-library(rgdal)
-library(raster)
-## this is the unsimplified polygon, follows raster edges perfectly
-# plantP <- readOGR("processed/boston/plant10m_poly.shp")
-# plantP.filt <- plantP[plantP@data$gridcode=="1000000" & plantP@data$Shape_Area>=2,]
-# # writeOGR(plantP.filt, "processed/boston/plant10m_poly_filt.shp", "plant10m_poly_filt", driver="ESRI Shapefile")
-plantP <- readOGR("processed/boston/plant10mPoly_Simp.shp")
-plantP.filt <- plantP[plantP@data$gridcode=="1000000" & plantP@data$Shape_Area>1.3,]
-writeOGR(plantP.filt, "processed/boston/plant10m_poly_simp_filt.shp", "plant10m_poly_simp_filt", driver="ESRI Shapefile")
-### put this shit into arc and run a buffer on the filtered (simplified) polygons
+### load the resulting data file from the final processing steps in arc
+holes <- read.csv("processed/boston/newplanting/road2345_donut_line_rec.csv")
+holes$plant.length <- holes$Shape_Length/2
+holes$tree.num <- floor(holes$plant.length/8)+1
+sum(holes$tree.num) ## there is room for another 170147 trees on developed road buffers (this is developed and residential areas)
+sum(holes$plant.length)/1000 ## 1197 additional km of sidewalk that could have trees planted
 
-#### read in the 4m buffered filtered polygons and filter for >50% open sky
-# plantP.filt <- readOGR("processed/boston/plant10m_poly_filt.shp") ## 78618 features
-# plantP.filt.buff <- readOGR("processed/boston/plant10m_poly_filt_4mBuff.shp") ##78618 features
-plantP.filt.buff <- readOGR("processed/boston/plant10m_poly_simp_filt_4mBuff.shp") ##82527 features
-
-### clean up data frame, filter for canopy sky view factor
-# sum(as.numeric(as.character(plantP.filt@data$OBJECTID))-as.numeric(as.character(plantP.filt@data$Id))) ## identical
-filt.d <- plantP.filt@data[,c("OBJECTID", "Shape_Leng", "Shape_Area")]
-names(filt.d)[2:3] <- c("plant_Leng", "plant_Area")
-buff.d <- plantP.filt.buff@data[,c("OBJECTID", "gridcode", "BUFF_DIST", "Shape_Le_1", "Shape_Area")]
-names(buff.d)[4:5] <- c("buff_Leng", "buff_Area")
-merg.d <- merge(x=filt.d, y=buff.d, by="OBJECTID")
-plantP.filt.buff@data$OBJECTID_1 <- NULL
-plantP.filt.buff@data$Id <- NULL
-plantP.filt.buff@data$BUFF_DIST <- NULL
-plantP.filt.buff@data$Shape_Area <- NULL
-plantP.filt.buff@data$Shape_Le_1 <- NULL
-plantP.filt.buff@data$Shape_Leng <- NULL
-plantP.filt.buff@data$ORIG_FID <- NULL
-plantP.filt.buff@data$gridcode <- NULL
-plantP.filt.buff@data <- merge(x=plantP.filt.buff@data, y=merg.d, by="OBJECTID")
-
-### filter file by extracting canopy area within the buffer, then eliminating polygons associated with buffers that have too much canopy already
-keep <- integer()
-ditch <- integer()
-bos.can <- raster("processed/boston/bos.can.tif")
-for(f in 1:dim(plantP.filt.buff@data)[1]){
-  a=Sys.time()
-  test <- extract(bos.can, plantP.filt.buff[f,])
-  if(sum(test[[1]], na.rm=T)<0.5*plantP.filt.buff@data[f,"buff_Area"]){ ## if less than half the buffer area already in canopy
-    keep <- c(keep, f)
-  } else{
-    ditch <- c(ditch, f)
-  }
-  print(paste("evaluated polygon", f, Sys.time()-a))
-}
-
-plantP.canfilt <- plantP.filt.buff[keep,]
-plantP.canReject <- plantP.filt.buff[ditch,]
+###
+### This was the old way processing expanded planting space from arcmap, looking at avaialble pervious/noncanopy within road buffers
+######
+# ### Now use cover map to locate near-road pervious pixels without canopy cover
+# rdbuff <- raster("E:/FragEVI/processed/boston/ROAD10m_rast.tif")
+# cov <- raster("E:/FragEVI/processed/boston/bos.cov.V3-canisa.tif")
+# rdbuff <- crop(extend(rdbuff, cov), cov)
+# bos.aoi <- raster("processed/boston/bos.aoi.tif")
+# 
+# #### find cover class 3 or 2 (non-veg pervious, veg pervious) in the buffer region
+# road.planting <- function(roadbuffer, cover, aoi, filename) {
+#   out <- raster(aoi)
+#   bs <- blockSize(aoi)
+#   out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+#   for (i in 1:bs$n) {
+#     target <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) ## dummy chunk
+#     road <- getValues(roadbuffer, row=bs$row[i], nrows=bs$nrows[i]) ## road buffer chunk, 1=buffer/NA
+#     plantme <- getValues(cover, row=bs$row[i], nrows=bs$nrows[i]) ## cover chunk
+#     here <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) ## aoi chunk
+#     target[here==1] <- 0 ## blank values for anything inside AOI
+#     target[road==1 & plantme %in% c(2,3) & here==1] <- 1 ## mark the places inside AOI that are suitable
+#     out <- writeValues(out, target, bs$row[i])
+#     print(paste("finished block", i, "of", bs$n))
+#   }
+#   out <- writeStop(out)
+#   return(out)
+# }
+# cj <- road.planting(rdbuff, cov, bos.aoi, "processed/boston/bos.planting10m.tif")
+# plot(cj)
+# 
+# ## converted to polygon in arc
+# ### Arc is being an asshole, won't filter the polygons properly, so do it here
+# library(rgdal)
+# library(raster)
+# ## this is the unsimplified polygon, follows raster edges perfectly
+# # plantP <- readOGR("processed/boston/plant10m_poly.shp")
+# # plantP.filt <- plantP[plantP@data$gridcode=="1000000" & plantP@data$Shape_Area>=2,]
+# # # writeOGR(plantP.filt, "processed/boston/plant10m_poly_filt.shp", "plant10m_poly_filt", driver="ESRI Shapefile")
+# plantP <- readOGR("processed/boston/plant10mPoly_Simp.shp")
+# plantP.filt <- plantP[plantP@data$gridcode=="1000000" & plantP@data$Shape_Area>1.3,]
+# writeOGR(plantP.filt, "processed/boston/plant10m_poly_simp_filt.shp", "plant10m_poly_simp_filt", driver="ESRI Shapefile")
+# ### put this shit into arc and run a buffer on the filtered (simplified) polygons
+# 
+# #### read in the 4m buffered filtered polygons and filter for >50% open sky
+# # plantP.filt <- readOGR("processed/boston/plant10m_poly_filt.shp") ## 78618 features
+# # plantP.filt.buff <- readOGR("processed/boston/plant10m_poly_filt_4mBuff.shp") ##78618 features
+# plantP.filt.buff <- readOGR("processed/boston/plant10m_poly_simp_filt_4mBuff.shp") ##82527 features
+# 
+# ### clean up data frame, filter for canopy sky view factor
+# # sum(as.numeric(as.character(plantP.filt@data$OBJECTID))-as.numeric(as.character(plantP.filt@data$Id))) ## identical
+# filt.d <- plantP.filt@data[,c("OBJECTID", "Shape_Leng", "Shape_Area")]
+# names(filt.d)[2:3] <- c("plant_Leng", "plant_Area")
+# buff.d <- plantP.filt.buff@data[,c("OBJECTID", "gridcode", "BUFF_DIST", "Shape_Le_1", "Shape_Area")]
+# names(buff.d)[4:5] <- c("buff_Leng", "buff_Area")
+# merg.d <- merge(x=filt.d, y=buff.d, by="OBJECTID")
+# plantP.filt.buff@data$OBJECTID_1 <- NULL
+# plantP.filt.buff@data$Id <- NULL
+# plantP.filt.buff@data$BUFF_DIST <- NULL
+# plantP.filt.buff@data$Shape_Area <- NULL
+# plantP.filt.buff@data$Shape_Le_1 <- NULL
+# plantP.filt.buff@data$Shape_Leng <- NULL
+# plantP.filt.buff@data$ORIG_FID <- NULL
+# plantP.filt.buff@data$gridcode <- NULL
+# plantP.filt.buff@data <- merge(x=plantP.filt.buff@data, y=merg.d, by="OBJECTID")
+# 
+# ### filter file by extracting canopy area within the buffer, then eliminating polygons associated with buffers that have too much canopy already
+# keep <- integer()
+# ditch <- integer()
+# bos.can <- raster("processed/boston/bos.can.tif")
+# for(f in 1:dim(plantP.filt.buff@data)[1]){
+#   a=Sys.time()
+#   test <- extract(bos.can, plantP.filt.buff[f,])
+#   if(sum(test[[1]], na.rm=T)<0.5*plantP.filt.buff@data[f,"buff_Area"]){ ## if less than half the buffer area already in canopy
+#     keep <- c(keep, f)
+#   } else{
+#     ditch <- c(ditch, f)
+#   }
+#   print(paste("evaluated polygon", f, Sys.time()-a))
+# }
+# 
+# plantP.canfilt <- plantP.filt.buff[keep,]
+# plantP.canReject <- plantP.filt.buff[ditch,]
 
 ### this hangs forever it seems
 # test <- extract(bos.can, plantP.filt.buff[,])
@@ -454,10 +505,10 @@ plantP.canReject <- plantP.filt.buff[ditch,]
 # plantP.filt.buff@data$can_area <- sapply(test, sum.na)
 # plantP.canfilt <- plantP.filt.buff[can_area<(0.5*buff_Area),]
 # plantP.canReject <- plantP.filt.buff[can_area>=(0.5*buff_Area),]
-
-writeOGR(plantP.canfilt, "processed/boston/plant10m_simp_4mbuff_canOK.shp", "plant10m_simp_4mbuff_canOK", driver="ESRI Shapefile")
-writeOGR(plantP.canReject, "processed/boston/plant10m_simp_4mbuff_canBAD.shp", "plant10m_simp_4mbuff_canBAD", driver="ESRI Shapefile")
-#####
+# 
+# writeOGR(plantP.canfilt, "processed/boston/plant10m_simp_4mbuff_canOK.shp", "plant10m_simp_4mbuff_canOK", driver="ESRI Shapefile")
+# writeOGR(plantP.canReject, "processed/boston/plant10m_simp_4mbuff_canBAD.shp", "plant10m_simp_4mbuff_canBAD", driver="ESRI Shapefile")
+######
 
 ###
 ### Processing 1m canopy map for edge class
@@ -866,7 +917,6 @@ output = system2('C:/Python27/ArcGIS10.4/python.exe', args=pyth.path, stdout=TRU
 LULC.r <- raster("processed/LULC30m.tif")
 #####
 
-
 ###
 ### aggregate AOI-wide data to 250m MODIS grid
 #####
@@ -1010,7 +1060,6 @@ write.csv(AOI.1km.dat, "processed/AOI.1km.dat.csv")
 AOI.1km.stack <- stack("processed/AOI.1km.stack.tif")
 plot(AOI.1km.stack)
 #####
-
 
 # ###Process NAIP 1m CIR data to NDVI
 #####
