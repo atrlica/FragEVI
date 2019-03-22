@@ -48,9 +48,12 @@ street.allo <- read.csv("docs/street.biometrics.csv") ## AG wood vol (m3) as b0*
 # street.canopy$d <- as.numeric(as.character(street.canopy$d))
 # street.canopy$e <- as.numeric(as.character(street.canopy$e))
 # street.canopy <- as.data.frame(street.canopy)
-# nogenus <- 1## resolved: Acer platanoides is the most common spp -- for the handful of spp not in this list, we will use the A. platanoides canopy equation
+nogenus <- 1 ## resolved: Acer platanoides is the most common spp -- for the handful of spp not in this list, we will use the A. platanoides canopy equation
 # write.csv(street.canopy, "docs/street.canopy.csv")
 street.canopy <- read.csv("docs/street.canopy.csv")
+
+## load up street tree survey data for use in pieces of this thing
+street <- as.data.table(read.csv("processed/boston/street.trees.dbh.csv"))
 
 ###  get a list of model coefficients to run for each repetition (dbh.delta~dbh.start)
 # library(lme4)
@@ -148,12 +151,11 @@ nonfor <- biom.dat[bos.aoi30m>800 & !(bos.lulc30m.lumped %in% c(1,4,5,6)) & bos.
 scenario <- c("BAU", "oldies", "expand")
 # scenario <- "expand"
 ## record specific parameter sets
-resim.vers <- 6 ## what are we labeling this round of resims?
-## 1 was prelim, 2 included full 100x pix resim per year, 3 is model mean single resim per year
+resim.vers <- 7 ## what are we labeling this round of resims?
 vers <- 6 ## what simulator results version are we dealing with?
 
 ### default factors
-npp.quant.range <- c(0.02, 0.02) ## what dbh samples to draw from
+npp.quant.range <- c(0.025, 0.975) ## what dbh samples to draw from
 mort.mod <- 1 ## default modification to mortality rate (scenario specific)
 default.sizecutoff <- 10000 ## size of tree dbh over which to screw with mortality
 largemort.mod <- 1 ## multiplier for mortalities in large trees
@@ -173,13 +175,13 @@ expand.timeline <- 10 ### how many years to implement the expand scenario
 # expand.rate.go <- (box[,sum(num.trees)]/expand.timeline)/length(nonfor) ## this is the per non-forest pixel annual rate of planting needed to fill out the city (assuming that only a small number of the replant boxes fall in forest pixels)
 # expand.rate.go <- 0
 # expand.rate.go <- (sum(holes$num.trees)/expand.timeline)/length(nonfor) ## new buffer calc, this is the per-year rate of new stem appearance in NONFOREST pixels needed to get us to full expand coverage after number of years = expand.timeline
-expand.rate.go <- 170147/length(nonfor) ## hard code the fucker
+expand.rate.go <- (170147/expand.timeline)/length(nonfor) ## hard code the fucker
 
 
 # record run parameters to text file
 # params.list <- list(c(scenario, resim.vers, vers,
 #                     highmort.mortfactor, lowmort.mortfactor, 
-#                     npp.quant.range, lowreplant.factor, oldies.sizecutoff, 
+#                     , lowreplant.factor, oldies.sizecutoff, 
 #                     oldies.mortfactor))
 sink(paste0("processed/boston/biom_street/resim_params_list_V", resim.vers, ".txt"))
 cat(c("Resimulation version: ", resim.vers), "\n")
@@ -275,8 +277,8 @@ for(s in 1:length(scenario)){
   already <- strsplit(already, split = "[.]")
   already <- sapply(already, "[[" ,5)
   
-  # hitlist <- as.character(obj.list[!(obj.list %in%  already)])
-  hitlist <- as.character(obj.list)
+#   hitlist <- as.character(obj.list)
+  hitlist <- as.character(obj.list[!(obj.list %in%  already)])
   hitlist[hitlist=="100000"] <- "1e+05"
   if(length(hitlist)==0){print(paste(scenario[s], "already processed"))}
   
@@ -314,23 +316,27 @@ for(s in 1:length(scenario)){
         for(a in 1:1){   ### resimulate every pixel 'a' number of times
 
           # can select dbh populations based on proximity to median simulated biomass...
-          biom.lims <- quantile(cage.biom.sim[[procset[pix]]], probs=c(0.40, 0.6)) ## figure out which of the simulations to draw and modify
+          biom.lims <- quantile(cage.biom.sim[[procset[pix]]], probs=npp.quant.range) ## figure out which of the simulations to draw and modify
           j <- sample(which(cage.biom.sim[[procset[pix]]]>=biom.lims[1] & cage.biom.sim[[procset[pix]]]<=biom.lims[2]),1) ## get a random dbh sample from the the middle 10% of simulator results close to the target biomass
+          ## just in case...
+          if(length(j)==0){j <- sample(1:length(cage.biom.sim[[procset[pix]]]), 1)} ## just sample any fucking thing
+          
+            ## this sampling method won't work for later pixel sims because we did not calculate npp in the simulator
+#           # ...or can select dbh populations based on how close they are to median npp (not 100% overlapping)
+#           npp.lims <- quantile(cage.ann.npp[[pix]], probs=npp.quant.range) ## restrict which of the simulations to draw and modify
+#           j <- which(cage.ann.npp[[pix]]>=npp.lims[1] & cage.ann.npp[[pix]]<=npp.lims[2])
+#           if(length(j)>=4){ ## if there's not enough dbh samples that meet your criteria...
+#             j <- sample(j,1) ## get a random dbh sample selected range of simulator results close to the target biomass
+#           }else{j <- sample(1:length(cage.biom.sim[[pix]]), 1)} ## or just sample the whole simulation collection if all simulations are nearly identical
 
-          ## ...or can select dbh populations based on how close they are to median npp (not 100% overlapping)
-          # npp.lims <- quantile(cage.ann.npp[[pix]], probs=npp.quant.range) ## restrict which of the simulations to draw and modify
-          # j <- which(cage.ann.npp[[pix]]>=npp.lims[1] & cage.ann.npp[[pix]]<=npp.lims[2])
-          # if(length(j)>=4){ ## if there's not enough dbh samples that meet your criteria...
-          #   j <- sample(j,1) ## get a random dbh sample selected range of simulator results close to the target biomass
-          # }else{j <- sample(1:length(cage.biom.sim[[pix]]), 1)} ## or just sample the whole simulation collection if all simulations are nearly identical
-
+# j=5
           #### load up a dbh sample and resimulate each tree for 36 consecutive years
           tree.samp <- cage.dbh[[procset[pix]]][[j]] ## what initial trees are present in this simulator result
 
           ## tree expansion scenario
           ### this is imperfect -- but assume a small amount of new street buffer planting space is available in this spot and sim new trees
           expand.track <- rbinom(n = 10, prob=expand.rate, size=1) ## give this tree a tree plant flag for the next ten years that on average across the map gets the right number of plantings in each pixel
-
+# expand.track=c(rep(1, 2),rep(0, 8))
           npp.track <- numeric() ## annual tally of npp in this resim as you go up in years
           biom.track <- numeric() ## annual tally of biomass in this resim
           num.track <- integer() ## annual tally of number of trees in this resim
@@ -345,7 +351,7 @@ for(s in 1:length(scenario)){
 
           ### figure out biomass and NPP at start of simulation without any effects of growth/mort
           tmp.dbh0 <- tree.samp 
-          tmp.genus <- cage.genus[[procset[pix]]][[j]]
+          tmp.genus <- as.character(cage.genus[[procset[pix]]][[j]])
           tmp.biom0 <- street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b0"]*(tmp.dbh0^street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b1"])*street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "dens"]
           tmp.dbh1 <- tmp.dbh0+(b0.rand[a]+(b1.rand[a]*tmp.dbh0)+(b2.rand[a]*(tmp.dbh0^2))) ## grow the dbh to time 1, no growth in dead trees
           tmp.biom1 <- street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b0"]*(tmp.dbh1^street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b1"])*street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "dens"]
@@ -367,21 +373,25 @@ for(s in 1:length(scenario)){
                                                  log(log(tmp.dbh0+1)+
                                                        street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "c"]/2)))/2)^2)*pi, na.rm=T)
           
-          ## record start conditions
+          ## record start conditions (year 0)
           npp.track <- c(npp.track, sum(tmp.biom1-tmp.biom0))
           num.track <- c(num.track, length(tmp.dbh0))
-          biom.track <- c(biom.track, tmp.biom0)
+          biom.track <- c(biom.track, sum(tmp.biom0))
           can.track <- c(can.track, tmp.can0)
+
           
-          ## Now simulate 36 successive years of growth/mortality/replanting/plant expansion 2007-2043
-          for(e in 1:33){
-            if(scenario[s]=="expand" & e<=expand.timeline){
-              tree.samp <- c(tree.samp, 5*expand.track[e]) ## add a 5cm tree if the expand.track wins one this year (within the first 10 years)
+          ## Now simulate 34 successive years of growth/mortality/replanting/plant expansion 2007-2043
+          for(e in 1:34){
+            print(paste("begin year", e))
+            if(scenario[s]=="expand" & e<=expand.timeline & expand.track[e]==1){
+              tree.samp <- c(tree.samp, 5) ## add a 5cm tree if the expand.track wins one this year (within the first 10 years)
               newplants <- newplants+1
               delay <- c(delay, sample(seq(delay.factor[1],
                                            delay.factor[2]),
                                        size = 1,
                                        replace=T)) ## give this new tree its own delay clock
+              tmp.genus <- c(tmp.genus, as.character(sample(street[record.good==1, genus], 1)))
+              print(paste("added expand tree of genus", tail(tmp.genus, n=1)))
             }
 
           ### figure mortality and determine a kill list
@@ -389,68 +399,73 @@ for(s in 1:length(scenario)){
           deathwatch[tree.samp>=dbh.big] <- deathwatch[tree.samp>=dbh.big]*largemort.mod ## adjust mortality in larger trees
           kill.list <- rbinom(length(tree.samp), 1, deathwatch/100) ## randomly kill based on mortality rate
           # kill.list <- rep(1,length(tree.samp)) ## test: kill everything
-
           kill.list[tree.samp==0] <- 0 ## do not rekill the previously dead
           tree.samp[kill.list==1] <- 0 ## the dead are nullified
+          if(sum(kill.list>0)){
+            print(paste(sum(kill.list), "tree(s) of genus", tmp.genus[kill.list==1], "have died"))
+          }
 
-          ## determine a delay clock for this stems killed this cycle and update old delay clocks
+          ## determine a delay clock for the stems killed this cycle
           delay[kill.list==1] <- sample(seq(delay.factor[1],
                                             delay.factor[2]),
                                         size = length(delay[kill.list==1]),
-                                        replace=T) # start a clock for any tree killed
-          delay[kill.list==0 & tree.samp==0 & delay>0] <- delay[kill.list==0 & tree.samp==0 & delay>0]-1 ## count down the delay clocks that had been set before
+                                        replace=T) # start a clock for any tree killed this year
 
-          ## grow up the survivors using estimated growth regression
-          # tree.samp <- tree.samp[tree.samp>0]*(1+dbhg.pred(tree.samp[tree.samp>0])) ## static realization of growth model
-          tree.samp[tree.samp>0] <- tree.samp[tree.samp>0]+(b0.rand[a]+(b1.rand[a]*tree.samp[tree.samp>0])+(b2.rand[a]*tree.samp[tree.samp>0]^2))
+          ## grow up the survivors using estimated growth regression, figure biomass and forward project npp
+          tmp.dbh0.live <- tree.samp[tree.samp>0] ## exclude dead trees from dbh/biomass change
+          tmp.genus.live <- tmp.genus[tree.samp>0] ## genera of dbh collection
+          
+          tmp.dbh0.live <- tmp.dbh0.live+(b0.rand[a]+(b1.rand[a]*tmp.dbh0.live)+(b2.rand[a]*tmp.dbh0.live^2))
+          tmp.biom0.live <- street.allo[match(tmp.genus.live, street.allo$genus, nomatch=8), "b0"]*(tmp.dbh0.live^street.allo[match(tmp.genus.live, street.allo$genus, nomatch=8), "b1"])*street.allo[match(tmp.genus.live, street.allo$genus, nomatch=8), "dens"]
+          tree.samp[tree.samp>0] <- tmp.dbh0.live ## update the master list for trees that are alive and growing
+          
+          ## forward project next year's npp with this year's biomass 
+          tmp.dbh1 <- tmp.dbh0.live+(b0.rand[a]+(b1.rand[a]*tmp.dbh0.live)+(b2.rand[a]*(tmp.dbh0.live^2))) ## grow the dbh to time 1, no growth in dead trees
+          tmp.biom1 <- street.allo[match(tmp.genus.live, street.allo$genus, nomatch=8), "b0"]*(tmp.dbh1^street.allo[match(tmp.genus.live, street.allo$genus, nomatch=8), "b1"])*street.allo[match(tmp.genus.live, street.allo$genus, nomatch=8), "dens"]
+          if(length(tmp.biom0.live)==0){tmp.biom0.live <- 0; tmp.biom1 <- 0} ## if everything is dead
 
-          ### upgrade: urban specific allometries to determine biomass change
-          tmp.dbh0 <- tree.samp[tree.samp>0] ## exclude dead trees from dbh/biomass change
-          tmp.genus <- tmp.genus[tree.samp>0] ## genera of dbh collection
-
-          ### fast match the genus to the specific allometric if possible, or divert to general equation at row 8
-          tmp.biom0 <- street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b0"]*(tmp.dbh0^street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b1"])*street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "dens"]
-          tmp.dbh1 <- tmp.dbh0+(b0.rand[a]+(b1.rand[a]*tmp.dbh0)+(b2.rand[a]*(tmp.dbh0^2))) ## grow the dbh to time 1, no growth in dead trees
-          tmp.biom1 <- street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b0"]*(tmp.dbh1^street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "b1"])*street.allo[match(tmp.genus, street.allo$genus, nomatch=8), "dens"]
-          if(length(tmp.biom0)==0){tmp.biom0 <- 0; tmp.biom1 <- 0} ## if everything is dead
-
-          ### same thing for canopy coverage history
+          ### Determine canopy cover in THIS YEAR based on live stem dbh and matching street tree allometrics by genus
           ### get vector of equation types to use first
-          eq.form <- street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "EqName"]
+          eq.form <- street.canopy[match(tmp.genus.live, street.canopy$genus, nomatch=nogenus), "EqName"]
           ## add up total canopy area applying correct equation form to each
-          tmp.can1 <- sum(((((eq.form=="quad")*(street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "a"]+
-                                     (street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "b"]*tmp.dbh1)+
-                                     (street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "c"]*tmp.dbh1^2)))/2)^2)*pi, na.rm=T)+
-            sum(((((eq.form=="cub")*(street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "a"]+
-                                       (street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "b"]*tmp.dbh1)+
-                                       (street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "c"]*tmp.dbh1^2)+
-                                      (street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "d"]*tmp.dbh1^3)))/2)^2)*pi, na.rm=T)+
-            sum(((((eq.form=="lin")*(street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "a"]+
-                                        (street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "b"]*tmp.dbh1)))/2)^2)*pi, na.rm=T)+
-            sum((((eq.form=="loglogw1")*exp(street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "a"]+
-                                       (street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "b"]*
-                                          log(log(tmp.dbh1+1)+
-                                                street.canopy[match(tmp.genus, street.canopy$genus, nomatch=nogenus), "c"]/2)))/2)^2)*pi, na.rm=T)
+          tmp.can0 <- sum(((((eq.form=="quad")*(street.canopy[match(tmp.genus.live, street.canopy$genus, nomatch=nogenus), "a"]+
+                                     (street.canopy[match(tmp.genus.live, street.canopy$genus, nomatch=nogenus), "b"]*tmp.dbh0.live)+
+                                     (street.canopy[match(tmp.genus.live, street.canopy$genus, nomatch=nogenus), "c"]*tmp.dbh0.live^2)))/2)^2)*pi, na.rm=T)+
+            sum(((((eq.form=="cub")*(street.canopy[match(tmp.genus.live, street.canopy$genus, nomatch=nogenus), "a"]+
+                                       (street.canopy[match(tmp.genus.live, street.canopy$genus, nomatch=nogenus), "b"]*tmp.dbh0.live)+
+                                       (street.canopy[match(tmp.genus.live, street.canopy$genus, nomatch=nogenus), "c"]*tmp.dbh0.live^2)+
+                                      (street.canopy[match(tmp.genus.live, street.canopy$genus, nomatch=nogenus), "d"]*tmp.dbh0.live^3)))/2)^2)*pi, na.rm=T)+
+            sum(((((eq.form=="lin")*(street.canopy[match(tmp.genus.live, street.canopy$genus, nomatch=nogenus), "a"]+
+                                        (street.canopy[match(tmp.genus.live, street.canopy$genus, nomatch=nogenus), "b"]*tmp.dbh0.live)))/2)^2)*pi, na.rm=T)+
+            sum((((eq.form=="loglogw1")*exp(street.canopy[match(tmp.genus.live, street.canopy$genus, nomatch=nogenus), "a"]+
+                                       (street.canopy[match(tmp.genus.live, street.canopy$genus, nomatch=nogenus), "b"]*
+                                          log(log(tmp.dbh0.live+1)+
+                                                street.canopy[match(tmp.genus.live, street.canopy$genus, nomatch=nogenus), "c"]/2)))/2)^2)*pi, na.rm=T)
 
-
-          ### update productivity and biomass for track on this year
-          npp.track <- c(npp.track, sum(tmp.biom1-tmp.biom0))
-          biom.track <- c(biom.track, sum(tmp.biom1))
-          can.track <- c(can.track, tmp.can1)
-
-          ### now determine which of the (previously) dead are replanted this year
-          if(sum(tree.samp==0)>0){ ## if there are dead trees here
-            replanted <- rbinom(length(tree.samp[tree.samp==0 & delay==0]), 1, replant.factor) ## decide which of the dead trees without a delay timer get a chance to be replaced
-            tree.samp[tree.samp==0 & delay==0] <- replanted*5 ## replace selected dead trees that win the replacement lottery
+          ### update track of productivity/biomass/canopy for year e
+          npp.track <- c(npp.track, sum(tmp.biom1)-sum(tmp.biom0.live))
+          biom.track <- c(biom.track, sum(tmp.biom0.live))
+          can.track <- c(can.track, tmp.can0)
+          
+          ### now determine which of the previously dead are replanted this year
+          if(sum(tree.samp==0 & delay==0)>0){ ## if there are dead trees here that qualify for replanting
+            replanted <- rbinom(length(tree.samp), 1, replant.factor) ## figure which get the green light for replanting
+            replanted[delay!=0] <- 0 ## only replant where delay clock is up
+            replanted[tree.samp!=0] <- 0 ## only replant trees that are dead
+            tmp.genus[replanted==1] <- as.character(sample(street[record.good==1, genus], sum(replanted==1))) ## swap in a new genus chosen at random
+            tree.samp <- tree.samp+(replanted*5) ## replace selected dead trees that win the replacement lottery
+            print(paste("replanted", sum(replanted), "dead trees of genus", tmp.genus[replanted==1]))
+            delay[replanted==1] <- sample(seq(delay.factor[1],delay.factor[2]),size = sum(replanted),replace=T) ## set a new delay clock for the replanted trees
           }
-          ### the logic of this scheme is that delay indicates the number of years *after the death year* that there is 0 productivity
-          ### trees lose all NPP in death year (growth calc happens before replant calc)
-          ### delay range of 0-2 years implies a wait-out of 1-3 years before productivity happens again
-
+          
+          ## update death tracking and wind down/reset the replant delay for the non-killed trees
           deaths <- deaths+sum(kill.list) ## count the dead
           num.track <- c(num.track, length(tree.samp[tree.samp>0])) ## count the living
+          delay[kill.list==0 & delay==0] <- sample(seq(delay.factor[1],delay.factor[2]),size = sum(kill.list==0 & delay==0),replace=T) ## reset clocks that have wound down
+          delay[kill.list==0 & delay>0] <- delay[kill.list==0 & delay>0]-1 ## count down the replant delay clock for things not killed this year
+          print(paste("there are", length(tree.samp[tree.samp>0]), "live trees by the end of year", e))
 
-        } ## end of loop for 36 year projector
+        } ## end of loop for annual projector
           
           # dbh.sav[[pix]][[a]] <- tree.samp ## updated tree sample after all 36 years of morts + growth
           npp.box[[pix]][[a]] <- npp.track ## use matrix(unlist(npp.box[[pix]]), nrow=100, byrow=T)
