@@ -68,6 +68,9 @@ b2.hard <- c(1.329e-04, 3.369e-05)
 b0.rand <- rnorm(100, b0.hard[1], b0.hard[2])
 b1.rand <- rnorm(100, b1.hard[1], b1.hard[2])
 b2.rand <- rnorm(100, b2.hard[1], b2.hard[2])
+write.csv(b0.rand, "processed/boston/biom_street/b0.rand.csv") ## export a stable collection of coefficients
+write.csv(b1.rand, "processed/boston/biom_street/b1.rand.csv")
+write.csv(b2.rand, "processed/boston/biom_street/b2.rand.csv")
 # b0.rand <- b0.hard[1]
 # b1.rand <- b1.hard[1]
 # b2.rand <- b2.hard[1]
@@ -205,11 +208,52 @@ cat(c("expand timeline yrs =", expand.timeline), "\n")
 sink()
 
 ## loops for simulating growth+mortality in pixel dbh samples
-## pull in all the simulator samples of tree dbh in every pixel
+## pull in all the pixel simulator samples of tree dbh in every pixel
 obj.list <- list.files("processed/boston/biom_street/")
 obj.list <- obj.list[grep(obj.list, pattern=paste("dbh.street.v", vers, sep=""))]
 obj.list <- sub('.*weighted\\.', '', obj.list)
 obj.list <- (sub('\\..*', '', obj.list))
+
+## check existing resim files, find next chunk to write
+check <- list.files("processed/boston/biom_street")
+check <- check[grep(check, pattern=paste("index.track.scenario"))] ### version label here
+check <- check[grep(check, pattern=paste0("V", resim.vers))]
+library(stringr)
+already <- str_match(check, paste0("BAU.(.*?).V", resim.vers))
+already <- already[,2]
+already <- already[!is.na(already)]
+
+notyet <- obj.list[!(obj.list%in%already)]
+
+## if any chunks are not fully processed, next check to see if they're being worked on currently
+## the one weakness of this (besides requiring manual launch of each chunk)
+## is that if a script times out or otherwise aborts before successfully completing after the step below
+## it can't release the unfinished job from being "in process" and will keep the other scripts from running that chunk
+if(length(notyet)!=0){ 
+  ## make an empty record file if no file exists
+  if(!file.exists(paste("processed/boston/biom_street/resim.atwork", resim.vers, "csv", sep="."))){ ## if it isn't there start a file of who is working now
+    l <- data.frame(at.work=integer())
+    write.csv(l, file=paste("processed/boston/biom_street/resim.atwork", resim.vers, "csv", sep="."))
+  }
+  ## read the at work file and see which jobs are running
+  atwork <- read.csv(paste("processed/boston/biom_street/resim.atwork", resim.vers, "csv", sep="."))
+  atwork <- atwork$at.work
+  ## set target for what isn't completed and isn't being worked on
+  y <- as.numeric(min(notyet[!(notyet%in%atwork)])) 
+  
+  if(length(y)==0 | !is.finite(y)){stop("all resim pixels currently finished or in process")}
+  print(paste("going to work on chunk", y)) 
+  
+  ## update the at.work file to warn other job instances
+  atwork <- c(atwork, y)
+  l <- data.frame(at.work=atwork)
+  write.csv(l, file=paste("processed/boston/biom_street/atwork", resim.vers, "csv", sep="."))
+  
+}else{stop("all pixels already processed")}
+
+## upgrade -- parallelize
+## just assign static value for chunk to hitlist and feed in
+hitlist <- y
 
 ## loop the simulated pixel chunks
 ## each pixel*scenario takes ~3.5s to run -- a single chunk will take ~2hrs per scenario, ~33hr per map for a single scenario
@@ -274,19 +318,19 @@ for(s in 1:length(scenario)){
   }
   print(paste("starting resim run scenario", scenario[s], "with", realize, "realizations per pixel"))
   
-  ### avoid processing shit that's already done
-  already <- list.files("processed/boston/biom_street")
-  already <- already[grep(already, pattern=".resim.")]
-  already <- already[grep(already, pattern=paste0(".V", resim.vers))]
-  already <- already[grep(already, pattern="npp.track.")]
-  already <- already[grep(already, pattern=paste(".", scenario[s], ".", sep=""))]
-  already <- strsplit(already, split = "[.]")
-  already <- sapply(already, "[[" ,5)
+  # ### avoid processing shit that's already done
+  # already <- list.files("processed/boston/biom_street")
+  # already <- already[grep(already, pattern=".resim.")]
+  # already <- already[grep(already, pattern=paste0(".V", resim.vers))]
+  # already <- already[grep(already, pattern="npp.track.")]
+  # already <- already[grep(already, pattern=paste(".", scenario[s], ".", sep=""))]
+  # already <- strsplit(already, split = "[.]")
+  # already <- sapply(already, "[[" ,5)
   
-#   hitlist <- as.character(obj.list)
-  hitlist <- as.character(obj.list[!(obj.list %in%  already)])
-  hitlist[hitlist=="100000"] <- "1e+05"
-  if(length(hitlist)==0){print(paste(scenario[s], "already processed"))}
+# #   hitlist <- as.character(obj.list)
+#   hitlist <- as.character(obj.list[!(obj.list %in%  already)])
+#   hitlist[hitlist=="100000"] <- "1e+05"
+#   if(length(hitlist)==0){print(paste(scenario[s], "already processed"))}
   
   if(length(hitlist)>0){
     for(o in hitlist){
@@ -509,6 +553,24 @@ for(s in 1:length(scenario)){
     print(paste("finished resim run scenario", scenario[s]))
   } ## if check on whether file has been processed
 } ## scenario loop
+
+## update the atwork file to release this job
+check <- list.files("processed/boston/biom_street")
+check <- check[grep(check, pattern=paste("index.track.scenario"))] ### version label here
+check <- check[grep(check, pattern=paste0("V", resim.vers))]
+library(stringr)
+already <- str_match(check, paste0("BAU.(.*?).V", resim.vers))
+already <- already[,2]
+already <- already[!is.na(already)]
+notyet <- obj.list[!(obj.list%in%already)]
+
+## update atwork to remove any in-progress files that now have finished files on disk
+atwork <- read.csv(paste("processed/boston/biom_street/resim.atwork", resim.vers, "csv", sep="."))
+atwork <- atwork$at.work
+atwork <- atwork[atwork%in%notyet] ## clear job records that have completed files on disk
+l <- data.frame(at.work=atwork)
+write.csv(l, file=paste("processed/boston/biom_street/resim.atwork", resim.vers, "csv", sep="."))
+
 
 
 ###
