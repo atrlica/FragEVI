@@ -1,6 +1,6 @@
 #!/bin/sh -l
 
-#$ -l h_rt=60:00:00
+#$ -l h_rt=2:00:00
 #$ -N can.proj
 #$ -V
 #$ -j y
