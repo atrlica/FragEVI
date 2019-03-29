@@ -1443,7 +1443,34 @@ can.rel$Year <- seq(2007, by=1, length.out=dim(can.rel)[1])
 can.rel <- can.rel[2:34,]
 names(can.rel) <- c("BAU.can", "old.can", "exp.can", "Year")
 
+### get the summary data in usable form for the figure
+resim.vers=8
+preamb="processed/boston/biom_street/results/"
+scenario=c("BAU", "oldies", "expand")
+for(s in 1:length(scenario)){
+  load(file = paste0(preamb, scenario[s], ".v", resim.vers, ".AnnMapSums.MedLoHi.sav"))
+  assign(paste0(scenario[s], ".sum"), value = map.sum)
+}
+proj.omni <- data.frame(cbind(seq(from = 2006, length.out = 35, by = 1),
+                BAU.sum[[1]][,2:5], BAU.sum[[2]][,2:5], BAU.sum[[3]][,2:5],
+                oldies.sum[[1]][,2:5], oldies.sum[[2]][,2:5], oldies.sum[[3]],
+                expand.sum[[1]][,2:5], expand.sum[[2]][,2:5], expand.sum[[3]][,2:5]))
+proj.omni$V22 <- NULL
+
+names(proj.omni) <- c("Year", 
+                      paste(rep("BAU", 4), c("npp", "biom", "can", "num"), rep("med", 4), sep="."),
+                      paste(rep("BAU", 4), c("npp", "biom", "can", "num"), rep("lo", 4), sep="."),
+                      paste(rep("BAU", 4), c("npp", "biom", "can", "num"), rep("hi", 4), sep="."),
+                      paste(rep("old", 4), c("npp", "biom", "can", "num"), rep("med", 4), sep="."),
+                      paste(rep("old", 4), c("npp", "biom", "can", "num"), rep("lo", 4), sep="."),
+                      paste(rep("old", 4), c("npp", "biom", "can", "num"), rep("hi", 4), sep="."),
+                      paste(rep("exp", 4), c("npp", "biom", "can", "num"), rep("med", 4), sep="."),
+                      paste(rep("exp", 4), c("npp", "biom", "can", "num"), rep("lo", 4), sep="."),
+                      paste(rep("exp", 4), c("npp", "biom", "can", "num"), rep("hi", 4), sep="."))
+
+
 library(ggplot2)
+library(viridis)
 ## set up common visual parameters
 xlim.all <- c(4, 100)
 ylim.all <- c(-1, 2.5)
@@ -1467,22 +1494,36 @@ legend.title.size=11
 legend.text.size=10
 alpha.master <- 0.2
 line.w <- 1.6
-proj.col <- plasma(3)
+line.w.sm <- 0.9
+plot(1:10, pch=15, cex=1.9, col=plasma(10)) ## plasma 10: 1,5,9
+proj.col <- plasma(10)
+proj.col <- proj.col[c(1,5,9)]
 
-proj.npp=ggplot(npp.rel, aes(Year))+
-  geom_line(aes(y=BAU.npp, colour="BAU"), size=line.w)+
-  geom_line(aes(y=old.npp, colour="Preserve >40cm"), size=line.w)+
-  geom_line(aes(y=exp.npp, colour="Expand planting"), size=line.w)+
-  labs(x = "Year", y="Growth vs. 2008 (MgC/yr x 1000)", title="Annual Growth")+
+
+proj.npp=ggplot(proj.omni, aes(Year))+
+  geom_line(aes(y=BAU.npp.med/2000/1000, colour="BAU"), size=line.w)+
+  # geom_line(aes(y=BAU.npp.lo/2000/1000, colour="BAU"), size=line.w.sm)+
+  # geom_line(aes(y=BAU.npp.hi/2000/1000, colour="BAU"), size=line.w.sm)+
+  geom_line(aes(y=old.npp.med/2000/1000, colour="Preserve >40cm"), size=line.w)+
+  # geom_line(aes(y=old.npp.lo/2000/1000, colour="Preserve >40cm"), size=line.w.sm)+
+  # geom_line(aes(y=old.npp.hi/2000/1000, colour="Preserve >40cm"), size=line.w.sm)+
+  geom_line(aes(y=exp.npp.med/2000/1000, colour="Expand planting"), size=line.w)+
+  # geom_line(aes(y=exp.npp.lo/2000/1000, colour="Expand planting"), size=line.w.sm)+
+  # geom_line(aes(y=exp.npp.hi/2000/1000, colour="Expand planting"), size=line.w.sm)+
+  lims(x=c(2010, 2040), y=c(5,6.2))+
+  # lims(x=c(2010, 2040), y=c(3,15))+
+  # geom_ribbon(aes(ymin=BAU.npp, ymax=old.npp), fill=proj.col[1], alpha=0.4)+
+  # geom_ribbon(aes(ymin=exp.npp, ymax=old.npp), fill=proj.col[3], alpha=0.4)+
+  labs(x = "Year", y="Biomass C gain (MgC/yr x 1000)", title="Annual C uptake")+
   theme.master+
   scale_colour_manual(guide="none", values=proj.col)
-  
 
-proj.biom=ggplot(biom.rel, aes(Year))+
-  geom_line(aes(y=BAU.biom, colour="BAU"), size=line.w)+
-  geom_line(aes(y=old.biom, colour="Preserve >40cm"), size=line.w)+
-  geom_line(aes(y=exp.biom, colour="Expand planting"), size=line.w)+
-  labs(x = "Year", y="Biomass vs. 2008 (MgC x 1000)", title="Tree Biomass")+
+
+proj.biom=ggplot(proj.omni, aes(Year))+
+  geom_line(aes(y=BAU.biom.med/2000/1000, colour="BAU"), size=line.w)+
+  geom_line(aes(y=old.biom.med/2000/1000, colour="Preserve >40cm"), size=line.w)+
+  geom_line(aes(y=exp.biom.med/2000/1000, colour="Expand planting"), size=line.w)+
+  labs(x = "Year", y="Standing Biomass (MgC x 1000)", title="Tree Biomass")+
   scale_colour_manual(name="Scenario", labels=c("BAU", "Street tree planting", "Preserve >40cm"), values=proj.col)+
   theme(legend.position = c(0.2, 0.7),
         legend.title = element_text(size=legend.title.size, face="bold"),
@@ -1491,14 +1532,17 @@ proj.biom=ggplot(biom.rel, aes(Year))+
         legend.key.size = unit(0.8, "lines"),
         legend.text = element_text(size=legend.title.size-1, face="plain"),
         legend.justification = "center")+
+  lims(x=c(2010, 2040))+
   theme.master
 
-proj.can=ggplot(can.rel, aes(Year))+
-  geom_line(aes(y=BAU.can, colour="BAU"), size=line.w)+
-  geom_line(aes(y=old.can, colour="Preserve >40cm"), size=line.w)+
-  geom_line(aes(y=exp.can, colour="Expand planting"), size=line.w)+
+proj.can=ggplot(proj.omni, aes(Year))+
+  geom_line(aes(y=BAU.can.med, colour="BAU"), size=line.w)+
+  geom_line(aes(y=old.can.med, colour="Preserve >40cm"), size=line.w)+
+  geom_line(aes(y=exp.can.med, colour="Expand planting"), size=line.w)+
   scale_colour_manual(guide="none", values=proj.col)+
-  labs(x = "Year", y="Canopy change vs. 2008 (%)", title="Canopy Area")+
+  geom_hline(yintercept=1, linetype=2, size=0.7, colour="gray50")+
+  labs(x = "Year", y="Canopy change vs. 2006 ", title="Canopy Area")+
+  lims(x=c(2010, 2040))+
   theme.master
 
 ## collate and export
