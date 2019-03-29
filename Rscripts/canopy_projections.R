@@ -225,10 +225,21 @@ check <- list.files("processed/boston/biom_street")
 check <- check[grep(check, pattern=paste("index.track.scenario"))] ### version label here
 check <- check[grep(check, pattern=paste0("V", resim.vers))]
 library(stringr)
+anti.alr <- vector()
+for(a in 1:length(scenario)){ ## check again to see if you've got full coverge for every scenario
+  alr <- str_match(check, paste0(scenario[a],".(.*?).V", resim.vers))
+  alr <- alr[,2]
+  alr <- alr[!is.na(alr)]
+  anti.alr <- c(anti.alr, obj.list[!(obj.list%in%alr)]) ## basically find any chunk in any scenario that doesn't have an index.track written to disk yet and keep a record
+#   print(anti.alr)
+}
+anti.alr <- anti.alr[!duplicated(anti.alr)]
 already <- str_match(check, paste0("BAU.(.*?).V", resim.vers))
 if(length(already)!=0){
   already <- already[,2]
-  already <- already[!is.na(already)]} else{already <- integer()}
+  already <- already[!is.na(already)]
+  already <- already[!(already%in%anti.alr)]
+} else{already <- integer()}
 
 notyet <- obj.list[!(obj.list%in%already)]
 
@@ -357,6 +368,7 @@ for(s in 1:length(scenario)){
       # procset <- sample(1:length(cage.dbh), size=50) ## test a random subset
       procset <- 1:length(cage.dbh) ## FULL PROCESS
       procset <- procset[(index.track%in%nonfor)] ### only resim the non-forest
+      print(paste("working on chunk", o, "in scenario", scenario[s]))
       
       for(pix in 1:length(procset)){ ## the number of pixels in this sim chunk
         # print(paste("working on pixel", index.track[procset[pix]]))
@@ -370,7 +382,7 @@ for(s in 1:length(scenario)){
 
           for(a in 1:realize){   ### resimulate every pixel realize number of times; about 13 hours per scenario at 10x resim realizations
             if(length(cage.biom.sim[[procset[pix]]])>=40){ ## only process if enough simulations successfully completed in this pixel
-            print(paste("resimming pix", index.track[pix], "realization", a))
+#             print(paste("resimming pix", index.track[pix], "realization", a))
             ### first select which pixel simulation you're drawing from in this pixel*realization
             # can select dbh populations based on proximity to median simulated biomass...
             biom.lims <- quantile(cage.biom.sim[[procset[pix]]], probs=npp.quant.range) ## figure out which of the simulations to draw and modify
@@ -581,126 +593,7 @@ write.csv(l, file=paste("processed/boston/biom_street/resim.atwork", resim.vers,
 ### process resim results by scenario
 #####
 ## get a general list of the resim results and the corresponding pixel index
-sum.na <- function(x){sum(x, na.rm=T)}
-scenario <- c("BAU", "oldies", "expand")
-vers <- 6
-resim.vers <- 8
-realize <- 20
-yr.run <- 34
-# preamb <- "processed/boston/biom_street/"
-preamb <- "/projectnb/buultra/atrlica/FragEVI/processed/boston/biom_street/"
-library(abind) ## lets us build array boxes containing the maps/years/realizations organized well
-
-### loop each scenario's results containers and process
-for(s in 1:length(scenario)){
-  print(paste("processing resim results for scenario", scenario[s]))
-  obj.list <- list.files("processed/boston/biom_street/")
-  obj.list <- obj.list[grep(obj.list, pattern=paste("scenario", scenario[s], sep="."))]
-  obj.list <- obj.list[grep(obj.list, pattern=paste0("V", resim.vers))]
-  index.list <- obj.list[grep(obj.list, pattern="index")]
-  chunks <- strsplit(index.list, split = "[.]")
-  chunks <- sapply(chunks, "[[" ,5)
-  
-  ### set up results containers
-  biom.contain <- vector("list", realize)
-  can.contain <- vector("list", realize)
-  num.contain <- vector("list", realize)
-  npp.contain <- vector("list", realize) ## each list element will be a matrix of pixIDx35 years, each top list element is a realization
-  deaths.contain <- vector() 
-  expand.contain <- vector() 
-  pixID.record <- integer()
-  npp.maps <- list()
-  for(o in 1:length(chunks)){
-#     print(paste("processing results chunk", chunks[o]))
-    load(paste0(preamb, "npp.track.scenario.", scenario[s], ".", chunks[o], ".V", resim.vers, ".resim.sav", sep="")) ## npp.box
-    load(paste0(preamb, "biom.track.scenario.", scenario[s], ".", chunks[o], ".V", resim.vers, ".resim.sav", sep="")) ## biom.box
-    load(paste0(preamb, "num.track.scenario.", scenario[s], ".", chunks[o], ".V", resim.vers, ".resim.sav", sep="")) ## num.box
-    load(paste0(preamb, "can.track.scenario.", scenario[s], ".", chunks[o], ".V", resim.vers, ".resim.sav", sep="")) ## can.box
-    load(paste0(preamb, "death.track.scenario.", scenario[s], ".", chunks[o], ".V", resim.vers, ".resim.sav", sep="")) ## deaths.sav
-    load(paste0(preamb, "expand.plant.num.scenario.", scenario[s], ".", chunks[o], ".V", resim.vers, ".resim.sav", sep="")) ## expand.plant.num
-    load(paste0(preamb, "index.track.scenario.", scenario[s], ".", chunks[o], ".V", resim.vers, ".resim.sav", sep="")) ## pixID.track
-
-#     dum <- sapply(npp.box, "[[", 1)
-#     ded <- sapply(dum, is.null) ## use realization 1 to detect which resims didn't go through (appears stable across realizations)
-    ## some of these bastards get an NA entry instead of a pinche NULL entry...
-    for(r in 1:realize){ ## for every realization of the resimmed map
-#       pix1r1 <- npp.box[[1]][[1]]
-#       pix1r2 <- npp.box[[1]][[2]]
-#       pix1r20 <- npp.box[[1]][[20]]
-#       ss1 <- sapply(npp.box, "[[", 1) ## this is a list of realization 1 for all pix
-#       ss2 <- sapply(npp.box, "[[", 2) ## this is a list of realization 2 for all pix
-#       ss20 <- sapply(npp.box, "[[", 20) ## this is a list of realization 2 for all pix
-#       plot(pix1r1, ss1[[1]])
-#       plot(pix1r2, ss2[[1]])
-#       plot(pix1r20, ss20[[1]]) ## these are all identical vectors, each is realization r of this chunk
-      rel.npp <- sapply(npp.box, "[[", r) ## pick out realization r from the list of pixels*years
-      rel.biom <- sapply(biom.box, "[[", r)
-      rel.can <- sapply(can.box, "[[", r)
-      rel.num <- sapply(num.box, "[[", r)
-      if(r==1){ ## if this is the first realization processed in this chunk...
-        ### a robust means of picking out and recording which pixel resimms worked (examine first realization as an archetype)
-        ded1 <- sapply(rel.npp, is.null)
-        ded1 <- which(ded1)
-        ded2 <- sapply(rel.npp, "[[", 1)
-        ded2 <- which(is.na(ded2))
-        ded <- c(ded1, ded2) ## ID everything that is either NA or NULL
-        pixID.record <- c(pixID.record, pixID.track[-ded]) ## update the vector of pixel IDs included in the resim record
-      }
-      ### filter bad pixels in this realization list
-      ### unlist to single vector
-      ### bind to whole-map vector for this realization as element in in ***.contain
-      rel.npp <- rel.npp[-ded]
-      npp.raw <- unlist(rel.npp) ## just pure vector of pixel resim histories, no entries for NULL
-      npp.raw <- npp.raw[!is.na(npp.raw)] ## pick out any NAs that appear (do not have length 35)
-      npp.contain[[r]] <- c(npp.contain[[r]], npp.raw)
-      rel.biom <- rel.biom[-ded]
-      biom.raw <- unlist(rel.biom)
-      biom.raw <- biom.raw[!is.na(npp.raw)]
-      biom.contain[[r]] <- c(biom.contain[[r]], biom.raw)
-      rel.can <- rel.can[-ded]
-      can.raw <- unlist(rel.can)
-      can.raw <- can.raw[!is.na(npp.raw)]
-      can.contain[[r]] <- c(can.contain[[r]], can.raw)
-      rel.num <- rel.num[-ded]
-      num.raw <- unlist(rel.num)
-      num.raw <- num.raw[!is.na(npp.raw)]
-      num.contain[[r]] <- c(num.contain[[r]], num.raw)  
-    } ## loop for different realizations r of resimulator
-  ## deaths/expand are sums per pixel across all resim years, recorded for each realization
-  deaths.contain <- c(deaths.contain, deaths.sav[-ded])
-  expand.contain <- c(expand.contain, expand.plant.num[-ded]) ## just get a raw vector and reconstitute to matrix later
-  print(paste("finished parsing all resim realizations of chunk", chunks[o]))
-  } ## loop for pixel chunks[o]
-
-  ### sanity check: what do these "raw" list containers contain
-  # length(npp.contain)
-  # length(npp.contain[[1]])/35 ## this is all 35 year maps of a single realization  
-  # unlist(lapply(npp.contain, length)) ## consistent lengths
-  # unlist(lapply(biom.contain, length)) ## consistent but about 100 extra pix compared to npp ressims
-  
-  ### repackage raw vectors as pixelXyear matrices and write to disk
-  mapmaker <- function(x){ ## take the raw vector and reconstitute into a map pixXyear matrix with pixID markers
-    ana <- matrix(x, ncol=yr.run+1, byrow = T)
-    ana <- cbind(pixID.record, ana)
-    return(ana)
-    } 
-  npp.maps <- lapply(npp.contain, mapmaker) ## now we have a list of the map matricies with a list element for each realization
-  biom.maps <- lapply(biom.contain, mapmaker)
-  can.maps <- lapply(can.contain, mapmaker)
-  num.maps <- lapply(num.contain, mapmaker)
-  deaths.rel <- matrix(unlist(deaths.contain), nrow=length(pixID.record), byrow=T) ## rows=pixels, col=realization(sum all years)
-  expand.rel <- matrix(unlist(expand.contain), nrow=length(pixID.record), byrow=T)
-  
-  print(paste("writing collated results of", scenario[s], "to disk"))
-  save(npp.maps, file=paste0(preamb, scenario[s], ".V", resim.vers, ".npp.maps.sav"))
-  save(biom.maps, file=paste0(preamb, scenario[s], ".V", resim.vers, ".biom.maps.sav"))
-  save(can.maps, file=paste0(preamb, scenario[s], ".V", resim.vers, ".can.maps.sav"))
-  save(num.maps, file=paste0(preamb, scenario[s], ".V", resim.vers, ".num.maps.sav"))
-  write.csv(deaths.rel, file=paste0(preamb, scenario[s], ".V", resim.vers, ".deaths.maps.csv"))
-  write.csv(expand.rel, file=paste0(preamb, scenario[s], ".V", resim.vers, ".expand.maps.csv"))
-} ## loop for scenario[s]
-#####
-
+ 
 
 # ## Exploratory of resim results
 # #####
