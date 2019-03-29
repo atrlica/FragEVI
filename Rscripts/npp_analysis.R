@@ -916,7 +916,7 @@ for(s in 1:length(scenario)){
     rrr <- raster(aoi)
     rrr <- setValues(rrr, map.dat[[r]])
     writeRaster(rrr,
-                filename = paste0("processed/boston/biom_street/results/", scenario[s], ".V", resim.vers, ".", names(map.dat)[r], ".tif"),
+                filename = paste0(preamb, scenario[s], ".V", resim.vers, ".", names(map.dat)[r], ".tif"),
                 format="GTiff", overwrite=T)
   }
 
