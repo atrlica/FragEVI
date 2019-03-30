@@ -1383,65 +1383,65 @@ targ.biom <- unlist(extract(biom, targ))
 
 ## FIGURE 5: TRAJECTORIES OF C UPTAKE AND CANOPY UNDER RESIMS
 #####
-bau.npp <- read.csv("processed/results/BAU.V3.npp.trendmap.csv")
-bau.can <- read.csv("processed/results/BAU.V3.can.trendmap.csv")
-bau.biom <- read.csv("processed/results/BAU.V3.biom.trendmap.csv")
-bau.npp.t <- apply(bau.npp[,3:39], MARGIN = 2, FUN = sum.na)
-bau.can.t <- apply(bau.can[,3:39], MARGIN = 2, FUN = sum.na)
-bau.biom.t <- apply(bau.biom[,3:39], MARGIN = 2, FUN = sum.na)
-bau.npp.rel <- bau.npp.t-bau.npp.t[2]
-bau.can.rel <- ((bau.can.t-bau.can.t[2])/bau.can.t[2])*100
-bau.biom.rel <- (bau.biom.t-bau.biom.t[2])
-
-
-old.npp <- read.csv("processed/results/oldies.V3.npp.trendmap.csv")
-old.can <- read.csv("processed/results/oldies.V3.can.trendmap.csv")
-old.biom <- read.csv("processed/results/oldies.V3.biom.trendmap.csv")
-old.npp.t <- apply(old.npp[,3:39], MARGIN = 2, FUN = sum.na)
-old.can.t <- apply(old.can[,3:39], MARGIN = 2, FUN = sum.na)
-old.biom.t <- apply(old.biom[,3:39], MARGIN = 2, FUN = sum.na)
-old.npp.rel <- old.npp.t-old.npp.t[2]
-old.can.rel <- ((old.can.t-old.can.t[2])/old.can.t[2])*100
-old.biom.rel <- (old.biom.t-old.biom.t[2])
-
-
-exp.npp <- read.csv("processed/results/expand.V3.npp.trendmap.csv")
-exp.can <- read.csv("processed/results/expand.V3.can.trendmap.csv")
-exp.biom <- read.csv("processed/results/expand.V3.biom.trendmap.csv")
-exp.npp.t <- apply(exp.npp[,3:39], MARGIN = 2, FUN = sum.na)
-exp.can.t <- apply(exp.can[,3:39], MARGIN = 2, FUN = sum.na)
-exp.biom.t <- apply(exp.biom[,3:39], MARGIN = 2, FUN = sum.na)
-exp.npp.rel <- exp.npp.t-exp.npp.t[2]
-exp.can.rel <- ((exp.can.t-exp.can.t[2])/exp.can.t[2])*100
-exp.biom.rel <- (exp.biom.t-exp.biom.t[2])
-
-plot(old.npp.rel[2:36]/2000/1000, ylim=c(0,2), col="blue")
-points(exp.npp.rel[2:36]/2000/1000, col="red")
-points(bau.npp.rel[2:36]/2000/1000, col="purple")
-
-plot(old.can.rel[2:36], col="blue", ylim=c(-0.06, 0.3))
-points(exp.can.rel[2:36], col="red")
-points(bau.can.rel[2:36], col="purple")
-
-plot(old.biom.rel[2:36]/2000/1000, col="blue")
-points(bau.biom.rel[2:36]/2000/1000, col="purple")
-points(exp.biom.rel[2:36]/2000/1000, col="red")
-
-npp.rel <- as.data.frame(cbind(c(2007:2043), bau.npp.rel/2000/1000, old.npp.rel/2000/1000, exp.npp.rel/2000/1000))
-npp.rel <- npp.rel[2:34,]
-names(npp.rel) <- c("Year", "BAU.npp", "old.npp", "exp.npp")
-
-biom.rel <- as.data.frame(cbind(bau.biom.rel/2000/1000, old.biom.rel/2000/1000, exp.biom.rel/2000/1000))
-rownames(biom.rel) <- NULL
-biom.rel$Year <- seq(2007, by=1, length.out=dim(biom.rel)[1])
-biom.rel <- biom.rel[2:34,]
-names(biom.rel) <- c("BAU.biom", "old.biom", "exp.biom", "Year")
-
-can.rel <- as.data.frame(cbind(bau.can.rel, old.can.rel, exp.can.rel))
-rownames(can.rel) <- NULL
-can.rel$Year <- seq(2007, by=1, length.out=dim(can.rel)[1])
-can.rel <- can.rel[2:34,]
-names(can.rel) <- c("BAU.can", "old.can", "exp.can", "Year")
+# bau.npp <- read.csv("processed/results/BAU.V3.npp.trendmap.csv")
+# bau.can <- read.csv("processed/results/BAU.V3.can.trendmap.csv")
+# bau.biom <- read.csv("processed/results/BAU.V3.biom.trendmap.csv")
+# bau.npp.t <- apply(bau.npp[,3:39], MARGIN = 2, FUN = sum.na)
+# bau.can.t <- apply(bau.can[,3:39], MARGIN = 2, FUN = sum.na)
+# bau.biom.t <- apply(bau.biom[,3:39], MARGIN = 2, FUN = sum.na)
+# bau.npp.rel <- bau.npp.t-bau.npp.t[2]
+# bau.can.rel <- ((bau.can.t-bau.can.t[2])/bau.can.t[2])*100
+# bau.biom.rel <- (bau.biom.t-bau.biom.t[2])
+# 
+# 
+# old.npp <- read.csv("processed/results/oldies.V3.npp.trendmap.csv")
+# old.can <- read.csv("processed/results/oldies.V3.can.trendmap.csv")
+# old.biom <- read.csv("processed/results/oldies.V3.biom.trendmap.csv")
+# old.npp.t <- apply(old.npp[,3:39], MARGIN = 2, FUN = sum.na)
+# old.can.t <- apply(old.can[,3:39], MARGIN = 2, FUN = sum.na)
+# old.biom.t <- apply(old.biom[,3:39], MARGIN = 2, FUN = sum.na)
+# old.npp.rel <- old.npp.t-old.npp.t[2]
+# old.can.rel <- ((old.can.t-old.can.t[2])/old.can.t[2])*100
+# old.biom.rel <- (old.biom.t-old.biom.t[2])
+# 
+# 
+# exp.npp <- read.csv("processed/results/expand.V3.npp.trendmap.csv")
+# exp.can <- read.csv("processed/results/expand.V3.can.trendmap.csv")
+# exp.biom <- read.csv("processed/results/expand.V3.biom.trendmap.csv")
+# exp.npp.t <- apply(exp.npp[,3:39], MARGIN = 2, FUN = sum.na)
+# exp.can.t <- apply(exp.can[,3:39], MARGIN = 2, FUN = sum.na)
+# exp.biom.t <- apply(exp.biom[,3:39], MARGIN = 2, FUN = sum.na)
+# exp.npp.rel <- exp.npp.t-exp.npp.t[2]
+# exp.can.rel <- ((exp.can.t-exp.can.t[2])/exp.can.t[2])*100
+# exp.biom.rel <- (exp.biom.t-exp.biom.t[2])
+# 
+# plot(old.npp.rel[2:36]/2000/1000, ylim=c(0,2), col="blue")
+# points(exp.npp.rel[2:36]/2000/1000, col="red")
+# points(bau.npp.rel[2:36]/2000/1000, col="purple")
+# 
+# plot(old.can.rel[2:36], col="blue", ylim=c(-0.06, 0.3))
+# points(exp.can.rel[2:36], col="red")
+# points(bau.can.rel[2:36], col="purple")
+# 
+# plot(old.biom.rel[2:36]/2000/1000, col="blue")
+# points(bau.biom.rel[2:36]/2000/1000, col="purple")
+# points(exp.biom.rel[2:36]/2000/1000, col="red")
+# 
+# npp.rel <- as.data.frame(cbind(c(2007:2043), bau.npp.rel/2000/1000, old.npp.rel/2000/1000, exp.npp.rel/2000/1000))
+# npp.rel <- npp.rel[2:34,]
+# names(npp.rel) <- c("Year", "BAU.npp", "old.npp", "exp.npp")
+# 
+# biom.rel <- as.data.frame(cbind(bau.biom.rel/2000/1000, old.biom.rel/2000/1000, exp.biom.rel/2000/1000))
+# rownames(biom.rel) <- NULL
+# biom.rel$Year <- seq(2007, by=1, length.out=dim(biom.rel)[1])
+# biom.rel <- biom.rel[2:34,]
+# names(biom.rel) <- c("BAU.biom", "old.biom", "exp.biom", "Year")
+# 
+# can.rel <- as.data.frame(cbind(bau.can.rel, old.can.rel, exp.can.rel))
+# rownames(can.rel) <- NULL
+# can.rel$Year <- seq(2007, by=1, length.out=dim(can.rel)[1])
+# can.rel <- can.rel[2:34,]
+# names(can.rel) <- c("BAU.can", "old.can", "exp.can", "Year")
 
 ### get the summary data in usable form for the figure
 resim.vers=8
@@ -1472,8 +1472,7 @@ names(proj.omni) <- c("Year",
 library(ggplot2)
 library(viridis)
 ## set up common visual parameters
-xlim.all <- c(4, 100)
-ylim.all <- c(-1, 2.5)
+xlim.all <- c(2010, 2040)
 title.size <- 12
 axis.marks <- 9
 axis.titles <- 10
@@ -1495,7 +1494,7 @@ legend.text.size=10
 alpha.master <- 0.2
 line.w <- 1.6
 line.w.sm <- 0.9
-plot(1:10, pch=15, cex=1.9, col=plasma(10)) ## plasma 10: 1,5,9
+# plot(1:10, pch=15, cex=1.9, col=plasma(10)) ## plasma 10: 1,5,9
 proj.col <- plasma(10)
 proj.col <- proj.col[c(1,5,9)]
 
@@ -1510,7 +1509,7 @@ proj.npp=ggplot(proj.omni, aes(Year))+
   geom_line(aes(y=exp.npp.med/2000/1000, colour="Expand planting"), size=line.w)+
   # geom_line(aes(y=exp.npp.lo/2000/1000, colour="Expand planting"), size=line.w.sm)+
   # geom_line(aes(y=exp.npp.hi/2000/1000, colour="Expand planting"), size=line.w.sm)+
-  lims(x=c(2010, 2040), y=c(5,6.2))+
+  lims(x=xlim.all, y=c(5,6.2))+
   # lims(x=c(2010, 2040), y=c(3,15))+
   # geom_ribbon(aes(ymin=BAU.npp, ymax=old.npp), fill=proj.col[1], alpha=0.4)+
   # geom_ribbon(aes(ymin=exp.npp, ymax=old.npp), fill=proj.col[3], alpha=0.4)+
@@ -1532,7 +1531,7 @@ proj.biom=ggplot(proj.omni, aes(Year))+
         legend.key.size = unit(0.8, "lines"),
         legend.text = element_text(size=legend.title.size-1, face="plain"),
         legend.justification = "center")+
-  lims(x=c(2010, 2040))+
+  lims(x=xlim.all)+
   theme.master
 
 proj.can=ggplot(proj.omni, aes(Year))+
@@ -1542,7 +1541,7 @@ proj.can=ggplot(proj.omni, aes(Year))+
   scale_colour_manual(guide="none", values=proj.col)+
   geom_hline(yintercept=1, linetype=2, size=0.7, colour="gray50")+
   labs(x = "Year", y="Canopy change vs. 2006 ", title="Canopy Area")+
-  lims(x=c(2010, 2040))+
+  lims(x=xlim.all)+
   theme.master
 
 ## collate and export

@@ -154,6 +154,7 @@ biom.dat <- cbind(biom.dat, aoi.dat, can.dat, isa.dat, lulc.dat)
 biom.dat[,pix.ID:=seq(1:dim(biom.dat)[1])]
 nonfor <- biom.dat[bos.aoi30m>800 & !(bos.lulc30m.lumped %in% c(1,4,5,6)) & bos.biom30m<20000, pix.ID] ### identify pixel ID's that are dev, hdres, ldres
 
+### actual simulator machine here
 ######
 ### set scenario options 
 # scenario <- c("BAU", "highmort", "lowreplant", "oldies", "lowmort", "slowreplant", "expand")
@@ -370,7 +371,7 @@ for(s in 1:length(scenario)){
 
           for(a in 1:realize){   ### resimulate every pixel realize number of times; about 13 hours per scenario at 10x resim realizations
             if(length(cage.biom.sim[[procset[pix]]])>=40){ ## only process if enough simulations successfully completed in this pixel
-            print(paste("resimming pix", index.track[pix], "realization", a))
+            # print(paste("resimming pix", index.track[pix], "realization", a))
             ### first select which pixel simulation you're drawing from in this pixel*realization
             # can select dbh populations based on proximity to median simulated biomass...
             biom.lims <- quantile(cage.biom.sim[[procset[pix]]], probs=npp.quant.range) ## figure out which of the simulations to draw and modify
@@ -574,7 +575,7 @@ atwork <- atwork$at.work
 atwork <- atwork[atwork%in%notyet] ## clear job records that have completed files on disk
 l <- data.frame(at.work=atwork)
 write.csv(l, file=paste("processed/boston/biom_street/resim.atwork", resim.vers, "csv", sep="."))
-
+#####
 
 
 ###
@@ -587,8 +588,8 @@ vers <- 6
 resim.vers <- 8
 realize <- 20
 yr.run <- 34
-# preamb <- "processed/boston/biom_street/"
-preamb <- "/projectnb/buultra/atrlica/FragEVI/processed/boston/biom_street/"
+preamb <- "processed/boston/biom_street/"
+# preamb <- "/projectnb/buultra/atrlica/FragEVI/processed/boston/biom_street/"
 library(abind) ## lets us build array boxes containing the maps/years/realizations organized well
 
 ### loop each scenario's results containers and process
@@ -611,7 +612,6 @@ for(s in 1:length(scenario)){
   pixID.record <- integer()
   npp.maps <- list()
   for(o in 1:length(chunks)){
-#     print(paste("processing results chunk", chunks[o]))
     load(paste0(preamb, "npp.track.scenario.", scenario[s], ".", chunks[o], ".V", resim.vers, ".resim.sav", sep="")) ## npp.box
     load(paste0(preamb, "biom.track.scenario.", scenario[s], ".", chunks[o], ".V", resim.vers, ".resim.sav", sep="")) ## biom.box
     load(paste0(preamb, "num.track.scenario.", scenario[s], ".", chunks[o], ".V", resim.vers, ".resim.sav", sep="")) ## num.box
@@ -692,12 +692,12 @@ for(s in 1:length(scenario)){
   expand.rel <- matrix(unlist(expand.contain), nrow=length(pixID.record), byrow=T)
   
   print(paste("writing collated results of", scenario[s], "to disk"))
-  save(npp.maps, file=paste0(preamb, scenario[s], ".V", resim.vers, ".npp.maps.sav"))
-  save(biom.maps, file=paste0(preamb, scenario[s], ".V", resim.vers, ".biom.maps.sav"))
-  save(can.maps, file=paste0(preamb, scenario[s], ".V", resim.vers, ".can.maps.sav"))
-  save(num.maps, file=paste0(preamb, scenario[s], ".V", resim.vers, ".num.maps.sav"))
-  write.csv(deaths.rel, file=paste0(preamb, scenario[s], ".V", resim.vers, ".deaths.maps.csv"))
-  write.csv(expand.rel, file=paste0(preamb, scenario[s], ".V", resim.vers, ".expand.maps.csv"))
+  save(npp.maps, file=paste0(preamb, "results/", scenario[s], ".V", resim.vers, ".npp.maps.sav"))
+  save(biom.maps, file=paste0(preamb, "results/", scenario[s], ".V", resim.vers, ".biom.maps.sav"))
+  save(can.maps, file=paste0(preamb, "results/", scenario[s], ".V", resim.vers, ".can.maps.sav"))
+  save(num.maps, file=paste0(preamb, "results/", scenario[s], ".V", resim.vers, ".num.maps.sav"))
+  write.csv(deaths.rel, file=paste0(preamb, "results/", scenario[s], ".V", resim.vers, ".deaths.maps.csv"))
+  write.csv(expand.rel, file=paste0(preamb, "results/", scenario[s], ".V", resim.vers, ".expand.maps.csv"))
 } ## loop for scenario[s]
 #####
 

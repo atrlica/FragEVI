@@ -768,7 +768,7 @@ scenario <- c("BAU", "oldies", "expand")
 resim.vers <- 8
 
 ### scenarios, explore behavior
-s=3
+s=2
 load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".npp.maps.sav")) # npp.maps
 load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".biom.maps.sav")) # biom.maps
 load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".can.maps.sav")) # can.maps
@@ -839,8 +839,7 @@ plot(apply(cc.rel, MARGIN=1, FUN=median), ylim=c(0.8, 1.3))
 points(apply(cc.rel, MARGIN=1, FUN=q.top))
 points(apply(cc.rel, MARGIN=1, FUN=q.bot)) ## ok this is looking fine
 
-
-
+###
 ### make a few summary tables and 2040 maps of outcome metrics under different scenarios
 ## TOTAL MORTS, TOTAL NEW, BIOM, NPP, CAN-REL
 library(abind)
@@ -873,18 +872,20 @@ nonfor <- biom.dat[bos.aoi30m>800 & !(bos.lulc30m.lumped %in% c(1,4,5,6)) & bos.
 scen.2040.sum <- data.frame()
 tmp <- character()
 for(s in 1:length(scenario)){
+  print(paste("loading map files for scenario", scenario[s]))
   load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".npp.maps.sav")) # npp.maps
   load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".biom.maps.sav")) # biom.maps
   load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".can.maps.sav")) # can.maps
   load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".num.maps.sav")) # num.maps
-  deaths.maps <- read.csv(file=paste0(preamb, scenario[s], ".V", resim.vers, "deaths.maps.csv"))
-  expand.maps <- read.csv(file=paste0(preamb, scenario[s], ".V", resim.vers, "expand.maps.csv"))
+  deaths.maps <- read.csv(file=paste0(preamb, scenario[s], ".V", resim.vers, ".deaths.maps.csv"))
+  expand.maps <- read.csv(file=paste0(preamb, scenario[s], ".V", resim.vers, ".expand.maps.csv"))
   
   npp.z <- abind(npp.maps, along=3) ## stack up each list element (matrix)
   biom.z <- abind(biom.maps, along=3) ## stack up each list element (matrix)
   can.z <- abind(can.maps, along=3) ## stack up each list element (matrix)
   num.z <- abind(num.maps, along=3) ## stack up each list element (matrix)
   
+  print(paste("doing apply on 2040 results"))
   npp.last.med <- apply(npp.z[,36,], MARGIN=c(1), FUN=median) ## median 2040 pixel value across stack
   biom.last.med <- apply(biom.z[,36,], MARGIN=c(1), FUN=median)
   can.last.med <- apply(can.z[,36,], MARGIN=c(1), FUN=median)
@@ -921,6 +922,7 @@ for(s in 1:length(scenario)){
   }
 
   ### make some summary tables of map totals by year (needed for figures)
+  print(paste("getting realization spreads in map totals"))
   npp.tot <- apply(npp.z[,2:36,], MARGIN=c(2,3), sum) ## full-map sum by year (nrow=35) in each realization (ncol=20)
   biom.tot <- apply(biom.z[,2:36,], MARGIN=c(2,3), sum)
   num.tot <- apply(num.z[,2:36,], MARGIN=c(2,3), sum)
@@ -979,6 +981,7 @@ for(s in 1:length(scenario)){
   
 
   ## make 2040 summary tables
+  print(paste("making summary table for 2040 results"))
   table.nice <- function(x){round(x/2000/1000, 1)}
   can.nice <- function(x){round(x, 2)}
   num.nice <- function(x){round(x/1000, 1)}
