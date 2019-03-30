@@ -226,10 +226,21 @@ check <- list.files("processed/boston/biom_street")
 check <- check[grep(check, pattern=paste("index.track.scenario"))] ### version label here
 check <- check[grep(check, pattern=paste0("V", resim.vers))]
 library(stringr)
+anti.alr <- vector()
+for(a in 1:length(scenario)){ ## check again to see if you've got full coverge for every scenario
+  alr <- str_match(check, paste0(scenario[a],".(.*?).V", resim.vers))
+  alr <- alr[,2]
+  alr <- alr[!is.na(alr)]
+  anti.alr <- c(anti.alr, obj.list[!(obj.list%in%alr)]) ## basically find any chunk in any scenario that doesn't have an index.track written to disk yet and keep a record
+#   print(anti.alr)
+}
+anti.alr <- anti.alr[!duplicated(anti.alr)]
 already <- str_match(check, paste0("BAU.(.*?).V", resim.vers))
 if(length(already)!=0){
   already <- already[,2]
-  already <- already[!is.na(already)]} else{already <- integer()}
+  already <- already[!is.na(already)]
+  already <- already[!(already%in%anti.alr)]
+} else{already <- integer()}
 
 notyet <- obj.list[!(obj.list%in%already)]
 
@@ -358,6 +369,7 @@ for(s in 1:length(scenario)){
       # procset <- sample(1:length(cage.dbh), size=50) ## test a random subset
       procset <- 1:length(cage.dbh) ## FULL PROCESS
       procset <- procset[(index.track%in%nonfor)] ### only resim the non-forest
+      print(paste("working on chunk", o, "in scenario", scenario[s]))
       
       for(pix in 1:length(procset)){ ## the number of pixels in this sim chunk
         # print(paste("working on pixel", index.track[procset[pix]]))
@@ -371,7 +383,11 @@ for(s in 1:length(scenario)){
 
           for(a in 1:realize){   ### resimulate every pixel realize number of times; about 13 hours per scenario at 10x resim realizations
             if(length(cage.biom.sim[[procset[pix]]])>=40){ ## only process if enough simulations successfully completed in this pixel
+<<<<<<< HEAD
             # print(paste("resimming pix", index.track[pix], "realization", a))
+=======
+#             print(paste("resimming pix", index.track[pix], "realization", a))
+>>>>>>> 697499f47b671be076f50bfbc90b0adaa8bb5c4b
             ### first select which pixel simulation you're drawing from in this pixel*realization
             # can select dbh populations based on proximity to median simulated biomass...
             biom.lims <- quantile(cage.biom.sim[[procset[pix]]], probs=npp.quant.range) ## figure out which of the simulations to draw and modify
@@ -582,6 +598,7 @@ write.csv(l, file=paste("processed/boston/biom_street/resim.atwork", resim.vers,
 ### process resim results by scenario
 #####
 ## get a general list of the resim results and the corresponding pixel index
+<<<<<<< HEAD
 sum.na <- function(x){sum(x, na.rm=T)}
 scenario <- c("BAU", "oldies", "expand")
 vers <- 6
@@ -701,6 +718,9 @@ for(s in 1:length(scenario)){
 } ## loop for scenario[s]
 #####
 
+=======
+ 
+>>>>>>> 697499f47b671be076f50bfbc90b0adaa8bb5c4b
 
 # ## Exploratory of resim results
 # #####
