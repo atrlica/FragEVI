@@ -16,3 +16,4 @@ presentations/*
 *.rast*
 ROAD10m_rast.aux.xml
 *.csv
+*.bullshit
