@@ -383,11 +383,7 @@ for(s in 1:length(scenario)){
 
           for(a in 1:realize){   ### resimulate every pixel realize number of times; about 13 hours per scenario at 10x resim realizations
             if(length(cage.biom.sim[[procset[pix]]])>=40){ ## only process if enough simulations successfully completed in this pixel
-<<<<<<< HEAD
-            # print(paste("resimming pix", index.track[pix], "realization", a))
-=======
-#             print(paste("resimming pix", index.track[pix], "realization", a))
->>>>>>> 697499f47b671be076f50bfbc90b0adaa8bb5c4b
+
             ### first select which pixel simulation you're drawing from in this pixel*realization
             # can select dbh populations based on proximity to median simulated biomass...
             biom.lims <- quantile(cage.biom.sim[[procset[pix]]], probs=npp.quant.range) ## figure out which of the simulations to draw and modify
@@ -598,7 +594,6 @@ write.csv(l, file=paste("processed/boston/biom_street/resim.atwork", resim.vers,
 ### process resim results by scenario
 #####
 ## get a general list of the resim results and the corresponding pixel index
-<<<<<<< HEAD
 sum.na <- function(x){sum(x, na.rm=T)}
 scenario <- c("BAU", "oldies", "expand")
 vers <- 6
@@ -718,9 +713,6 @@ for(s in 1:length(scenario)){
 } ## loop for scenario[s]
 #####
 
-=======
- 
->>>>>>> 697499f47b671be076f50bfbc90b0adaa8bb5c4b
 
 # ## Exploratory of resim results
 # #####

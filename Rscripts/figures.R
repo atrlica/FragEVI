@@ -404,6 +404,10 @@ legend.title.size=9
 legend.text.size=8
 alpha.master <- 0.2
 plotcols <- plasma(20)[c(6,15,8,17)] ## listed as: FIA, Andy-int, Andy-edge, Street
+
+plotcols <- magma(20)
+plot(1:20, col=plotcols, pch=15, cex=2)
+plotcols <- plotcols[c(6,7,16,14)]
 #####
 
 ### FIA rural trees
@@ -483,19 +487,18 @@ for(d in 1:1000){ ## get 1000 estimator equations set up and estimate across rg
   eq.tmp <- c(sample(b0.rand, size=1), sample(b1.rand, size=1))
   rg.dump <- rbind(rg.dump, eq.tmp[1]+(rg*eq.tmp[2]))
 }
-rg.hi <- apply(rg.dump, MARGIN=2, FUN=mean)+apply(rg.dump, MARGIN=2, FUN=sd)*1.96
-rg.lo <- apply(rg.dump, MARGIN=2, FUN=mean)-apply(rg.dump, MARGIN=2, FUN=sd)*1.96
+qlo <- function(x){quantile(x, probs=0.025)}
+qhi <- function(x){quantile(x, probs=0.975)}
+rg.hi <- apply(rg.dump, MARGIN=2, FUN=qhi)
+rg.lo <- apply(rg.dump, MARGIN=2, FUN=qlo)
 rg.mn <- apply(rg.dump, MARGIN=2, FUN=mean)
 
-plot(rg, rg.mn, col="red", ylim=c(-1, 10))
-points(rg, pred_live$diam.rate.pred)
-# rg.max <- apply(rg.dump, MARGIN=2, FUN=max)
-# rg.min <- apply(rg.dump, MARGIN=2, FUN=min)
-# plot(rg, rg.hi, ylim=c(-2, 15), col="red")
-# points(rg, rg.lo, col="red")
-# points(rg, mean(b0.rand)+(rg*mean(b1.rand)))   
-# points(rg, rg.min, col="blue")
-# points(rg, rg.max, col="blue")
+# rg.hi <- apply(rg.dump, MARGIN=2, FUN=mean)+apply(rg.dump, MARGIN=2, FUN=sd)*1.96
+# rg.lo <- apply(rg.dump, MARGIN=2, FUN=mean)-apply(rg.dump, MARGIN=2, FUN=sd)*1.96
+# rg.mn <- apply(rg.dump, MARGIN=2, FUN=mean)
+
+# plot(rg, rg.mn, col="red", ylim=c(-1, 1))
+# points(rg, pred_live$diam.rate.pred)
 
 live_lo <- data.frame(diam.rate.pred=rg.lo,
                         DIAM_T0=seq(live[lag>0 & STATUS==1,min(DIAM_T0, na.rm=T)],
@@ -506,10 +509,18 @@ live_hi <- data.frame(diam.rate.pred=rg.hi,
                                   live[lag>0 & STATUS==1,max(DIAM_T0, na.rm=T)], by=0.2))
 
 #####
+plot(live[lag>0 & STATUS==1, DIAM_T0], live[lag>0 & STATUS==1, diam.rate], col="gray40", cex=0.2, ylim=c(-1,2))
+sel0 <- rnorm(mean=summary(yyy)$coefficients[1,1], sd = summary(yyy)$coefficients[1,2], n=200)
+sel1 <- rnorm(mean=summary(yyy)$coefficients[2,1], sd = summary(yyy)$coefficients[2,2], n=200)
+x=seq(0, 80, by=1)
+for(r in 1:200){
+  lines(x, sel0[r]+(sel1[r]*x))
+}
+
 
 ## dbh increment
 #####
-fia.mono.incr <- ggplot(live, aes(DIAM_T0, diam.rate))+
+fia.mono.incr <- ggplot(live[lag>0 & STATUS==1,], aes(DIAM_T0, diam.rate))+
   geom_point(alpha=alpha.master, color=plotcols[1], size=pt.size)+
   scale_y_continuous(breaks=c(-1, 0, 1, 2), limits=ylim.all)+
   scale_x_continuous(limits=xlim.all, breaks=c(0, 20, 40, 60, 80, 100))+
@@ -633,13 +644,27 @@ for(d in 1:1000){ ## get 1000 estimator equations set up and estimate across rg
   rg.dump.e <- rbind(rg.dump.e, eq.tmp[1]+(rg.e*eq.tmp[3]))
   rg.dump.i <- rbind(rg.dump.i, eq.tmp[1]+eq.tmp[2]+(rg.i*(eq.tmp[3]+eq.tmp[4])))
 }
-rg.e.hi <- apply(rg.dump.e, MARGIN=2, FUN=mean)+apply(rg.dump.e, MARGIN=2, FUN=sd)*1.96
-rg.e.lo <- apply(rg.dump.e, MARGIN=2, FUN=mean)-apply(rg.dump.e, MARGIN=2, FUN=sd)*1.96
+qlo <- function(x){quantile(x, probs=0.025)}
+qhi <- function(x){quantile(x, probs=0.975)}
+
+rg.e.hi <- apply(rg.dump.e, MARGIN=2, FUN=qhi)
+rg.e.lo <- apply(rg.dump.e, MARGIN=2, FUN=qlo)
 rg.e.mn <- apply(rg.dump.e, MARGIN=2, FUN=mean)
 
-rg.i.hi <- apply(rg.dump.i, MARGIN=2, FUN=mean)+apply(rg.dump.i, MARGIN=2, FUN=sd)*1.96
-rg.i.lo <- apply(rg.dump.i, MARGIN=2, FUN=mean)-apply(rg.dump.i, MARGIN=2, FUN=sd)*1.96
+rg.i.hi <- apply(rg.dump.i, MARGIN=2, FUN=qhi)
+rg.i.lo <- apply(rg.dump.i, MARGIN=2, FUN=qlo)
 rg.i.mn <- apply(rg.dump.i, MARGIN=2, FUN=mean)
+
+# rg.e.hi <- apply(rg.dump.e, MARGIN=2, FUN=mean)+apply(rg.dump.e, MARGIN=2, FUN=sd)*1.96
+# rg.e.lo <- apply(rg.dump.e, MARGIN=2, FUN=mean)-apply(rg.dump.e, MARGIN=2, FUN=sd)*1.96
+# rg.e.mn <- apply(rg.dump.e, MARGIN=2, FUN=mean)
+# 
+# rg.i.hi <- apply(rg.dump.i, MARGIN=2, FUN=mean)+apply(rg.dump.i, MARGIN=2, FUN=sd)*1.96
+# rg.i.lo <- apply(rg.dump.i, MARGIN=2, FUN=mean)-apply(rg.dump.i, MARGIN=2, FUN=sd)*1.96
+# rg.i.mn <- apply(rg.dump.i, MARGIN=2, FUN=mean)
+
+
+
 
 ## constrain the prediction envelope as is done in the recursive modeling part of this
 ps.contain <- as.data.table(read.csv("processed/andy.bai.ps.dbhincr.csv")) ## this is the nicely formatted BAI data from the psueoreplicated tree cores
@@ -670,7 +695,7 @@ int_hi <- data.frame(diam.rate.pred=rg.i.hi,
 
 
 ## split colors (seg.Edge), density via alpha
-andy.col <- plotcols[c(2,3)]
+andy.col <- plotcols[c(3,2)]
 names(andy.col) <- levels(andy.bai$seg.Edge)
 col.map <- scale_color_manual(name="Tree position", values=andy.col, labels=c("Edge <10m", "Interior"))
 shape.map <- scale_shape_manual(name="Tree position", values=c(16,17), labels=c("Edge <10m", "Interior"))
@@ -688,12 +713,12 @@ andy.mono.incr <- ggplot(andy.bai[dbh.start>=5,], aes(dbh.start, dbh.incr.ann, c
   # geom_hline(yintercept=andy.bai[dbh.start>=5 & seg.Edge=="I",median(biom.rel.ann, na.rm=T)], color=med.lines.col, size=med.lines.width)+
   # geom_line(data = pred_andy.edge, aes(x=dbh.start, y=diam.incr.ann), color="darkmagenta", linetype=fit.type, size=fit.width)+
   # geom_line(data = pred_andy.int, aes(x=dbh.start, y=diam.incr.ann), color="chocolate3", linetype=fit.type, size=fit.width)+
-  geom_line(data = pred_andy.edge, aes(x=dbh.start, y=diam.incr.ann), color="chocolate3", linetype=fit.type, size=fit.width)+
-  geom_line(data = edge_lo, aes(x=dbh.start, y=diam.rate.pred), color="chocolate3", linetype=rg.type, size=rg.width)+
-  geom_line(data = edge_hi, aes(x=dbh.start, y=diam.rate.pred), color="chocolate3", linetype=rg.type, size=rg.width)+
-  geom_line(data = pred_andy.int, aes(x=dbh.start, y=diam.incr.ann), color="darkmagenta", linetype=fit.type, size=fit.width)+
-  geom_line(data = int_lo, aes(x=dbh.start, y=diam.rate.pred), color="darkmagenta", linetype=rg.type, size=rg.width)+
-  geom_line(data = int_hi, aes(x=dbh.start, y=diam.rate.pred), color="darkmagenta", linetype=rg.type, size=rg.width)+
+  geom_line(data = pred_andy.edge, aes(x=dbh.start, y=diam.incr.ann), color="coral", linetype=fit.type, size=fit.width)+
+  geom_line(data = edge_lo, aes(x=dbh.start, y=diam.rate.pred), color="coral", linetype=rg.type, size=rg.width)+
+  geom_line(data = edge_hi, aes(x=dbh.start, y=diam.rate.pred), color="coral", linetype=rg.type, size=rg.width)+
+  geom_line(data = pred_andy.int, aes(x=dbh.start, y=diam.incr.ann), color="darkorchid2", linetype=fit.type, size=fit.width)+
+  geom_line(data = int_lo, aes(x=dbh.start, y=diam.rate.pred), color="darkorchid2", linetype=rg.type, size=rg.width)+
+  geom_line(data = int_hi, aes(x=dbh.start, y=diam.rate.pred), color="darkorchid2", linetype=rg.type, size=rg.width)+
   labs(x = "Stem DBH (cm)", y="Stem Growth (cm/yr)", title="Urban Forest '90-'16")+
   theme.master+
   theme(legend.position = c(0.8, 0.65),
@@ -705,7 +730,7 @@ andy.mono.incr <- ggplot(andy.bai[dbh.start>=5,], aes(dbh.start, dbh.incr.ann, c
         legend.justification = "center")+
   guides(shape = guide_legend(override.aes = list(size=pt.size*1.7,
                                                   alpha=0.8,
-                                                  color=plotcols[c(2,3)])))
+                                                  color=andy.col)))
   # guides(shape = guide_legend(override.aes = list(size=pt.size*1.7,
   #                                                 alpha=0.8,
   #                                                 color=c("darkmagenta",
@@ -856,8 +881,8 @@ for(d in 1:1000){ ## get 1000 estimator equations set up and estimate across rg
   eq.tmp <- c(sample(b0.rand, size=1), sample(b1.rand, size=1), sample(b2.rand, size=1))
   rg.dump <- rbind(rg.dump, eq.tmp[1]+(rg*eq.tmp[2])+((rg^2)*eq.tmp[3]))
 }
-rg.hi <- apply(rg.dump, MARGIN=2, FUN=mean)+apply(rg.dump, MARGIN=2, FUN=sd)*1.96
-rg.lo <- apply(rg.dump, MARGIN=2, FUN=mean)-apply(rg.dump, MARGIN=2, FUN=sd)*1.96
+rg.hi <- apply(rg.dump, MARGIN=2, FUN=qhi)
+rg.lo <- apply(rg.dump, MARGIN=2, FUN=qlo)
 rg.mn <- apply(rg.dump, MARGIN=2, FUN=mean)
 
 street_lo <- data.frame(diam.rate.pred=rg.lo,
@@ -1468,6 +1493,29 @@ names(proj.omni) <- c("Year",
                       paste(rep("exp", 4), c("npp", "biom", "can", "num"), rep("lo", 4), sep="."),
                       paste(rep("exp", 4), c("npp", "biom", "can", "num"), rep("hi", 4), sep="."))
 
+library(data.table)
+proj.omni <- as.data.table(proj.omni)
+
+proj.omni[Year==2040,.(old.biom.med/1E6/2,
+                       old.biom.lo/1E6/2,
+                       old.biom.hi/1E6/2)]
+proj.omni[Year==2040,.(BAU.biom.med/1E6/2,
+                       BAU.biom.lo/1E6/2,
+                       BAU.biom.hi/1E6/2)]
+
+proj.omni[Year==2040,.(old.can.med,
+                       old.can.lo,
+                       old.can.hi)]
+proj.omni[Year==2040,.(BAU.can.med,
+                       BAU.can.lo,
+                       BAU.can.hi)]
+
+proj.omni[Year==2040,.(exp.npp.med/1E6/2,
+                       exp.npp.lo/1E6/2,
+                       exp.npp.hi/1E6/2)]
+proj.omni[Year==2040,.(BAU.npp.med/1E6/2,
+                       BAU.npp.lo/1E6/2,
+                       BAU.npp.hi/1E6/2)]
 
 library(ggplot2)
 library(viridis)
@@ -1513,7 +1561,7 @@ proj.npp=ggplot(proj.omni, aes(Year))+
   # lims(x=c(2010, 2040), y=c(3,15))+
   # geom_ribbon(aes(ymin=BAU.npp, ymax=old.npp), fill=proj.col[1], alpha=0.4)+
   # geom_ribbon(aes(ymin=exp.npp, ymax=old.npp), fill=proj.col[3], alpha=0.4)+
-  labs(x = "Year", y="Biomass C gain (MgC/yr x 1000)", title="Annual C uptake")+
+  labs(x = "Year", y="Biomass C gain (GgC/yr)", title="Annual C uptake")+
   theme.master+
   scale_colour_manual(guide="none", values=proj.col)
 
@@ -1522,7 +1570,7 @@ proj.biom=ggplot(proj.omni, aes(Year))+
   geom_line(aes(y=BAU.biom.med/2000/1000, colour="BAU"), size=line.w)+
   geom_line(aes(y=old.biom.med/2000/1000, colour="Preserve >40cm"), size=line.w)+
   geom_line(aes(y=exp.biom.med/2000/1000, colour="Expand planting"), size=line.w)+
-  labs(x = "Year", y="Standing Biomass (MgC x 1000)", title="Tree Biomass")+
+  labs(x = "Year", y="Standing Biomass (GgC)", title="Tree Biomass")+
   scale_colour_manual(name="Scenario", labels=c("BAU", "Street tree planting", "Preserve >40cm"), values=proj.col)+
   theme(legend.position = c(0.2, 0.7),
         legend.title = element_text(size=legend.title.size, face="bold"),
@@ -1535,12 +1583,12 @@ proj.biom=ggplot(proj.omni, aes(Year))+
   theme.master
 
 proj.can=ggplot(proj.omni, aes(Year))+
-  geom_line(aes(y=BAU.can.med, colour="BAU"), size=line.w)+
-  geom_line(aes(y=old.can.med, colour="Preserve >40cm"), size=line.w)+
-  geom_line(aes(y=exp.can.med, colour="Expand planting"), size=line.w)+
+  geom_line(aes(y=(BAU.can.med-1)*100, colour="BAU"), size=line.w)+
+  geom_line(aes(y=(old.can.med-1)*100, colour="Preserve >40cm"), size=line.w)+
+  geom_line(aes(y=(exp.can.med-1)*100, colour="Expand planting"), size=line.w)+
   scale_colour_manual(guide="none", values=proj.col)+
-  geom_hline(yintercept=1, linetype=2, size=0.7, colour="gray50")+
-  labs(x = "Year", y="Canopy change vs. 2006 ", title="Canopy Area")+
+  geom_hline(yintercept=0, linetype=2, size=0.7, colour="gray50")+
+  labs(x = "Year", y="% Canopy change vs. 2006 ", title="Canopy Area")+
   lims(x=xlim.all)+
   theme.master
 
