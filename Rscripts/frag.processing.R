@@ -97,12 +97,12 @@ bos.isa <- raster("processed/isa_cangrid.tif")
 # print(output)
 
 ### get a clean copy of the LULC 1m raster
-# bos.lulc <- raster("processed/boston/LU_bos_r1m.tif")
-# bos.aoi <- raster("processed/boston/bos.aoi.tif")
-# # bos.lulc <- crop(bos.lulc, bos.aoi)
-# # bos.lulc <- mask(bos.lulc, bos.aoi)
-# # writeRaster(bos.lulc, filename="processed/boston/bos.lulc_only.tif", format="GTiff", overwrite=T)
-# bos.lulc <- raster("processed/boston/bos.lulc_only.tif")
+bos.lulc <- raster("processed/boston/LU_bos_r1m.tif")
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+# bos.lulc <- crop(bos.lulc, bos.aoi)
+# bos.lulc <- mask(bos.lulc, bos.aoi)
+# writeRaster(bos.lulc, filename="processed/boston/bos.lulc_only.tif", format="GTiff", overwrite=T)
+bos.lulc <- raster("processed/boston/bos.lulc_only.tif")
 
 ## decide on a collapsed LULC scheme to flag for area fraction
 lu.classnames <- c("forest", "dev", "hdres", "ldres", "lowveg", "water")
@@ -165,7 +165,7 @@ lulc.flag <- function(x, lu.spot, aoi, filename) { # x is 1m lulc, lu.spot is li
     o[v%in%lu.spot] <- 1 ## flag the in-category with 1
     o[is.na(a)] <- NA ## cancel values outside of AOI
     out <- writeValues(out, o, bs$row[i])
-    print(paste("finished block", i, "of", bs$n, "in", lu.classnames[l]))
+    print(paste("finished block", i, "of", bs$n))
   }
   out <- writeStop(out)
   return(out)
@@ -186,18 +186,24 @@ for(l in 1:length(lulc.tot)){
 # bos.aoi <- raster("processed/boston/bos.aoi.tif")
 # lulc.flag(bos.lulc, lulc.tot[[1]], bos.aoi, "processed/boston/bos.forest.tif")
 
-bos.forest <- raster("processed/boston/bos.forest_only.tif")
-bos.dev <- raster("processed/boston/bos.dev_only.tif")
-bos.hdres <- raster("processed/boston/bos.hdres_only.tif")
-bos.ldres <- raster("processed/boston/bos.ldres_only.tif")
-bos.lowveg <- raster("processed/boston/bos.lowveg_only.tif")
-bos.water <- raster("processed/boston/bos.water_only.tif")
-plot(bos.forest, main="forest")
-plot(bos.dev, main="Developed")
-plot(bos.hdres, main="HDres")
-plot(bos.ldres, main="LDRes")
-plot(bos.lowveg, main="LowVeg")
-plot(bos.water, main="water")
+### create a golf course layer for C flux mapping
+# bos.lulc <- raster("processed/boston/bos.lulc_only.tif")
+# bos.aoi <- raster("processed/boston/bos.aoi.tif")
+# lulc.flag(bos.lulc, c(26), bos.aoi, "E:/BosBiog/processed/bos.golf1m.tif")
+# 
+# bos.golf <- raster("E:/BosBiog/processed/bos.golf1m.tif")
+# bos.forest <- raster("processed/boston/bos.forest_only.tif")
+# bos.dev <- raster("processed/boston/bos.dev_only.tif")
+# bos.hdres <- raster("processed/boston/bos.hdres_only.tif")
+# bos.ldres <- raster("processed/boston/bos.ldres_only.tif")
+# bos.lowveg <- raster("processed/boston/bos.lowveg_only.tif")
+# bos.water <- raster("processed/boston/bos.water_only.tif")
+# plot(bos.forest, main="forest")
+# plot(bos.dev, main="Developed")
+# plot(bos.hdres, main="HDres")
+# plot(bos.ldres, main="LDRes")
+# plot(bos.lowveg, main="LowVeg")
+# plot(bos.water, main="water")
 #####
 
 ###
@@ -349,17 +355,72 @@ veg.class <- function(can, isa, ndvi, lulc, aoi, filename) {
 cl <- veg.class(bos.can, bos.isa, bos.ndvi, bos.lulc, bos.aoi, "processed/boston/bos.cov.V4-canisa.tif")
 plot(cl)
 
-library(viridis)
-image(cl, col=magma(6))
-image(cl, col=plasma(6))
-image(cl, col=viridis(6))
-image(cl, col=cividis(6))
-cov.pal <- magma(6)
-cov.pal <- plasma(6)
-cov.pal <- cividis(6)
-cov.pal <- c(cov.pal[1],cov.pal[6],cov.pal[3],cov.pal[2],cov.pal[4],cov.pal[5]) ## this seems like an intuitive structuring
-image(cl, col=cov.pal)
-col2rgb(cov.pal) ## how to enter these assholes into arc RGB
+## make a grass and barren only 1m layer
+bos.cov <- stack("processed/boston/bos.cov.V4-canisa.tif")
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+
+lulc.flag <- function(x, lu.spot, aoi, filename) { # x is 1m lulc, lu.spot is list of LULC targeted, aoi is aoi 1m raster
+  out <- raster(x)
+  bs <- blockSize(out)
+  out <- writeStart(out, filename, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    v <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## 1m LULC raster
+    a <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) # AOI mask
+    o <- rep(0, length(v))
+    o[v%in%lu.spot] <- 1 ## flag the in-category with 1
+    o[is.na(a)] <- NA ## cancel values outside of AOI
+    out <- writeValues(out, o, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out <- writeStop(out)
+  return(out)
+}
+lulc.flag(bos.cov, c(2), bos.aoi, "E:/BosBiog/processed/bos.grass1m.tif")
+lulc.flag(bos.cov, c(3), bos.aoi, "E:/BosBiog/processed/bos.barr1m.tif")
+
+bos.grass <- raster("E:/BosBiog/processed/bos.grass1m.tif")
+bos.aoi <- raster("processed/boston/bos.aoi.tif")
+bos.golf <- raster("E:/BosBiog/processed/bos.golf1m.tif")
+
+### flag grass inside golf and outside golf
+grass.sort <- function(x, y, aoi, filename.golf, filename.nogolf) { # x is grass1m, y is 0/1 golf1m flag, aoi is aoi 1m raster
+  out <- raster(x)
+  bs <- blockSize(out)
+  out1 <- writeStart(out, filename.golf, overwrite=TRUE, format="GTiff")
+  out2 <- writeStart(out, filename.nogolf, overwrite=TRUE, format="GTiff")
+  for (i in 1:bs$n) {
+    gr <- getValues(x, row=bs$row[i], nrows=bs$nrows[i]) ## grass
+    go <- getValues(y, row=bs$row[i], nrows=bs$nrows[i]) # golf
+    donk <- getValues(aoi, row=bs$row[i], nrows=bs$nrows[i]) # AOI mask
+    go.gr <- rep(0, length(donk))
+    go.gr[gr==1 & go==1] <- 1 ## flag golf grass with 1
+    go.gr[is.na(donk)] <- NA ## cancel values outside of AOI
+    out1 <- writeValues(out1, go.gr, bs$row[i])
+    nogo.gr <- rep(0, length(donk))
+    nogo.gr[gr==1 & go==0] <- 1
+    nogo.gr[is.na(donk)] <- NA
+    out2 <- writeValues(out2, nogo.gr, bs$row[i])
+    print(paste("finished block", i, "of", bs$n))
+  }
+  out1 <- writeStop(out1)
+  out2 <- writeStop(out2)
+  return(out1)
+  return(out2)
+}
+grass.sort(bos.grass, bos.golf, bos.aoi, "E:/BosBiog/processed/bos.golfturf1m.tif", "E:/BosBiog/processed/bos.nogolfturf1m.tif")
+
+
+# library(viridis)
+# image(cl, col=magma(6))
+# image(cl, col=plasma(6))
+# image(cl, col=viridis(6))
+# image(cl, col=cividis(6))
+# cov.pal <- magma(6)
+# cov.pal <- plasma(6)
+# cov.pal <- cividis(6)
+# cov.pal <- c(cov.pal[1],cov.pal[6],cov.pal[3],cov.pal[2],cov.pal[4],cov.pal[5]) ## this seems like an intuitive structuring
+# image(cl, col=cov.pal)
+# col2rgb(cov.pal) ## how to enter these assholes into arc RGB
 #####
 
 ##
