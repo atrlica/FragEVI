@@ -374,21 +374,21 @@ plot(biom.dat[aoi>800 & biom>0, MgC.ha], biom.dat[aoi>800 & biom>0, hybrid.med.M
 
 
 ## compile a table of pixel median ranges
-l <- biom.dat[aoi>800 & !is.na(biom), round(quantile(hybrid.med.MgC.ha, probs=0.05, na.rm=T), 1), by=lulc]
+l <- biom.dat[aoi>800 & !is.na(biom), round(quantile(hybrid.med.MgC.ha, probs=0.025, na.rm=T), 1), by=lulc]
 l <- l[order(lulc),]
 m <- biom.dat[aoi>800 & !is.na(biom), round(quantile(hybrid.med.MgC.ha, probs=0.5, na.rm=T), 1), by=lulc]
 m <- m[order(lulc),]
-h <- biom.dat[aoi>800 & !is.na(biom), round(quantile(hybrid.med.MgC.ha, probs=0.95, na.rm=T), 1), by=lulc]
+h <- biom.dat[aoi>800 & !is.na(biom), round(quantile(hybrid.med.MgC.ha, probs=0.975, na.rm=T), 1), by=lulc]
 h <- h[order(lulc),]
 
 fin <- cbind(c("Forest", "Dev", "HDRes", "LDRes", "OVeg", "Water", "NA"),
       paste0(m[,V1], " (", l[,V1], "-", h[,V1], ")"))
 
-l <- biom.dat[aoi>800 & !is.na(biom), round(quantile(fia.forest.med.MgC.ha, probs=0.05, na.rm=T), 1), by=lulc]
+l <- biom.dat[aoi>800 & !is.na(biom), round(quantile(fia.forest.med.MgC.ha, probs=0.025, na.rm=T), 1), by=lulc]
 l <- l[order(lulc),]
 m <- biom.dat[aoi>800 & !is.na(biom), round(quantile(fia.forest.med.MgC.ha, probs=0.5, na.rm=T), 1), by=lulc]
 m <- m[order(lulc),]
-h <- biom.dat[aoi>800 & !is.na(biom), round(quantile(fia.forest.med.MgC.ha, probs=0.95, na.rm=T), 1), by=lulc]
+h <- biom.dat[aoi>800 & !is.na(biom), round(quantile(fia.forest.med.MgC.ha, probs=0.975, na.rm=T), 1), by=lulc]
 h <- h[order(lulc),]
 
 fin <- cbind(fin,
@@ -397,19 +397,20 @@ fin <- cbind(fin,
 fin <- rbind(fin, c("Total",
                     paste0(biom.dat[aoi>800 & !is.na(biom), round(quantile(hybrid.med.MgC.ha, probs=0.5, na.rm=T), 1)],
                            " (",
-                           biom.dat[aoi>800 & !is.na(biom), round(quantile(hybrid.med.MgC.ha, probs=0.05, na.rm=T), 1)],
+                           biom.dat[aoi>800 & !is.na(biom), round(quantile(hybrid.med.MgC.ha, probs=0.025, na.rm=T), 1)],
                            "-",
-                           biom.dat[aoi>800 & !is.na(biom), round(quantile(hybrid.med.MgC.ha, probs=0.95, na.rm=T), 1)],
+                           biom.dat[aoi>800 & !is.na(biom), round(quantile(hybrid.med.MgC.ha, probs=0.975, na.rm=T), 1)],
                            ")"),
                     paste0(biom.dat[aoi>800 & !is.na(biom), round(quantile(fia.forest.med.MgC.ha, probs=0.5, na.rm=T), 1)],
                            " (",
-                           biom.dat[aoi>800 & !is.na(biom), round(quantile(fia.forest.med.MgC.ha, probs=0.05, na.rm=T), 1)],
+                           biom.dat[aoi>800 & !is.na(biom), round(quantile(fia.forest.med.MgC.ha, probs=0.025, na.rm=T), 1)],
                            "-",
-                           biom.dat[aoi>800 & !is.na(biom), round(quantile(fia.forest.med.MgC.ha, probs=0.95, na.rm=T), 1)],
+                           biom.dat[aoi>800 & !is.na(biom), round(quantile(fia.forest.med.MgC.ha, probs=0.975, na.rm=T), 1)],
                            ")"))
              
 )
 write.csv(fin, "processed/results/pix.med.lulc.spread.csv")
+fin
 
 ### compile the whole map sum distributions one model at a time (not enough memory to load up every shits at once)
 median.na <- function(x){median(x, na.rm=T)}
@@ -429,9 +430,9 @@ for(t in 1:3){ ## perform this routine for every map model
     l.med <- apply(as.matrix(tmp.l[, min(grep(names(tmp), pattern="iter")):max(grep(names(tmp), pattern="iter"))]), MARGIN=2, FUN=sum.na)
     j <- paste0(round(median(l.med, na.rm=T)/(2000*1000),1),
            " (",
-           round(quantile(l.med, probs=0.05, na.rm=T)/(2000*1000), 1),
+           round(quantile(l.med, probs=0.025, na.rm=T)/(2000*1000), 1),
            "-", 
-           round(quantile(l.med, probs=0.95, na.rm=T)/(2000*1000), 1),
+           round(quantile(l.med, probs=0.975, na.rm=T)/(2000*1000), 1),
            ")")
     p <- rbind(p, j)
   }
@@ -440,9 +441,9 @@ for(t in 1:3){ ## perform this routine for every map model
   p <- rbind(p, 
              paste0(round(median(mod.med, na.rm=T)/(2000*1000),1),
                     " (",
-                    round(quantile(mod.med, probs=0.05, na.rm=T)/(2000*1000), 1),
+                    round(quantile(mod.med, probs=0.025, na.rm=T)/(2000*1000), 1),
                     "-", 
-                    round(quantile(mod.med, probs=0.95, na.rm=T)/(2000*1000), 1),
+                    round(quantile(mod.med, probs=0.975, na.rm=T)/(2000*1000), 1),
                     ")"))
   burp <- cbind(burp, p)
 }
@@ -781,8 +782,8 @@ apply(expand.maps[,2:21], MARGIN=2, sum) ## no expand trees in BAU or oldies, 12
 apply(deaths.maps[,2:21], MARGIN=2, sum) ## deaths/map over 35 years: 580k BAU+oldies; 680k in expand
 
 library(abind)
-q.top <- function(x){quantile(x, probs=c(0.95))}
-q.bot <- function(x){quantile(x, probs=c(0.05))}
+q.top <- function(x){quantile(x, probs=c(0.975))}
+q.bot <- function(x){quantile(x, probs=c(0.025))}
 ### BAU, npp trajectory and model prediction spreads
 npp.z <- abind(npp.maps, along=3) ## stack up each list element (matrix)
 apply(npp.z, MARGIN = 3, sum)/2000/1000 ## total 35 years of productivity by realization
@@ -847,8 +848,8 @@ scenario <- c("BAU", "oldies", "expand")
 preamb="processed/boston/biom_street/results/"
 scenario <- c("BAU", "oldies", "expand")
 resim.vers <- 8
-q.top <- function(x){quantile(x, probs=c(0.95))}
-q.bot <- function(x){quantile(x, probs=c(0.05))}
+q.top <- function(x){quantile(x, probs=c(0.975))}
+q.bot <- function(x){quantile(x, probs=c(0.025))}
 
 ## load up the map data
 library(raster)
@@ -1001,11 +1002,11 @@ for(s in 1:length(scenario)){
                          " (", num.nice(map.sum[[2]][35,5]),
                          "-", num.nice(map.sum[[3]][35,5]), ")"),
                   paste0(round(median(tot.deaths)/1000, 1), " (", 
-                         round(quantile(tot.deaths, probs=0.05)/1000, 1), "-", 
-                         round(quantile(tot.deaths, probs=0.95)/1000, 1), ")"),
+                         round(quantile(tot.deaths, probs=0.025)/1000, 1), "-", 
+                         round(quantile(tot.deaths, probs=0.975)/1000, 1), ")"),
                   paste0(round(median(tot.expand)/1000, 1), " (", 
-                         round(quantile(tot.expand, probs=0.05)/1000, 1), "-", 
-                         round(quantile(tot.expand, probs=0.95)/1000, 1), ")")))
+                         round(quantile(tot.expand, probs=0.025)/1000, 1), "-", 
+                         round(quantile(tot.expand, probs=0.975)/1000, 1), ")")))
     # cock <- rbinom(n=500000, size=35, prob=0.03) ## according to this thing, even at 3% chance per year of death a population of 500k trees would get you a bit more than 500k deaths in aggregate
   # sum(cock==0) ## only 170k, 34% will represent stems that never "died"
 print(paste("finished summary and map making for scenario", scenario[s]))
@@ -1014,7 +1015,7 @@ scen.2040.sum <- matrix(tmp, nrow=3, byrow = T)
 scen.2040.sum <- data.frame(cbind(scenario, scen.2040.sum))
 colnames(scen.2040.sum) <- c("secnario", "npp", "biom", "can.rel", "num", "deaths", "expand")
 write.csv(scen.2040.sum, paste0("processed/boston/biom_street/results/2040_summary.V", resim.vers, ".csv"))
-
+scen.2040.sum
 #####
 
 

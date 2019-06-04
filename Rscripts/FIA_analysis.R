@@ -259,8 +259,8 @@ save(yyy, file="processed/mod.fia.final.sav")
 ### equivalent plot-level assessment in live-only data ## 331 plots have at least one subplot dense enough to bother with
 library(data.table)
 live <- as.data.table(read.csv("processed/fia.live.stem.dbh.growth.csv")) ## this is data groomed to remove artifacts and subplots with <5 stems
-live[DIAM_T0>0 & STATUS==1, .(quantile(DIAM_T0, probs=c(0.05, 0.5, 0.95), na.rm=T), 
-                              quantile(diam.rate, probs=c(0.05, 0.5, 0.95), na.rm=T))]
+live[DIAM_T0>0 & STATUS==1, .(quantile(DIAM_T0, probs=c(0.025, 0.5, 0.975), na.rm=T), 
+                              quantile(diam.rate, probs=c(0.025, 0.5, 0.975), na.rm=T))]
 unique(live[DIAM_T0>0 & STATUS==1, unique(YEAR)])
 ### attempting to track the fate of individual stems (didn't work that well)
 #####
@@ -355,8 +355,8 @@ write.csv(plot.sum, "processed/fia.live.plot.groomedV2.csv")
 #####
 live.plot <- as.data.table(read.csv("processed/fia.live.plot.groomedV2.csv"))
 summary(live.plot[,YEAR-prev.sample])
-live.plot[HWfrac>0.25, .(quantile(biom0.MgC.ha, probs=c(0.05, 0.5, 0.95), na.rm=T),
-                         quantile(biom.delt.ann.rel.HW, probs=c(0.05, 0.5, 0.95), na.rm=T))]
+live.plot[HWfrac>0.25, .(quantile(biom0.MgC.ha, probs=c(0.025, 0.5, 0.975), na.rm=T),
+                         quantile(biom.delt.ann.rel.HW, probs=c(0.025, 0.5, 0.975), na.rm=T))]
 
 ### modeling growth as MgC/ha/yr(rate)~MgC/ha (density)
 plot(live.plot$biom0.MgC.ha, live.plot$biom.delt.ann) ## pretty linear, low slope

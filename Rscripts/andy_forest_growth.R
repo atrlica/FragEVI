@@ -244,8 +244,8 @@ write.csv(ps.dbh.contain, "processed/andy.bai.ps.dbhincr.csv")
 library(raster)
 library(data.table)
 ps.contain <- as.data.table(read.csv("processed/andy.bai.ps.dbhincr.csv")) ## this is the nicely formatted BAI data from the psueoreplicated tree cores
-ps.contain[dbh.start>=5, .(quantile(dbh.start, probs=c(0.05, 0.5, 0.95), na.rm=T),
-                           quantile(dbh.incr.ann, probs=c(0.05, 0.5, 0.95), na.rm=T)),
+ps.contain[dbh.start>=5, .(quantile(dbh.start, probs=c(0.025, 0.5, 0.975), na.rm=T),
+                           quantile(dbh.incr.ann, probs=c(0.025, 0.5, 0.975), na.rm=T)),
            by=seg.Edge]
 
 
@@ -532,9 +532,9 @@ for(i in 1:1000){
 
 # 
 # ## intercept 5.7%, interior -1.6%, -2.6% per 100 MgC+
-mean(plot.mod.b0); quantile(plot.mod.b0, probs=c(0.05, 0.95)); sd(plot.mod.b0)
-mean(plot.mod.b1); quantile(plot.mod.b1, probs=c(0.05, 0.95)); sd(plot.mod.b1)
-mean(plot.mod.b2); quantile(plot.mod.b2, probs=c(0.05, 0.95)); sd(plot.mod.b2)
+mean(plot.mod.b0); quantile(plot.mod.b0, probs=c(0.025, 0.975)); sd(plot.mod.b0)
+mean(plot.mod.b1); quantile(plot.mod.b1, probs=c(0.025, 0.975)); sd(plot.mod.b1)
+mean(plot.mod.b2); quantile(plot.mod.b2, probs=c(0.025, 0.975)); sd(plot.mod.b2)
 
 t.test(plot.mod.b1, mu=0)
 t.test(plot.mod.b2, mu=0)
@@ -543,22 +543,22 @@ t.test(plot.mod.b2, mu=0)
 ### plot-level growth rate predictions with error
 e.plots <- andy.dbh[seg.F=="E", sum(biom0), by=Plot.ID]
 e.plots[,MgC.ha.can:=((V1/2000)/(10*30))*1E4]
-e.plots[,quantile(MgC.ha.can, probs=c(0.05, 0.5, 0.95))]
+e.plots[,quantile(MgC.ha.can, probs=c(0.025, 0.5, 0.975))]
 a <- numeric()
 for(j in 1:dim(e.plots)[1]){
   a <- c(a, plot.mod.b0+(plot.mod.b1*e.plots[,MgC.ha.can][j]))
 }
-quantile(a, probs=c(0.05, 0.5, 0.95))
+quantile(a, probs=c(0.025, 0.5, 0.975))
 hist(a)
 
 i.plots <- andy.dbh[seg.F=="I", sum(biom0), by=Plot.ID]
 i.plots[,MgC.ha.can:=((V1/2000)/(10*30))*1E4]
-i.plots[,quantile(MgC.ha.can, probs=c(0.05, 0.5, 0.95))]
+i.plots[,quantile(MgC.ha.can, probs=c(0.025, 0.5, 0.975))]
 a <- numeric()
 for(j in 1:dim(i.plots)[1]){
   a <- c(a, plot.mod.b0+(plot.mod.b1*i.plots[,MgC.ha.can][j]))
 }
-quantile(a, probs=c(0.05, 0.5, 0.95))
+quantile(a, probs=c(0.025, 0.5, 0.975))
 hist(a)
 
 #####

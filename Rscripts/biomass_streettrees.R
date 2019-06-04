@@ -184,8 +184,8 @@ street[record.good==1,] ## 2592 records total
 # write.csv(dip, "docs/street.species.csv")
 
 ### basic summaries
-street[record.good==1, quantile(dbh.2006, probs=c(0.05, 0.5, 0.95), na.rm=T)]
-street[record.good==1, quantile(diam.rate, probs=c(0.05, 0.5, 0.95), na.rm=T)]
+street[record.good==1, quantile(dbh.2006, probs=c(0.025, 0.5, 0.975), na.rm=T)]
+street[record.good==1, quantile(diam.rate, probs=c(0.025, 0.5, 0.975), na.rm=T)]
 
 ### now the growth modeling
 ### basics: how does delta diameter vary?
