@@ -161,7 +161,7 @@ nonfor <- biom.dat[bos.aoi30m>800 & !(bos.lulc30m.lumped %in% c(1,4,5,6)) & bos.
 scenario <- c("BAU", "oldies", "expand")
 # scenario <- "expand"
 ## record specific parameter sets
-resim.vers <- 8 ## what are we labeling this round of resims?
+resim.vers <- 9 ## what are we labeling this round of resims?
 vers <- 6 ## what simulator results version are we dealing with?
 
 ### default factors
@@ -174,7 +174,7 @@ dbh.big <- default.sizecutoff
 default.delay <- c(0,2) ## low/hi on years of delay from death to replanting
 delay.factor <- default.delay
 yr.run <- 34 ## how many years past year 0 to run the scenario
-realize <- 20 ## how many realizations to put every pixel resim through (model+simulator error)
+realize <- 100 ## how many realizations to put every pixel resim through (model+simulator error)
 
 ## set options for scenario processing
 highmort.mortfactor <- 1.25
@@ -227,9 +227,12 @@ check <- check[grep(check, pattern=paste("index.track.scenario"))] ### version l
 check <- check[grep(check, pattern=paste0("V", resim.vers))]
 library(stringr)
 anti.alr <- vector()
+
 for(a in 1:length(scenario)){ ## check again to see if you've got full coverge for every scenario
   alr <- str_match(check, paste0(scenario[a],".(.*?).V", resim.vers))
-  alr <- alr[,2]
+  if(length(alr)>0){
+    alr <- alr[,2]
+  }
   alr <- alr[!is.na(alr)]
   anti.alr <- c(anti.alr, obj.list[!(obj.list%in%alr)]) ## basically find any chunk in any scenario that doesn't have an index.track written to disk yet and keep a record
 #   print(anti.alr)
@@ -350,7 +353,7 @@ for(s in 1:length(scenario)){
 #   hitlist <- as.character(obj.list[!(obj.list %in%  already)])
 #   hitlist[hitlist=="100000"] <- "1e+05"
 #   if(length(hitlist)==0){print(paste(scenario[s], "already processed"))}
-  
+
   if(length(hitlist)>0){
     for(o in hitlist){
       ### initialize read-in files and save dumps
@@ -597,11 +600,11 @@ write.csv(l, file=paste("processed/boston/biom_street/resim.atwork", resim.vers,
 sum.na <- function(x){sum(x, na.rm=T)}
 scenario <- c("BAU", "oldies", "expand")
 vers <- 6
-resim.vers <- 8
-realize <- 20
+resim.vers <- 9
+realize <- 100
 yr.run <- 34
-preamb <- "processed/boston/biom_street/"
-# preamb <- "/projectnb/buultra/atrlica/FragEVI/processed/boston/biom_street/"
+# preamb <- "processed/boston/biom_street/"
+preamb <- "/projectnb/buultra/atrlica/FragEVI/processed/boston/biom_street/"
 library(abind) ## lets us build array boxes containing the maps/years/realizations organized well
 
 ### loop each scenario's results containers and process
@@ -685,10 +688,10 @@ for(s in 1:length(scenario)){
   } ## loop for pixel chunks[o]
 
   ### sanity check: what do these "raw" list containers contain
-  # length(npp.contain)
-  # length(npp.contain[[1]])/35 ## this is all 35 year maps of a single realization  
-  # unlist(lapply(npp.contain, length)) ## consistent lengths
-  # unlist(lapply(biom.contain, length)) ## consistent but about 100 extra pix compared to npp ressims
+#   length(npp.contain) ## should be = realizations
+#   length(npp.contain[[1]])/35 ## this is all 35 year maps of a single realization  
+#   unlist(lapply(npp.contain, length)) ## consistent lengths
+#   unlist(lapply(biom.contain, length)) ## consistent but about 100 extra pix compared to npp ressims
   
   ### repackage raw vectors as pixelXyear matrices and write to disk
   mapmaker <- function(x){ ## take the raw vector and reconstitute into a map pixXyear matrix with pixID markers
@@ -714,33 +717,33 @@ for(s in 1:length(scenario)){
 #####
 
 
-# ## Exploratory of resim results
-# #####
-# ## load up ancillary map data
-# library(raster)
-# library(rgdal)
-# biom <- raster("processed/boston/bos.biom30m.tif")
-# aoi <- raster("processed/boston/bos.aoi30m.tif")
-# biom <- crop(biom, aoi)
-# can <- raster("processed/boston/bos.can.redux30m.tif")
-# isa <- raster("processed/boston/bos.isa30m.tif")
-# biom.dat <- as.data.table(as.data.frame(biom))
-# aoi.dat <- as.data.table(as.data.frame(aoi))
-# can.dat <- as.data.table(as.data.frame(can))
-# isa.dat <- as.data.table(as.data.frame(isa))
-# lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
-# lulc.dat <- as.data.table(as.data.frame(lulc))
-# biom.dat <- cbind(biom.dat, aoi.dat, can.dat, isa.dat, lulc.dat)
-# biom.dat[,pix.ID:=seq(1:dim(biom.dat)[1])]
-# nonfor <- biom.dat[bos.aoi30m>800 & !(bos.lulc30m.lumped %in% c(1,4,5,6)) & bos.biom30m<20000, pix.ID] ### identify pixel ID's that are nonforest
-# # hyb <- as.data.table(read.csv("processed/results/hybrid.results.V6.csv"))
-# hyb.t <- as.data.table(as.data.frame(raster("processed/results/hybrid.V7.median.tif")))
-# hyb.t[,pix.ID:=seq(1, dim(hyb.t)[1])]
-# biom.dat <- merge(biom.dat, hyb.t, by="pix.ID")
-# dim(biom.dat[bos.aoi30m>800,]) ## 136667 pix in the AOI
-# 
-# ## BAU scenario
-### process list containers
+## Exploratory of resim results
+#####
+## load up ancillary map data
+library(raster)
+library(rgdal)
+biom <- raster("processed/boston/bos.biom30m.tif")
+aoi <- raster("processed/boston/bos.aoi30m.tif")
+biom <- crop(biom, aoi)
+can <- raster("processed/boston/bos.can.redux30m.tif")
+isa <- raster("processed/boston/bos.isa30m.tif")
+biom.dat <- as.data.table(as.data.frame(biom))
+aoi.dat <- as.data.table(as.data.frame(aoi))
+can.dat <- as.data.table(as.data.frame(can))
+isa.dat <- as.data.table(as.data.frame(isa))
+lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
+lulc.dat <- as.data.table(as.data.frame(lulc))
+biom.dat <- cbind(biom.dat, aoi.dat, can.dat, isa.dat, lulc.dat)
+biom.dat[,pix.ID:=seq(1:dim(biom.dat)[1])]
+nonfor <- biom.dat[bos.aoi30m>800 & !(bos.lulc30m.lumped %in% c(1,4,5,6)) & bos.biom30m<20000, pix.ID] ### identify pixel ID's that are nonforest
+# hyb <- as.data.table(read.csv("processed/results/hybrid.results.V6.csv"))
+hyb.t <- as.data.table(as.data.frame(raster("processed/results/hybrid.V7.median.tif")))
+hyb.t[,pix.ID:=seq(1, dim(hyb.t)[1])]
+biom.dat <- merge(biom.dat, hyb.t, by="pix.ID")
+dim(biom.dat[bos.aoi30m>800,]) ## 136667 pix in the AOI
+
+## BAU scenario
+## process list containers
 npp.box <- abind(npp.maps, along=3) ## stack up each list element (matrix)
 apply(npp.box, MARGIN = 3, sum)/2000/1000 ## total 35 years of productivity by realization
 apply(npp.box, MARGIN=2, mean)/2000 ### mean per-pixel npp by year
@@ -750,96 +753,96 @@ for(i in 1:20){
   plot(dd[,i]/2000/1000, main=paste("map NPP, realization", i)) ## why is realization 1 so weird?
 }
 
-# biom.dat[bos.aoi30m>800, sum(hybrid.V7.median, na.rm=T)/2000/1000] ### 9.5 ktC in ~2007
-# bau.npp <- read.csv("processed/results/BAU.V7.npp.trendmap.csv")
-# bau.can <- read.csv("processed/results/BAU.V7.can.trendmap.csv")
-# bau.biom <- read.csv("processed/results/BAU.V7.biom.trendmap.csv")
-# bau.num <- read.csv("processed/results/BAU.V7.num.trendmap.csv")
-# 
-# ## BAU NPP start/finish
-# biom.dat <- merge(biom.dat, bau.npp[,c("pixID.track", "V2", "V36")], by.x="pix.ID", by.y="pixID.track", all.x=T)
-# dim(biom.dat[bos.aoi30m>800,]) ## still 136667
-# names(biom.dat)[8:9] <- c("BAU.start.npp", "BAU.finish.npp")
-# dim(biom.dat[bos.aoi30m>800 & !(is.na(BAU.start.npp))]) ## 77479 (excluded all non dev/hdres/ldres from resim)
-# ### does the predicted npp at the start of the resim resemble our estimated hybrid npp 
-# plot(biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), hybrid.V7.median], 
-#      biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), BAU.start.npp])
-# abline(a=0, b=1, col="red") ## fairly close
-# plot(biom.dat[bos.aoi30m>800 & !is.na(BAU.finish.npp), hybrid.V7.median], 
-#      biom.dat[bos.aoi30m>800 & !is.na(BAU.finish.npp), BAU.finish.npp]) ## a possible slight decline?
-# abline(a=0, b=1, col="blue")
-# biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(hybrid.V7.median, na.rm=T)/2000/1000] ## 6.0 ktC in hybrid npp IN THE RESIMMED PIX
-# biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(BAU.start.npp, na.rm=T)/2000/1000] ## 6.0 ktC in start of resim
-# biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(BAU.finish.npp, na.rm=T)/2000/1000] ## 5.9 ktC, slight decline over time
-# 
-# ## BAU canopy start/finish
-# biom.dat <- merge(biom.dat, bau.can[,c("pixID.track", "V2", "V36")], by.x="pix.ID", by.y="pixID.track", all.x=T)
-# names(biom.dat)[10:11] <- c("BAU.start.can", "BAU.finish.can")
-# plot(biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), bos.can.redux30m*bos.aoi30m], 
-#      biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), BAU.start.can])
-# abline(a=0, b=1, col="red")
-# ## not even close, way overpredicted by the model
-# plot(biom.dat[bos.aoi30m>800 & !is.na(BAU.finish.npp), bos.can.redux30m*bos.aoi30m], 
-#      biom.dat[bos.aoi30m>800 & !is.na(BAU.finish.npp), BAU.finish.can])
-# abline(a=0, b=1, col="blue") ## the simulator distinctly overpredicts canopy cover
-# biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(bos.can.redux30m*bos.aoi30m, na.rm=T)/1E4] ## 1.7 kha of canopy in the resimmed pix
-# biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(bos.aoi30m, na.rm=T)/1E4] ## 7.0 kha total resimmed area = ~24.3% canopy cover in resimmed pix
-# biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(BAU.start.can, na.rm=T)/1E4] ## 3.7 kha canopy area start in the resimmed area
-# biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(BAU.finish.can, na.rm=T)/1E4] ## 3.7 kha canopy finish in the resimmed area
-# 
-# biom.dat[bos.aoi30m>800, sum(bos.can.redux30m*bos.aoi30m, na.rm=T)]/biom.dat[bos.aoi30m>800, sum(bos.aoi30m)] ## 25.6% canopy in the AOI
-# biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), length(bos.aoi30m)] ## 77479 pix resimmed
-# biom.dat[bos.aoi30m>800, length(bos.aoi30m)] ## 136667 pix with data
-# 
-# ## BAU biomass start/finish
-# biom.dat <- merge(biom.dat, bau.biom[,c("pixID.track", "V2", "V36")], by.x="pix.ID", by.y="pixID.track", all.x=T)
-# names(biom.dat)[12:13] <- c("BAU.start.biom", "BAU.finish.biom")
+biom.dat[bos.aoi30m>800, sum(hybrid.V7.median, na.rm=T)/2000/1000] ### 9.5 ktC in ~2007
+bau.npp <- read.csv("processed/results/BAU.V7.npp.trendmap.csv")
+bau.can <- read.csv("processed/results/BAU.V7.can.trendmap.csv")
+bau.biom <- read.csv("processed/results/BAU.V7.biom.trendmap.csv")
+bau.num <- read.csv("processed/results/BAU.V7.num.trendmap.csv")
+
+## BAU NPP start/finish
+biom.dat <- merge(biom.dat, bau.npp[,c("pixID.track", "V2", "V36")], by.x="pix.ID", by.y="pixID.track", all.x=T)
+dim(biom.dat[bos.aoi30m>800,]) ## still 136667
+names(biom.dat)[8:9] <- c("BAU.start.npp", "BAU.finish.npp")
+dim(biom.dat[bos.aoi30m>800 & !(is.na(BAU.start.npp))]) ## 77479 (excluded all non dev/hdres/ldres from resim)
+### does the predicted npp at the start of the resim resemble our estimated hybrid npp 
+plot(biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), hybrid.V7.median], 
+     biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), BAU.start.npp])
+abline(a=0, b=1, col="red") ## fairly close
+plot(biom.dat[bos.aoi30m>800 & !is.na(BAU.finish.npp), hybrid.V7.median], 
+     biom.dat[bos.aoi30m>800 & !is.na(BAU.finish.npp), BAU.finish.npp]) ## a possible slight decline?
+abline(a=0, b=1, col="blue")
+biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(hybrid.V7.median, na.rm=T)/2000/1000] ## 6.0 ktC in hybrid npp IN THE RESIMMED PIX
+biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(BAU.start.npp, na.rm=T)/2000/1000] ## 6.0 ktC in start of resim
+biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(BAU.finish.npp, na.rm=T)/2000/1000] ## 5.9 ktC, slight decline over time
+
+## BAU canopy start/finish
+biom.dat <- merge(biom.dat, bau.can[,c("pixID.track", "V2", "V36")], by.x="pix.ID", by.y="pixID.track", all.x=T)
+names(biom.dat)[10:11] <- c("BAU.start.can", "BAU.finish.can")
+plot(biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), bos.can.redux30m*bos.aoi30m], 
+     biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), BAU.start.can])
+abline(a=0, b=1, col="red")
+## not even close, way overpredicted by the model
+plot(biom.dat[bos.aoi30m>800 & !is.na(BAU.finish.npp), bos.can.redux30m*bos.aoi30m], 
+     biom.dat[bos.aoi30m>800 & !is.na(BAU.finish.npp), BAU.finish.can])
+abline(a=0, b=1, col="blue") ## the simulator distinctly overpredicts canopy cover
+biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(bos.can.redux30m*bos.aoi30m, na.rm=T)/1E4] ## 1.7 kha of canopy in the resimmed pix
+biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(bos.aoi30m, na.rm=T)/1E4] ## 7.0 kha total resimmed area = ~24.3% canopy cover in resimmed pix
+biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(BAU.start.can, na.rm=T)/1E4] ## 3.7 kha canopy area start in the resimmed area
+biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(BAU.finish.can, na.rm=T)/1E4] ## 3.7 kha canopy finish in the resimmed area
+
+biom.dat[bos.aoi30m>800, sum(bos.can.redux30m*bos.aoi30m, na.rm=T)]/biom.dat[bos.aoi30m>800, sum(bos.aoi30m)] ## 25.6% canopy in the AOI
+biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), length(bos.aoi30m)] ## 77479 pix resimmed
+biom.dat[bos.aoi30m>800, length(bos.aoi30m)] ## 136667 pix with data
+
+## BAU biomass start/finish
+biom.dat <- merge(biom.dat, bau.biom[,c("pixID.track", "V2", "V36")], by.x="pix.ID", by.y="pixID.track", all.x=T)
+names(biom.dat)[12:13] <- c("BAU.start.biom", "BAU.finish.biom")
+plot(biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), bos.biom30m],
+     biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), BAU.start.biom])
+abline(a=0, b=1, col="red") ## LIKE A FUCKING GLOVE
+plot(biom.dat[bos.aoi30m>800 & !is.na(BAU.finish.npp), bos.biom30m],
+     biom.dat[bos.aoi30m>800 & !is.na(BAU.finish.npp), BAU.finish.biom])
+abline(a=0, b=1, col="blue")
+biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(bos.biom30m, na.rm=T)/2000/1000] ## 162 ktC measured in the resimmed area, compare 357 ktC in AOI
+biom.dat[bos.aoi30m>800, sum(BAU.finish.biom, na.rm=T)/2000/1000] ## 174 ktC by the end of simulation, 7% increase
+
+## tree number start/finish
+biom.dat <- merge(biom.dat, bau.num[,c("pixID.track", "V2", "V36")], by.x="pix.ID", by.y="pixID.track", all.x=T)
+names(biom.dat)[14:15] <- c("BAU.start.num", "BAU.finish.num")
 # plot(biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), bos.biom30m],
 #      biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), BAU.start.biom])
 # abline(a=0, b=1, col="red") ## LIKE A FUCKING GLOVE
-# plot(biom.dat[bos.aoi30m>800 & !is.na(BAU.finish.npp), bos.biom30m],
-#      biom.dat[bos.aoi30m>800 & !is.na(BAU.finish.npp), BAU.finish.biom])
-# abline(a=0, b=1, col="blue")
-# biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(bos.biom30m, na.rm=T)/2000/1000] ## 162 ktC measured in the resimmed area, compare 357 ktC in AOI
-# biom.dat[bos.aoi30m>800, sum(BAU.finish.biom, na.rm=T)/2000/1000] ## 174 ktC by the end of simulation, 7% increase
-# 
-# ## tree number start/finish
-# biom.dat <- merge(biom.dat, bau.num[,c("pixID.track", "V2", "V36")], by.x="pix.ID", by.y="pixID.track", all.x=T)
-# names(biom.dat)[14:15] <- c("BAU.start.num", "BAU.finish.num")
-# # plot(biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), bos.biom30m],
-# #      biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), BAU.start.biom])
-# # abline(a=0, b=1, col="red") ## LIKE A FUCKING GLOVE
-# ## can only compare start/finish, haven't exported median tree numbers for the map
-# plot(biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), BAU.start.num],
-#      biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), BAU.finish.num])
-# abline(a=0, b=1, col="blue") ## a little marginal loss in there
-# biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(BAU.start.num, na.rm=T)] ## 581879 simmed trees to start
-# biom.dat[bos.aoi30m>800, sum(BAU.finish.num, na.rm=T)] ## 552854 ktC by the end of simulation, ~5% decrease 
-# 
-# ## time series of BAU
-# sum.na <- function(x){sum(x, na.rm=T)}
-# bau.npp.t <- apply(bau.npp[,3:37], MARGIN = 2, FUN = sum.na)
-# plot(1:35, bau.npp.t/2000)
-# last(bau.npp.t)/2000; first(bau.npp.t)/2000
-# 
-# bau.can.t <- apply(bau.can[,3:37], MARGIN = 2, FUN = sum.na)
-# plot(1:35, bau.can.t/1E4)
-# last(bau.can.t)/1E4; first(bau.can.t)/1E4
-# 
-# bau.biom.t <- apply(bau.biom[,3:37], MARGIN = 2, FUN = sum.na)
-# plot(1:35, bau.biom.t/2000/1000)
-# last(bau.biom.t)/2000/1000; first(bau.biom.t)/2000/1000
-# 
-# bau.num.t <- apply(bau.num[,3:37], MARGIN = 2, FUN = sum.na)
-# plot(1:35, bau.num.t) ## after stabilizing, settles into an equilibrium
-# last(bau.num.t)/1000; first(bau.num.t)/1000
-# ### interesting: There's about a 5% loss in he first 3 years as part of the "burn in" phase for equilibrating mortality and 
-# ### delayed replanting: net loss at first as the mortalities kick in (about ~2%/yr) and then you have a large enough
-# ### pool of dead-awaiting-replanting that the numbers then stable off as the new replants each year begin to replace the new deaths. 
-# ### The model reads as an "excess" of mortalities in the first three years because it doesn't see any pool of dead-awaiting-replanting
-# ### to draw from until it has recorded a large enough pool of mortalities for itself.
-# 
-# 
+## can only compare start/finish, haven't exported median tree numbers for the map
+plot(biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), BAU.start.num],
+     biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), BAU.finish.num])
+abline(a=0, b=1, col="blue") ## a little marginal loss in there
+biom.dat[bos.aoi30m>800 & !is.na(BAU.start.npp), sum(BAU.start.num, na.rm=T)] ## 581879 simmed trees to start
+biom.dat[bos.aoi30m>800, sum(BAU.finish.num, na.rm=T)] ## 552854 ktC by the end of simulation, ~5% decrease 
+
+## time series of BAU
+sum.na <- function(x){sum(x, na.rm=T)}
+bau.npp.t <- apply(bau.npp[,3:37], MARGIN = 2, FUN = sum.na)
+plot(1:35, bau.npp.t/2000)
+last(bau.npp.t)/2000; first(bau.npp.t)/2000
+
+bau.can.t <- apply(bau.can[,3:37], MARGIN = 2, FUN = sum.na)
+plot(1:35, bau.can.t/1E4)
+last(bau.can.t)/1E4; first(bau.can.t)/1E4
+
+bau.biom.t <- apply(bau.biom[,3:37], MARGIN = 2, FUN = sum.na)
+plot(1:35, bau.biom.t/2000/1000)
+last(bau.biom.t)/2000/1000; first(bau.biom.t)/2000/1000
+
+bau.num.t <- apply(bau.num[,3:37], MARGIN = 2, FUN = sum.na)
+plot(1:35, bau.num.t) ## after stabilizing, settles into an equilibrium
+last(bau.num.t)/1000; first(bau.num.t)/1000
+### interesting: There's about a 5% loss in he first 3 years as part of the "burn in" phase for equilibrating mortality and 
+### delayed replanting: net loss at first as the mortalities kick in (about ~2%/yr) and then you have a large enough
+### pool of dead-awaiting-replanting that the numbers then stable off as the new replants each year begin to replace the new deaths. 
+### The model reads as an "excess" of mortalities in the first three years because it doesn't see any pool of dead-awaiting-replanting
+### to draw from until it has recorded a large enough pool of mortalities for itself.
+
+
 # ### Oldies scenario
 # biom.dat[bos.aoi30m>800, sum(hybrid.V7.median, na.rm=T)/2000/1000] ### 10.8 ktC in ~2007
 # old.npp <- read.csv("processed/results/oldies.V7.npp.trendmap.csv")
