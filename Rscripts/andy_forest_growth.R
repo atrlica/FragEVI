@@ -415,7 +415,7 @@ save(g.full, file = "processed/mod.andy.final.sav")
 ### DEVELOPING MODEL COEFFICIENTS+ERROR FOR PLOT-LEVEL GROWTH RATE
 #####
 ### Push the mixed effects model of dbh increment into the areal-basis model(s) for growth
-# load("processed/mod.andy.final.sav")
+load("processed/mod.andy.final.sav")
 # b0.rand <- rnorm(1000, mean=coef(summary(g.full))[1,1], sd=coef(summary(g.full))[1,2]) ## intercept
 # b1.rand <- rnorm(1000, mean=coef(summary(g.full))[2,1], sd=coef(summary(g.full))[2,2]) ## Interior
 # b2.rand <- rnorm(1000, mean=coef(summary(g.full))[3,1], sd=coef(summary(g.full))[3,2]) ## dbh slope
@@ -538,6 +538,20 @@ mean(plot.mod.b2); quantile(plot.mod.b2, probs=c(0.025, 0.975)); sd(plot.mod.b2)
 
 t.test(plot.mod.b1, mu=0)
 t.test(plot.mod.b2, mu=0)
+### how to get goodness of fit (residual square deviance= sigma(model) = stdev of residuals)
+mean.g <- apply(andy.dbh[,12:1011], MARGIN=1, FUN=mean) ## mean predicted stem growth for all 1000 stem model iterations
+andy.dbh <- cbind(andy.dbh, mean.g)
+g <- andy.dbh[, .(sum(biom0), sum(mean.g)), by=.(seg, Plot.ID)]
+g[, seg.F:="I"]
+g[seg==10, seg.F:="E"]
+g[,growth.rel:=V2/V1]
+g[,MgC.ha.can:=((V1/2000)/(10*30))*1E4] ## MgC/ha
+plot(g[,MgC.ha.can], g[,growth.rel], col=as.numeric(as.factor(g[,seg.F]))) ## ok the usual look
+g[,mean.mod.pred:=0.056+(-2.54E-04*MgC.ha.can)]
+g[seg.F=="I", mean.mod.pred:=.056+(-2.54E-04*MgC.ha.can)-0.016]
+points(g[,MgC.ha.can], g[,mean.mod.pred], col="blue", pch=15, cex=0.45)
+g[,resid:=mean.mod.pred-growth.rel]
+g[,sd(resid)]
 ## the whole purpose of the above is to produce a vector of model coefficients for use below in an interative NPP estimate
 
 ### plot-level growth rate predictions with error

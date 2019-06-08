@@ -764,70 +764,73 @@ write.csv(tab1.f, "processed/boston/results/lulc_NPP_summary.csv")
 ### Analysis of resim projection results
 ###
 #####
-preamb="processed/boston/biom_street/results/"
-scenario <- c("BAU", "oldies", "expand")
-resim.vers <- 8
-
-### scenarios, explore behavior
-s=2
-load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".npp.maps.sav")) # npp.maps
-load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".biom.maps.sav")) # biom.maps
-load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".can.maps.sav")) # can.maps
-load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".num.maps.sav")) # num.maps
-deaths.maps <- read.csv(file=paste0(preamb, scenario[s], ".V", resim.vers, "deaths.maps.csv"))
-expand.maps <- read.csv(file=paste0(preamb, scenario[s], ".V", resim.vers, "expand.maps.csv"))
-
-### just to verify some intuition
-apply(expand.maps[,2:21], MARGIN=2, sum) ## no expand trees in BAU or oldies, 120k in expand
-apply(deaths.maps[,2:21], MARGIN=2, sum) ## deaths/map over 35 years: 580k BAU+oldies; 680k in expand
-
+library(data.table)
 library(abind)
+preamb="H:/FragEVI/processed/boston/biom_street/results/"
+scenario <- c("BAU", "oldies", "expand")
+resim.vers <- 9
+realize <- 100
+
 q.top <- function(x){quantile(x, probs=c(0.975))}
 q.bot <- function(x){quantile(x, probs=c(0.025))}
-### BAU, npp trajectory and model prediction spreads
+
+### scenarios, explore behavior
+s=3
+deaths.maps <- read.csv(file=paste0(preamb, scenario[s], ".V", resim.vers, ".deaths.maps.csv"))
+expand.maps <- read.csv(file=paste0(preamb, scenario[s], ".V", resim.vers, ".expand.maps.csv"))
+
+### just to verify some intuition
+apply(expand.maps[,2:(realize+1)], MARGIN=2, sum) ## no expand trees in BAU or oldies, 120k in expand
+apply(deaths.maps[,2:(realize+1)], MARGIN=2, sum) ## deaths/map over 35 years: 580k BAU+oldies; 680k in expand
+
+### npp trajectory and model prediction spreads
+load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".npp.maps.sav")) # npp.maps
 npp.z <- abind(npp.maps, along=3) ## stack up each list element (matrix)
 apply(npp.z, MARGIN = 3, sum)/2000/1000 ## total 35 years of productivity by realization
 apply(npp.z, MARGIN=2, mean)/2000 ### mean per-pixel npp by year
 apply(npp.z, MARGIN=1, mean) ## mean NPP across years, by pixel
 dd <- apply(npp.z[,2:36,], MARGIN=c(2,3), sum) ## total full-map NPP in each yearXrealization
-for(i in 1:20){
+for(i in 1:realize){
   plot(dd[,i]/2000/1000, main=paste("map NPP, realization", i)) ## why is realization 1 so weird?
 }
-plot(apply(dd, MARGIN=1, FUN=median)/2000/1000, ylim=c(0, 10))
-points(apply(dd, MARGIN=1, FUN=q.top)/2000/1000)
-points(apply(dd, MARGIN=1, FUN=q.bot)/2000/1000)
+plot(apply(dd, MARGIN=1, FUN=median)/2000/1000, ylim=c(0, 10)) ## median NPP
+points(apply(dd, MARGIN=1, FUN=q.top)/2000/1000) ## 97.5%ile
+points(apply(dd, MARGIN=1, FUN=q.bot)/2000/1000) ## 2.5%ile
 
-### BAU, biom trajectory and model prediction spreads
+### biom trajectory and model prediction spreads
+load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".biom.maps.sav")) # biom.maps
 biom.z <- abind(biom.maps, along=3) ## stack up each list element (matrix)
-apply(biom.z, MARGIN = 3, sum)/2000/1000 ## total 35 years of productivity by realization
+apply(biom.z, MARGIN = 3, sum)/2000/1000 ## total 35 years of biom by realization
 apply(biom.z, MARGIN=2, mean)/2000 ### mean per-pixel biomass by year
 apply(biom.z, MARGIN=1, mean) ## mean biomass across years, by pixel
 gg <- apply(biom.z[,2:36,], MARGIN=c(2,3), sum) ## total full-map biomass in each yearXrealization
-for(i in 1:20){
-  plot(gg[,i]/2000/1000, main=paste("map biomass, realization", i)) ## why is realization 1 so weird?
+for(i in 1:realize){
+  plot(gg[,i]/2000/1000, main=paste("map biomass, realization", i)) ## BAU low 200s
 }
 plot(apply(gg, MARGIN=1, FUN=median)/2000/1000, ylim=c(100, 250))
 points(apply(gg, MARGIN=1, FUN=q.top)/2000/1000)
 points(apply(gg, MARGIN=1, FUN=q.bot)/2000/1000)
 
-### BAU, num trajectory and model prediction spreads
+### num trajectory and model prediction spreads
+load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".num.maps.sav")) # num.maps
 num.z <- abind(num.maps, along=3) ## stack up each list element (matrix)
 nn <- apply(num.z[,2:36,], MARGIN=c(2,3), sum) ## total full-map tree number in each yearXrealization
-for(i in 1:20){
+for(i in 1:realize){
   plot(nn[,i]/1000, main=paste("map tree numberx1000, realization", i)) ## why is realization 1 so weird?
 }
 plot(apply(nn, MARGIN=1, FUN=median)/1000)
 points(apply(nn, MARGIN=1, FUN=q.top)/1000)
 points(apply(nn, MARGIN=1, FUN=q.bot)/1000) ## BAU+oldies numbers are basically stable, expand shoots up to stable equilibrium ~100k extra trees
 
-### BAU, canopy trajectory and model prediction spreads
+### canopy trajectory and model prediction spreads
 ## note: Did this one as relative since the initial prediction tended to be systematically higher than the measured canopy cover
+load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".can.maps.sav")) # can.maps
 can.z <- abind(can.maps, along=3) ## stack up each list element (matrix)
 # apply(can.z, MARGIN = 3, sum)/2000/1000 ## total 35 years of productivity by realization
 # apply(biom.z, MARGIN=2, mean)/2000 ### mean per-pixel biomass by year
 # apply(biom.z, MARGIN=1, mean) ## mean biomass across years, by pixel
-cc <- apply(can.z[,2:36,], MARGIN=c(2,3), sum) ## total full-map biomass in each yearXrealization
-for(i in 1:20){
+cc <- apply(can.z[,2:36,], MARGIN=c(2,3), sum) ## total full-map canopy in each yearXrealization
+for(i in 1:realize){
   plot(cc[,i]/1E4, main=paste("map can ha raw, realization", i)) ## why is realization 1 so weird?
 }
 cc.rel.get <- function(x){
@@ -845,9 +848,10 @@ points(apply(cc.rel, MARGIN=1, FUN=q.bot)) ## ok this is looking fine
 ## TOTAL MORTS, TOTAL NEW, BIOM, NPP, CAN-REL
 library(abind)
 scenario <- c("BAU", "oldies", "expand")
-preamb="processed/boston/biom_street/results/"
+preamb="H:/FragEVI/processed/boston/biom_street/results/"
 scenario <- c("BAU", "oldies", "expand")
-resim.vers <- 8
+resim.vers <- 9
+realize <- 100 ## number of map realizations in this resim.vers
 q.top <- function(x){quantile(x, probs=c(0.975))}
 q.bot <- function(x){quantile(x, probs=c(0.025))}
 
@@ -855,64 +859,97 @@ q.bot <- function(x){quantile(x, probs=c(0.025))}
 library(raster)
 library(rgdal)
 library(data.table)
-biom <- raster("processed/boston/bos.biom30m.tif")
 aoi <- raster("processed/boston/bos.aoi30m.tif")
-biom <- crop(biom, aoi)
-can <- raster("processed/boston/bos.can.redux30m.tif")
-isa <- raster("processed/boston/bos.isa30m.tif")
-biom.dat <- as.data.table(as.data.frame(biom))
-aoi.dat <- as.data.table(as.data.frame(aoi))
-can.dat <- as.data.table(as.data.frame(can))
-isa.dat <- as.data.table(as.data.frame(isa))
-lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
-lulc.dat <- as.data.table(as.data.frame(lulc))
-biom.dat <- cbind(biom.dat, aoi.dat, can.dat, isa.dat, lulc.dat)
+biom.dat <- as.data.table(as.data.frame(aoi))
 biom.dat[,pix.ID:=seq(1:dim(biom.dat)[1])]
-nonfor <- biom.dat[bos.aoi30m>800 & !(bos.lulc30m.lumped %in% c(1,4,5,6)) & bos.biom30m<20000, pix.ID] ### identify pixel ID's that are dev, hdres, ldres
 
-scen.2040.sum <- data.frame()
+# biom <- raster("processed/boston/bos.biom30m.tif")
+# biom <- crop(biom, aoi)
+# can <- raster("processed/boston/bos.can.redux30m.tif")
+# isa <- raster("processed/boston/bos.isa30m.tif")
+# biom.dat <- as.data.table(as.data.frame(biom))
+# aoi.dat <- as.data.table(as.data.frame(aoi))
+# can.dat <- as.data.table(as.data.frame(can))
+# isa.dat <- as.data.table(as.data.frame(isa))
+# lulc <- raster("processed/boston/bos.lulc30m.lumped.tif")
+# lulc.dat <- as.data.table(as.data.frame(lulc))
+# biom.dat <- cbind(biom.dat, aoi.dat, can.dat, isa.dat, lulc.dat)
+# nonfor <- biom.dat[bos.aoi30m>800 & !(bos.lulc30m.lumped %in% c(1,4,5,6)) & bos.biom30m<20000, pix.ID] ### identify pixel ID's that are dev, hdres, ldres
+
+
 tmp <- character()
 for(s in 1:length(scenario)){
-  print(paste("loading map files for scenario", scenario[s]))
+  print(paste("processing scenario", scenario[s]))
+  
+  print("working on npp")
   load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".npp.maps.sav")) # npp.maps
+  npp.z <- abind(npp.maps, along=3) ## stack up each list element (matrix)
+  rm(npp.maps)
+  npp.tot <- apply(npp.z[,2:36,], MARGIN=c(2,3), sum) ## full-map sum by year (nrow=35) in each realization (ncol=20)
+  npp.last.med <- apply(npp.z[,36,], MARGIN=c(1), FUN=median) ## median 2040 pixel value across stack
+  pix.ID <- npp.z[,1,1]
+  rm(npp.z)
+  print(paste("allocated", memory.size(), "to memory"))
+  
+  print("working on biomass")
   load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".biom.maps.sav")) # biom.maps
+  biom.z <- abind(biom.maps, along=3) ## stack up each list element (matrix)
+  rm(biom.maps)
+  biom.tot <- apply(biom.z[,2:36,], MARGIN=c(2,3), sum)
+  biom.last.med <- apply(biom.z[,36,], MARGIN=c(1), FUN=median)
+  rm(biom.z)
+  print(paste("allocated", memory.size(), "to memory"))
+  
+  print("working on canopy")
   load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".can.maps.sav")) # can.maps
+  can.z <- abind(can.maps, along=3) ## stack up each list element (matrix)
+  rm(can.maps)
+  can.last.med <- apply(can.z[,36,], MARGIN=c(1), FUN=median)
+  can.first.med <- apply(can.z[,2,], MARGIN=c(1), FUN=median) ## you'll need this to get relative can change
+  can.start.tot <- apply(can.z[,2,], MARGIN=c(2), sum) ## total can area to start in each realization
+  can.rel.tot <- apply(can.z[,2:36,], MARGIN=c(2,3), sum)
+  can.rel.tot <- t(can.rel.tot) ### get realizations in rows
+  can.rel.tot <- can.rel.tot/can.start.tot ## divide each annual sum by the starting sum, by realization
+  can.rel.tot <- t(can.rel.tot) ## back to years=rows
+  rm(can.z)
+  print(paste("allocated", memory.size(), "to memory"))
+  
+  print("working on number")
   load(file=paste0(preamb, scenario[s], ".V", resim.vers, ".num.maps.sav")) # num.maps
+  num.z <- abind(num.maps, along=3) ## stack up each list element (matrix)
+  rm(num.maps)
+  num.last.med <- apply(num.z[,36,], MARGIN=c(1), FUN=median)
+  num.tot <- apply(num.z[,2:36,], MARGIN=c(2,3), sum)
+  rm(num.z)
+  print(paste("allocated", memory.size(), "to memory"))
+  
   deaths.maps <- read.csv(file=paste0(preamb, scenario[s], ".V", resim.vers, ".deaths.maps.csv"))
   expand.maps <- read.csv(file=paste0(preamb, scenario[s], ".V", resim.vers, ".expand.maps.csv"))
   
-  npp.z <- abind(npp.maps, along=3) ## stack up each list element (matrix)
-  biom.z <- abind(biom.maps, along=3) ## stack up each list element (matrix)
-  can.z <- abind(can.maps, along=3) ## stack up each list element (matrix)
-  num.z <- abind(num.maps, along=3) ## stack up each list element (matrix)
-  
   print(paste("doing apply on 2040 results"))
-  npp.last.med <- apply(npp.z[,36,], MARGIN=c(1), FUN=median) ## median 2040 pixel value across stack
-  biom.last.med <- apply(biom.z[,36,], MARGIN=c(1), FUN=median)
-  can.last.med <- apply(can.z[,36,], MARGIN=c(1), FUN=median)
-  can.first.med <- apply(can.z[,2,], MARGIN=c(1), FUN=median) ## you'll need this to get relative can change
-  num.last.med <- apply(num.z[,36,], MARGIN=c(1), FUN=median)
-  deaths.med <- apply(deaths.maps[,2:21], MARGIN=1, FUN=median) ## these are the sums over all resim years
-  expand.med <- apply(expand.maps[,2:21], MARGIN=1, FUN=median)
+  deaths.med <- apply(deaths.maps[,2:(realize+1)], MARGIN=1, FUN=median) ## these are the sums over all resim years
+  expand.med <- apply(expand.maps[,2:(realize+1)], MARGIN=1, FUN=median)
   
-  ## bind per-pix medians
-  z.meds <- cbind(npp.z[,1,1],
+
+  ## make some maps
+  # bind per-pix medians
+  z.meds <- cbind(pix.ID,
                   npp.last.med,
                   biom.last.med,
                   can.last.med,
                   can.first.med,
                   num.last.med,
                   deaths.med,
-                  expand.med, 
+                  expand.med,
                   rep(1, length(npp.last.med)))
-  
+
   colnames(z.meds)[1] <- "pix.ID"
   colnames(z.meds)[9] <- "resimmed" ## flag pixels in map that have been resimmed
+
   map.dat <- merge(x=biom.dat, y=z.meds, by="pix.ID", all.x=T)
   map.dat[bos.aoi30m>800 & is.na(resimmed), resimmed:=0]
   map.dat[,can.last.rel:=(can.last.med/can.first.med)]
-  ## make some maps
-  for(r in c(7,8,11,12,13,14,15)){
+  for(r in c(3,4,7,8,9,10,11)){
     # print(paste0("processed/boston/biom_street/results/", scenario[s], ".V", resim.vers, ".", names(map.dat)[r+6], ".tif"))
     print(paste("making 2040 map of", scenario[s], names(map.dat)[r]))
     rrr <- raster(aoi)
@@ -924,14 +961,6 @@ for(s in 1:length(scenario)){
 
   ### make some summary tables of map totals by year (needed for figures)
   print(paste("getting realization spreads in map totals"))
-  npp.tot <- apply(npp.z[,2:36,], MARGIN=c(2,3), sum) ## full-map sum by year (nrow=35) in each realization (ncol=20)
-  biom.tot <- apply(biom.z[,2:36,], MARGIN=c(2,3), sum)
-  num.tot <- apply(num.z[,2:36,], MARGIN=c(2,3), sum)
-  can.start.tot <- apply(can.z[,2,], MARGIN=c(2), sum) ## total can area to start in each realization
-  can.rel.tot <- apply(can.z[,2:36,], MARGIN=c(2,3), sum)
-  can.rel.tot <- t(can.rel.tot) ### get realizations in rows
-  can.rel.tot <- can.rel.tot/can.start.tot ## divide each annual sum by the starting sum, by realization
-  can.rel.tot <- t(can.rel.tot) ## back to years=rows
   
   map.npp.med <- apply(npp.tot, MARGIN=1, FUN=median)
   map.npp.lo <- apply(npp.tot, MARGIN=1, FUN=q.bot)
@@ -977,7 +1006,7 @@ for(s in 1:length(scenario)){
                         map.biom.hi,
                         map.can.hi,
                         map.num.hi)
-  names(map.sum) <- c("median", "lo5", "hi95")
+  names(map.sum) <- c("median", "lo25", "hi975")
   save(map.sum, file = paste0(preamb, scenario[s], ".v", resim.vers, ".AnnMapSums.MedLoHi.sav"))
   
 
@@ -986,8 +1015,8 @@ for(s in 1:length(scenario)){
   table.nice <- function(x){round(x/2000/1000, 1)}
   can.nice <- function(x){round(x, 2)}
   num.nice <- function(x){round(x/1000, 1)}
-  tot.deaths <- apply(deaths.maps[,2:21], MARGIN=2, FUN=sum) #total deaths per map realization
-  tot.expand <- apply(expand.maps[,2:21], MARGIN=2, FUN=sum) ## total  new expanded planting per map realization
+  tot.deaths <- apply(deaths.maps[,2:(realize+1)], MARGIN=2, FUN=sum) #total deaths per map realization
+  tot.expand <- apply(expand.maps[,2:(realize+1)], MARGIN=2, FUN=sum) ## total  new expanded planting per map realization
 
   tmp <- c(tmp, c(paste0(table.nice(map.sum[[1]][35,2]),
                          " (", table.nice(map.sum[[2]][35,2]),

@@ -964,7 +964,7 @@ street.mono.incr <- ggplot(street[record.good==1], aes(dbh.2006, diam.rate))+
 
 ### collate monocolored log-transformed plots
 library(gridExtra)
-png(width=8, height=3, units="in", res=600, bg="white", filename="images/Fig2A_stem-dbh-incr_mono.png")
+tiff(width=8, height=3, units="in", res=600, bg="white", compression = "none", filename="H:/FragEVI/images/Fig2A_stem-dbh-incr_mono.tif")
 grid.arrange(grobs=list(fia.mono.incr, andy.mono.incr, street.mono.incr),
              widths=c(1,1,1))
 dev.off()
@@ -1353,7 +1353,7 @@ bplots.pixmed <- ggplot(bdat.fin, aes(lulc, value, color=variable, alpha=variabl
   scale_alpha_manual(values=c(1,0.4), guide="none")+
   scale_x_discrete(labels=c("Developed", "Other Veg.", "HD Resid.", "LD Resid.", "Forest"))
 
-png(width=4, height=4, units="in", res=600, bg="white", filename="images/Fig3B_pixelNPP.png")
+tiff(width=4, height=4, units="in", res=600, bg="white", filename="H:/FragEVI/images/Fig3B_pixelNPP.tif")
 bplots.pixmed
 dev.off()
 
@@ -1469,8 +1469,8 @@ targ.biom <- unlist(extract(biom, targ))
 # names(can.rel) <- c("BAU.can", "old.can", "exp.can", "Year")
 
 ### get the summary data in usable form for the figure
-resim.vers=8
-preamb="processed/boston/biom_street/results/"
+resim.vers=9
+preamb="H:/FragEVI/processed/boston/biom_street/results/"
 scenario=c("BAU", "oldies", "expand")
 for(s in 1:length(scenario)){
   load(file = paste0(preamb, scenario[s], ".v", resim.vers, ".AnnMapSums.MedLoHi.sav"))
@@ -1557,7 +1557,7 @@ proj.npp=ggplot(proj.omni, aes(Year))+
   geom_line(aes(y=exp.npp.med/2000/1000, colour="Expand planting"), size=line.w)+
   # geom_line(aes(y=exp.npp.lo/2000/1000, colour="Expand planting"), size=line.w.sm)+
   # geom_line(aes(y=exp.npp.hi/2000/1000, colour="Expand planting"), size=line.w.sm)+
-  lims(x=xlim.all, y=c(5,6.2))+
+  lims(x=xlim.all, y=c(5.75,7.25))+
   # lims(x=c(2010, 2040), y=c(3,15))+
   # geom_ribbon(aes(ymin=BAU.npp, ymax=old.npp), fill=proj.col[1], alpha=0.4)+
   # geom_ribbon(aes(ymin=exp.npp, ymax=old.npp), fill=proj.col[3], alpha=0.4)+
@@ -1594,7 +1594,7 @@ proj.can=ggplot(proj.omni, aes(Year))+
 
 ## collate and export
 library(gridExtra)
-png(width=4.6, height=9, units="in", res=600, bg="white", filename="images/Fig5_projections.png")
+tiff(width=4.6, height=9, units="in", res=600, bg="white", compression="none", filename="H:/FragEVI/images/Fig5_projections.tif")
 grid.arrange(grobs=list(proj.npp, proj.biom, proj.can), nrow=3)
 dev.off()
 
